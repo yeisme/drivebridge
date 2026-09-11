@@ -61,9 +61,12 @@ func run() (err error) {
 	enabled := flags.Bool("enabled", false, "Explicitly enable file operations")
 	handoff := flags.Bool("handoff", false, "Enable a private local owner socket; requires --enabled")
 	space := flags.String("space", "", "Space identifier")
-	remote := flags.String("remote", "", "Existing OneDrive remote name")
+	remote := flags.String("remote", "", "Existing rclone remote name")
+	backend := flags.String("backend", "", "Backend kind: empty for OneDrive, or 'generic' for any transfer-only rclone remote")
 	drive := flags.String("drive-id", "", "OneDrive drive ID")
 	root := flags.String("root-id", "", "Allowed root item ID")
+	remotePath := flags.String("remote-path", "", "Generic backend root path inside the remote (empty = remote root)")
+	followSymlinks := flags.Bool("follow-symlinks", false, "Materialize symbolic links on upload for this space")
 	local := flags.String("local-root", "", "Allowed absolute local directory")
 	limit := flags.Int64("max-bytes", 0, "Explicit byte limit")
 	project := flags.String("project", "", "Authorized Scaena project reference")
@@ -155,7 +158,11 @@ func run() (err error) {
 	}
 	switch os.Args[1] {
 	case "space-add":
-		if err = s.AddSpace(bridge.Space{ID: *space, Remote: *remote, DriveID: *drive, RootID: *root, LocalRoot: *local, MaxBytes: *limit, Project: *project, Actor: *actor}); err != nil {
+		rootID := *root
+		if *backend == "generic" {
+			rootID = *remotePath
+		}
+		if err = s.AddSpace(bridge.Space{ID: *space, Remote: *remote, Backend: *backend, DriveID: *drive, RootID: rootID, LocalRoot: *local, MaxBytes: *limit, Project: *project, Actor: *actor, FollowSymlinks: *followSymlinks}); err != nil {
 			return err
 		}
 		return mode.write("space-add", "success", "Space configured.", nil)

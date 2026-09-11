@@ -31,6 +31,12 @@ func (s *Service) Upload(ctx context.Context, space, path, name, key string) (Op
 		return Operation{}, errors.New("local_root_unavailable")
 	}
 	defer root.Close()
+	// Symbolic links are rejected by default to prevent escapes; explicit
+	// opt-in materializes the target content (os.Root still blocks any link
+	// that would resolve outside the allowed root).
+	if info, e := root.Lstat(rel); e == nil && info.Mode()&os.ModeSymlink != 0 && !p.FollowSymlinks {
+		return Operation{}, errors.New("symlink_rejected")
+	}
 	f, err := root.Open(rel)
 	if err != nil {
 		return Operation{}, errors.New("local_file_unavailable")
@@ -208,7 +214,7 @@ func safeError(err error) string {
 		return ""
 	}
 	switch err.Error() {
-	case "transfer_capacity_unavailable", "disabled", "idempotency_conflict", "idempotency_key_required", "invalid_upload", "file_size_invalid", "local_file_unavailable", "local_root_unavailable", "state_unavailable", "operation_not_found", "operation_cancelled", "unknown_tool", "output_adapter_unavailable", "output_not_ready", "output_not_allowed", "output_grant_invalid", "scaena_unavailable", "graph_unavailable", "graph_unreachable", "download_unavailable", "download_access_unavailable", "media_probe_failed", "media_type_unsupported", "media_duration_invalid", "region_not_supported", "source_changed", "file_version_changed", "target_conflict", "space_not_allowed", "reference_not_found", "quota_exceeded", "throttled", "authentication_required", "path_not_allowed", "invalid_file_metadata", "remote_not_found", "remote_outside_space", "secure_handoff_unavailable", "content_mismatch":
+	case "transfer_capacity_unavailable", "disabled", "idempotency_conflict", "idempotency_key_required", "invalid_upload", "file_size_invalid", "local_file_unavailable", "local_root_unavailable", "state_unavailable", "operation_not_found", "operation_cancelled", "unknown_tool", "output_adapter_unavailable", "output_not_ready", "output_not_allowed", "output_grant_invalid", "scaena_unavailable", "graph_unavailable", "graph_unreachable", "download_unavailable", "download_access_unavailable", "media_probe_failed", "media_type_unsupported", "media_duration_invalid", "region_not_supported", "source_changed", "file_version_changed", "target_conflict", "space_not_allowed", "reference_not_found", "quota_exceeded", "throttled", "authentication_required", "path_not_allowed", "invalid_file_metadata", "remote_not_found", "remote_outside_space", "secure_handoff_unavailable", "handoff_not_available", "access_unsupported", "backend_unavailable", "symlink_rejected", "invalid_space", "space_conflict", "content_mismatch":
 		return err.Error()
 	}
 	return "transfer_failed"
@@ -253,7 +259,7 @@ func (s *Service) transfer(ctx context.Context, op *Operation) error {
 		if e != nil {
 			return e
 		}
-		in, e := s.Provider.Open(ctx, p, f)
+		in, e := s.providerFor(p).Open(ctx, p, f)
 		if e != nil {
 			out.Close()
 			return e
@@ -298,7 +304,7 @@ func (s *Service) transfer(ctx context.Context, op *Operation) error {
 		return e
 	}
 	// The operation-specific name prevents replacing a user-selected existing file.
-	items, e := s.Provider.List(ctx, p)
+	items, e := s.providerFor(p).List(ctx, p)
 	if e != nil {
 		return e
 	}
@@ -310,12 +316,12 @@ func (s *Service) transfer(ctx context.Context, op *Operation) error {
 		}
 	}
 	if remote.ItemID == "" {
-		remote, e = s.Provider.Upload(ctx, p, op.Target, &progressReader{r: source, s: s, id: op.ID}, n)
+		remote, e = s.providerFor(p).Upload(ctx, p, op.Target, &progressReader{r: source, s: s, id: op.ID}, n)
 		if e != nil {
 			return e
 		}
 	}
-	in, e := s.Provider.Open(ctx, p, remote)
+	in, e := s.providerFor(p).Open(ctx, p, remote)
 	if e != nil {
 		return e
 	}

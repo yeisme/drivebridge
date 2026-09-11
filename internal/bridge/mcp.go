@@ -32,7 +32,11 @@ func (s *Service) Tools() []mcp.Tool {
 	}
 }
 func (s *Service) Capabilities() any {
-	return map[string]any{"spec_version": "0.1", "enabled": s.Enabled, "spaces": s.Spaces(), "tools": s.Tools(), "secure_handoff": s.Enabled && s.Handoff, "output_adapter_enabled": s.Enabled && s.Output != nil, "authorization_status": "not_probed", "storage_status": "not_probed", "provider_consumption_status": "not_verified", "handoff_transport": "owner_unix_socket", "download_url_ttl": "unknown", "cli_required_on_mcp_client": false, "recovery": "operation_get_then_resume", "scope": "local_single_user", "generation_owner": "scaena"}
+	kinds := map[string]bool{}
+	for _, p := range s.Spaces() {
+		kinds[p.Kind()] = true
+	}
+	return map[string]any{"spec_version": "0.1", "enabled": s.Enabled, "spaces": s.Spaces(), "tools": s.Tools(), "backend_capabilities": map[string]any{"onedrive": map[string]any{"transfer": true, "direct_url": true, "reference_handoff": true}, "generic": map[string]any{"transfer": true, "direct_url": false, "reference_handoff": false}}, "configured_backend_kinds": kinds, "secure_handoff": s.Enabled && s.Handoff, "output_adapter_enabled": s.Enabled && s.Output != nil, "authorization_status": "not_probed", "storage_status": "not_probed", "provider_consumption_status": "not_verified", "handoff_transport": "owner_unix_socket", "download_url_ttl": "unknown", "cli_required_on_mcp_client": false, "recovery": "operation_get_then_resume", "scope": "local_single_user", "generation_owner": "scaena"}
 }
 func (s *Service) Call(ctx context.Context, name string, args map[string]any) (any, error) {
 	text := func(k string) string { v, _ := args[k].(string); return v }
@@ -66,6 +70,9 @@ func (s *Service) Call(ctx context.Context, name string, args map[string]any) (a
 		p, e := s.Space(f.SpaceID)
 		if e != nil {
 			return nil, e
+		}
+		if p.Kind() != "onedrive" {
+			return nil, errors.New("handoff_not_available")
 		}
 		if !s.Handoff || p.Project == "" || p.Actor == "" {
 			return nil, errors.New("secure_handoff_unavailable")

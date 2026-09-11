@@ -36,6 +36,9 @@ func (s *Service) reference(ctx context.Context, q HandoffRequest) (File, Space,
 	if err != nil {
 		return f, p, err
 	}
+	if p.Kind() != "onedrive" {
+		return f, p, errors.New("handoff_not_available")
+	}
 	if !s.Handoff || p.Project == "" || p.Actor == "" || p.Project != q.Project || p.Actor != q.Actor {
 		return f, p, errors.New("secure_handoff_unavailable")
 	}
@@ -46,7 +49,7 @@ func (s *Service) reference(ctx context.Context, q HandoffRequest) (File, Space,
 	if old.Verified {
 		return old, p, nil
 	}
-	in, err := s.Provider.Open(ctx, p, f)
+	in, err := s.providerFor(p).Open(ctx, p, f)
 	if err != nil {
 		return f, p, err
 	}
@@ -144,7 +147,7 @@ func (s *Service) Handler() http.Handler {
 			}
 			out := HandoffResponse{File: f}
 			if route == "acquire" {
-				out.URL, err = s.Provider.Access(r.Context(), p, f)
+				out.URL, err = s.providerFor(p).Access(r.Context(), p, f)
 				if err != nil {
 					http.Error(w, safeError(err), 409)
 					return

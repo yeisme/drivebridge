@@ -90,6 +90,7 @@ func joinNames(names []string) string {
 
 type doctorSpace struct {
 	ID, Remote, LocalRoot, Project, Actor string
+	Backend, RemotePath                   string
 	MaxBytes                              int64
 }
 
@@ -143,6 +144,9 @@ func doctorLocal(cfg doctorConfig) doctorReport {
 		add("spaces", "pass", fmt.Sprintf("%d space(s)", len(spaces)))
 	}
 	for _, p := range spaces {
+		if p.Backend == "generic" {
+			add("space."+p.ID+".backend", "info", "generic rclone backend (transfer-only; no direct URL or reference handoff)")
+		}
 		if !sections[p.Remote] {
 			add("space."+p.ID+".remote", "fail", "rclone_remote_missing: name not found in the rclone config; re-run auth")
 		} else {
@@ -162,9 +166,20 @@ func doctorLocal(cfg doctorConfig) doctorReport {
 		}
 	}
 
-	// Video reference validation dependency.
+	// Video reference validation dependency: only OneDrive spaces can take
+	// part in reference handoff, so a generic-only setup degrades to info.
+	oneDriveSpaces := false
+	for _, p := range spaces {
+		if p.Backend == "" || p.Backend == "onedrive" {
+			oneDriveSpaces = true
+		}
+	}
 	if _, err := exec.LookPath("ffprobe"); err != nil {
-		add("ffprobe", "fail", "ffprobe_missing: required for MP4 reference validation")
+		if oneDriveSpaces {
+			add("ffprobe", "fail", "ffprobe_missing: required for MP4 reference validation")
+		} else {
+			add("ffprobe", "info", "ffprobe_missing: reference validation unused (no OneDrive space)")
+		}
 	} else {
 		add("ffprobe", "pass", "")
 	}
@@ -333,7 +348,8 @@ func endpointReachable(base string) (string, bool) {
 }
 
 // readSpaces opens the state database strictly read-only so a running MCP
-// process is never blocked or mutated by a preflight.
+// process is never blocked or mutated by a preflight. Older databases without
+// the generic-backend columns fall back to the v1 column set.
 func readSpaces(dbPath string) ([]doctorSpace, string) {
 	if _, err := os.Lstat(dbPath); err != nil {
 		return nil, "state_database_missing"
@@ -343,15 +359,18 @@ func readSpaces(dbPath string) ([]doctorSpace, string) {
 		return nil, "state_database_unreadable"
 	}
 	defer db.Close()
-	rows, err := db.Query("SELECT id, remote, local_root, max_bytes, project, actor FROM spaces")
+	rows, err := db.Query("SELECT id, remote, local_root, max_bytes, project, actor, backend, root_id FROM spaces")
 	if err != nil {
-		return nil, "state_database_unreadable"
+		rows, err = db.Query("SELECT id, remote, local_root, max_bytes, project, actor, '' AS backend, '' AS root_id FROM spaces")
+		if err != nil {
+			return nil, "state_database_unreadable"
+		}
 	}
 	defer rows.Close()
 	var out []doctorSpace
 	for rows.Next() {
 		var p doctorSpace
-		if err := rows.Scan(&p.ID, &p.Remote, &p.LocalRoot, &p.MaxBytes, &p.Project, &p.Actor); err != nil {
+		if err := rows.Scan(&p.ID, &p.Remote, &p.LocalRoot, &p.MaxBytes, &p.Project, &p.Actor, &p.Backend, &p.RemotePath); err != nil {
 			return nil, "state_database_unreadable"
 		}
 		out = append(out, p)

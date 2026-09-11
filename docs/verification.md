@@ -20,3 +20,12 @@ Scaena 专项验证见对应 owner 文档。真实 Gateway、OneDrive 和火山�
 - `temp/integration-test-runs/20260911T143838Z-bb619b66/`：CGO_ENABLED=0 构建。
 
 doctor 预检只读：不创建 state、不取进程锁、`mode=ro` 打开 state.sqlite；HTTP 探测只证明可达，授权一律 not probed。agent 模式补充标量 `fact.*` 输出（排序键，嵌套只在 `--json`）。真实账号冒烟按 [activation-local.md](activation-local.md) 由用户本人执行后另记。
+
+## generic-backends（2026-09-11）
+
+- `temp/integration-test-runs/20260911T183826Z-23b57415/`：go test -race 全量（含 generic provider alias 后端 fixture：往返/嵌套根/软链接三态/handoff 拒绝/后端校验）。
+- `temp/integration-test-runs/20260911T183851Z-3b60848a/`：go vet。
+- `temp/integration-test-runs/20260911T183858Z-9122efea/`：CGO_ENABLED=0 构建（二进制 ~57 MiB，10 个内嵌 rclone 后端）。
+- `temp/integration-test-runs/20260911T183907Z-7ac80f65/`：真实 stdio MCP 冒烟（tools/list、能力资源、默认关闭）。
+
+generic 空间验证离线完成于 alias 后端（本地目录钉根），代表任意 rclone 远端的注册表行为；真实 Google Drive/Dropbox/S3/SMB 等账号登录与传输由用户按 README 步骤单独验收，不以 alias fixture 宣称云账号链路可用。remember 现保留同版本的缓存摘要与已验证媒体探测（此前纯列表会清空 SHA-256，属既有缺陷修复）。

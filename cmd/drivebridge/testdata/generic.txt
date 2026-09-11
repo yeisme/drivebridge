@@ -1,0 +1,23 @@
+# A generic (non-OneDrive) space works end to end through the CLI surface.
+mkdir local
+mkdir remote-files
+exec sh -c 'printf "[nas]\ntype = alias\nremote = %s\n" "$1" > rclone.conf' sh $WORK/remote-files
+chmod 0600 rclone.conf
+
+exec drivebridge space-add --state $WORK/state --space nas --backend generic --remote nas --local-root $WORK/local --max-bytes 1048576
+stdout 'Space configured'
+
+exec drivebridge capabilities --state $WORK/state --json
+stdout '"backend":"generic"'
+stdout '"reference_handoff":false'
+stdout '"direct_url":false'
+stdout '"follow_symlinks":false'
+
+# Re-adding with a different remote is a conflict, same as OneDrive spaces.
+! exec drivebridge space-add --state $WORK/state --space nas --backend generic --remote other --local-root $WORK/local --max-bytes 1048576
+
+# The doctor preflight reports the generic backend; ffprobe degrades to info
+# for a setup with no OneDrive space, so readiness holds either way.
+exec drivebridge doctor --state $WORK/state --rclone-config $WORK/rclone.conf --json
+stdout '"ready":true'
+stdout 'generic rclone backend'

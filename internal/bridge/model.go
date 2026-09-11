@@ -20,14 +20,26 @@ import (
 )
 
 type Space struct {
-	ID        string `json:"id" gorm:"primaryKey"`
-	Remote    string `json:"-"`
-	DriveID   string `json:"drive_id"`
-	RootID    string `json:"root_id"`
-	LocalRoot string `json:"local_root"`
-	MaxBytes  int64  `json:"max_bytes"`
-	Project   string `json:"project"`
-	Actor     string `json:"actor"`
+	ID         string `json:"id" gorm:"primaryKey"`
+	Remote     string `json:"-"`
+	Backend    string `json:"backend,omitempty"`
+	DriveID    string `json:"drive_id"`
+	RootID     string `json:"root_id"`
+	LocalRoot  string `json:"local_root"`
+	MaxBytes   int64  `json:"max_bytes"`
+	Project    string `json:"project"`
+	Actor      string `json:"actor"`
+	FollowSymlinks bool `json:"follow_symlinks"`
+}
+
+// Kind reports the provider family: "" and "onedrive" are the privileged
+// OneDrive path (direct URL handoff included); any other backend kind is a
+// transfer-only rclone remote.
+func (p Space) Kind() string {
+	if p.Backend == "" || p.Backend == "onedrive" {
+		return "onedrive"
+	}
+	return p.Backend
 }
 type File struct {
 	Ref      string `json:"ref" gorm:"primaryKey"`
@@ -70,12 +82,23 @@ type Provider interface {
 type Service struct {
 	DB       *gorm.DB
 	Provider Provider
+	Generic  Provider
 	Output   OutputSource
 	Enabled  bool
 	Handoff  bool
 	mu       sync.Mutex
 	jobs     map[string]context.CancelFunc
 	wg       sync.WaitGroup
+}
+
+// providerFor routes each space to its provider family; OneDrive keeps the
+// default provider (tests inject fakes there) and every other backend kind
+// uses the transfer-only generic rclone provider.
+func (s *Service) providerFor(p Space) Provider {
+	if p.Kind() != "onedrive" && s.Generic != nil {
+		return s.Generic
+	}
+	return s.Provider
 }
 
 func New(state string, provider Provider, enabled bool) (*Service, error) {
@@ -108,7 +131,7 @@ func New(state string, provider Provider, enabled bool) (*Service, error) {
 	if err = db.Model(&Operation{}).Where("status = ?", "cancelling").Updates(map[string]any{"status": "cancelled", "error": "operation_cancelled"}).Error; err != nil {
 		return nil, err
 	}
-	return &Service{DB: db, Provider: provider, Enabled: enabled, jobs: map[string]context.CancelFunc{}}, nil
+	return &Service{DB: db, Provider: provider, Generic: NewGeneric(), Enabled: enabled, jobs: map[string]context.CancelFunc{}}, nil
 }
 func (s *Service) Close() {
 	s.mu.Lock()
@@ -130,7 +153,23 @@ func (s *Service) Space(id string) (Space, error) {
 func (s *Service) Spaces() []Space { var out []Space; s.DB.Find(&out); return out }
 func (s *Service) AddSpace(p Space) error {
 	root, err := filepath.EvalSymlinks(p.LocalRoot)
-	if err != nil || !filepath.IsAbs(root) || p.ID == "" || strings.ContainsAny(p.Remote, ":/\\") || p.Remote == "" || p.DriveID == "" || p.RootID == "" || p.MaxBytes <= 0 {
+	if err != nil || !filepath.IsAbs(root) || p.ID == "" || strings.ContainsAny(p.Remote, ":/\\") || p.Remote == "" || p.MaxBytes <= 0 {
+		return errors.New("invalid_space")
+	}
+	switch p.Kind() {
+	case "onedrive":
+		if p.DriveID == "" || p.RootID == "" {
+			return errors.New("invalid_space")
+		}
+	case "generic":
+		// The remote root path is optional (empty = the remote's own root) but
+		// must stay inside the remote: no absolute paths, no traversal.
+		if p.RootID != "" && !filepath.IsLocal(p.RootID) {
+			return errors.New("invalid_space")
+		}
+		// Reuse the identity fields: a stable drive label plus the root path.
+		p.DriveID = "rclone:" + p.Remote
+	default:
 		return errors.New("invalid_space")
 	}
 	info, err := os.Stat(root)
@@ -187,6 +226,18 @@ func (s *Service) remember(p Space, f File) (File, error) {
 	sum := sha256.Sum256([]byte(p.ID + "\x00" + f.DriveID + "\x00" + f.ItemID + "\x00" + f.Version))
 	f.Ref = "drivebridge://file/" + hex.EncodeToString(sum[:])
 	f.SpaceID = p.ID
+	// A reference pins an immutable version: re-observing it through a plain
+	// listing must not drop the cached digest or the verified media probe.
+	var old File
+	if s.DB.First(&old, "ref = ?", f.Ref).Error == nil {
+		if f.SHA256 == "" {
+			f.SHA256 = old.SHA256
+		}
+		if f.MIME == "" {
+			f.MIME, f.Duration = old.MIME, old.Duration
+		}
+		f.Verified = f.Verified || old.Verified
+	}
 	if err := s.DB.Save(&f).Error; err != nil {
 		return File{}, errors.New("state_unavailable")
 	}
@@ -200,7 +251,7 @@ func (s *Service) List(ctx context.Context, space string) ([]File, error) {
 	if e != nil {
 		return nil, e
 	}
-	items, e := s.Provider.List(ctx, p)
+	items, e := s.providerFor(p).List(ctx, p)
 	if e != nil {
 		return nil, e
 	}
@@ -229,7 +280,7 @@ func (s *Service) Stat(ctx context.Context, ref string) (File, error) {
 	if e != nil {
 		return File{}, e
 	}
-	f, e := s.Provider.Stat(ctx, p, old.ItemID)
+	f, e := s.providerFor(p).Stat(ctx, p, old.ItemID)
 	if e != nil {
 		return File{}, e
 	}

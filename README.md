@@ -33,6 +33,20 @@ go build -o drivebridge ./cmd/drivebridge
 
 不加 `--enabled` 时只可发现能力和读取既有操作回执，上传、下载、恢复和取消默认关闭。`--handoff` 还需显式启用；socket 位于 state 目录的 `handoff.sock`，权限 0600。异常终止后若遗留 socket，确认旧进程已停止再由操作者清理，不会自动删除未知 socket。
 
+## 通用 rclone 后端（Google Drive/Dropbox/Box/pCloud/S3/WebDAV/SMB/SFTP）
+
+除 OneDrive 外，空间可以绑定任意已配置的 rclone 远端作为**仅传输面**后端。先用 `drivebridge auth`（或自有 rclone 配置 `--rclone-config`）在该远端完成登录，再以 `--backend generic` 建空间；`--remote-path` 钉住远端内的根（空=远端根）：
+
+```bash
+./drivebridge space-add --space gdrive --backend generic --remote '<rclone-remote>' --remote-path 'creative/refs' --local-root '/absolute/path/refs' --max-bytes 1073741824
+```
+
+能力边界由 `capabilities` 的 `backend_capabilities` 如实区分：generic 空间支持 list/stat/upload/download/恢复与稳定引用，**不提供**临时直链（`access_unsupported`）与 Scaena 参考交接（`handoff_not_available`）——这两项保持 OneDrive 专属。版本钉在 `大小+修改时间` 上，远端内容变化表现为版本漂移（`file_version_changed`），不静默复用旧引用。
+
+软链接默认拒绝（`symlink_rejected`），防止越界逃逸；空间级 `--follow-symlinks` 显式开启后以内容副本物化上传，且指向 local root 之外的链接仍被 os.Root 约束拦截。纯 generic 空间的 doctor 中 ffprobe 降级为 info（参考校验用不到）。
+
+内嵌后端清单见 `internal/bridge/backends.go`（alias/local/box/dropbox/drive/pcloud/s3/smb/sftp/webdav + OneDrive）；新增后端=补一行 import，无需其他接线。
+
 ## Agent 操作合同
 
 通过 `tools/list` 或 `drivebridge://capabilities` 发现真实工具/schema。能力资源与工具注册表共用定义。`authorization_status` 和 `storage_status` 的 `not_probed` 不代表已连通。
