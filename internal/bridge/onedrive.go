@@ -1,0 +1,343 @@
+package bridge
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"io"
+	"net"
+	"net/http"
+	"net/url"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/rclone/rclone/backend/onedrive"
+	onedriveapi "github.com/rclone/rclone/backend/onedrive/api"
+	"github.com/rclone/rclone/fs"
+	"github.com/rclone/rclone/fs/config"
+	"github.com/rclone/rclone/fs/config/configmap"
+	"github.com/rclone/rclone/fs/object"
+	"github.com/rclone/rclone/lib/oauthutil"
+)
+
+// OneDrive uses rclone as the only refresh-token authority. Graph borrows the
+// current access token in memory after a rclone authenticated request. It never
+// copies tokens to DriveBridge state, MCP output or a second credential store.
+type OneDrive struct {
+	mu        sync.Mutex
+	clients   map[string]fs.Fs
+	HTTP      *http.Client
+	authToken func(context.Context, Space) (string, error)
+}
+
+func NewOneDrive() *OneDrive {
+	return &OneDrive{clients: map[string]fs.Fs{}, HTTP: &http.Client{Timeout: 60 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}
+}
+func (r *OneDrive) mapper(p Space) (*configmap.Map, error) {
+	if config.GetValue(p.Remote, "type") != "onedrive" || config.GetValue(p.Remote, "drive_id") != p.DriveID {
+		return nil, errors.New("space_not_allowed")
+	}
+	region := config.GetValue(p.Remote, "region")
+	if region != "" && region != "global" {
+		return nil, errors.New("region_not_supported")
+	}
+	reg, err := fs.Find("onedrive")
+	if err != nil {
+		return nil, errors.New("authentication_required")
+	}
+	return fs.ConfigMap("onedrive", reg.Options, p.Remote, configmap.Simple{"drive_id": p.DriveID, "root_folder_id": p.RootID}), nil
+}
+func (r *OneDrive) client(ctx context.Context, p Space) (fs.Fs, error) {
+	m, err := r.mapper(p)
+	if err != nil {
+		return nil, err
+	}
+	if f, ok := r.clients[p.ID]; ok {
+		return f, nil
+	}
+	f, err := onedrive.NewFs(ctx, p.Remote, "", m)
+	if err != nil {
+		return nil, errors.New("authentication_required")
+	}
+	r.clients[p.ID] = f
+	return f, nil
+}
+func (r *OneDrive) token(ctx context.Context, p Space) (string, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	f, err := r.client(ctx, p)
+	if err != nil {
+		return "", err
+	}
+	// About performs an authenticated request and lets rclone refresh/save tokens.
+	if f.Features().About == nil {
+		return "", errors.New("authentication_required")
+	}
+	if _, err = f.Features().About(ctx); err != nil {
+		return "", errors.New("authentication_required")
+	}
+	m, err := r.mapper(p)
+	if err != nil {
+		return "", err
+	}
+	t, err := oauthutil.GetToken(p.Remote, m)
+	if err != nil || !t.Valid() {
+		return "", errors.New("authentication_required")
+	}
+	return t.AccessToken, nil
+}
+
+type driveItem struct {
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	Size   int64  `json:"size"`
+	ETag   string `json:"eTag"`
+	Parent struct {
+		ID    string `json:"id"`
+		Drive string `json:"driveId"`
+	} `json:"parentReference"`
+	File *struct {
+		MIME string `json:"mimeType"`
+	} `json:"file"`
+	Video *struct {
+		Duration int64 `json:"duration"`
+	} `json:"video"`
+	Download string `json:"@microsoft.graph.downloadUrl"`
+}
+
+func (i driveItem) file(p Space) File {
+	f := File{ItemID: i.ID, DriveID: i.Parent.Drive, Version: i.ETag, Name: i.Name, Size: i.Size}
+	if i.File != nil {
+		f.MIME = i.File.MIME
+	}
+	if i.Video != nil {
+		f.Duration = int((i.Video.Duration + 999) / 1000)
+	}
+	return f
+}
+func (r *OneDrive) graph(ctx context.Context, p Space, path string, out any) error {
+	getToken := r.token
+	if r.authToken != nil {
+		getToken = r.authToken
+	}
+	token, err := getToken(ctx, p)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://graph.microsoft.com/v1.0/drives/"+url.PathEscape(p.DriveID)+"/"+path, nil)
+	if err != nil {
+		return errors.New("invalid_graph_request")
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	response, err := r.HTTP.Do(req)
+	if err != nil {
+		return errors.New("graph_unreachable")
+	}
+	defer response.Body.Close()
+	switch response.StatusCode {
+	case 200:
+	case 401, 403:
+		return errors.New("authentication_required")
+	case 404:
+		return errors.New("remote_not_found")
+	case 429:
+		return errors.New("throttled")
+	case 507:
+		return errors.New("quota_exceeded")
+	default:
+		return errors.New("graph_unavailable")
+	}
+	if json.NewDecoder(io.LimitReader(response.Body, 4<<20)).Decode(out) != nil {
+		return errors.New("invalid_graph_response")
+	}
+	return nil
+}
+func (r *OneDrive) item(ctx context.Context, p Space, id string, access bool) (driveItem, error) {
+	var i driveItem
+	fields := "id,name,size,eTag,parentReference,file,video"
+	if access {
+		fields += ",@microsoft.graph.downloadUrl"
+	}
+	err := r.graph(ctx, p, "items/"+url.PathEscape(id)+"?$select="+url.QueryEscape(fields), &i)
+	if err != nil {
+		return i, err
+	}
+	if i.ID != id || i.Parent.Drive != p.DriveID {
+		return i, errors.New("remote_outside_space")
+	}
+	parent := i.Parent.ID
+	for n := 0; n < 128; n++ {
+		if parent == p.RootID {
+			return i, nil
+		}
+		if parent == "" || parent == id {
+			return i, errors.New("remote_outside_space")
+		}
+		var ancestor driveItem
+		if err = r.graph(ctx, p, "items/"+url.PathEscape(parent)+"?$select=id,parentReference", &ancestor); err != nil {
+			return i, err
+		}
+		if ancestor.Parent.Drive != "" && ancestor.Parent.Drive != p.DriveID {
+			return i, errors.New("remote_outside_space")
+		}
+		parent = ancestor.Parent.ID
+	}
+	return i, errors.New("remote_outside_space")
+}
+func (r *OneDrive) List(ctx context.Context, p Space) ([]File, error) {
+	path := "items/" + url.PathEscape(p.RootID) + "/children?$top=200&$select=id,name,size,eTag,parentReference,file,video"
+	out := []File{}
+	for page := 0; page < 100; page++ {
+		var data struct {
+			Items []driveItem `json:"value"`
+			Next  string      `json:"@odata.nextLink"`
+		}
+		if err := r.graph(ctx, p, path, &data); err != nil {
+			return nil, err
+		}
+		for _, i := range data.Items {
+			if i.File != nil && i.Parent.ID == p.RootID && i.Parent.Drive == p.DriveID {
+				out = append(out, i.file(p))
+			}
+		}
+		if data.Next == "" {
+			return out, nil
+		}
+		prefix := "https://graph.microsoft.com/v1.0/drives/" + url.PathEscape(p.DriveID) + "/"
+		if !strings.HasPrefix(data.Next, prefix) {
+			return nil, errors.New("invalid_graph_pagination")
+		}
+		path = strings.TrimPrefix(data.Next, prefix)
+	}
+	return nil, errors.New("listing_limit_exceeded")
+}
+func (r *OneDrive) Stat(ctx context.Context, p Space, id string) (File, error) {
+	i, err := r.item(ctx, p, id, false)
+	if err != nil {
+		return File{}, err
+	}
+	if i.File == nil {
+		return File{}, errors.New("not_a_file")
+	}
+	return i.file(p), nil
+}
+func (r *OneDrive) Upload(ctx context.Context, p Space, name string, in io.Reader, n int64) (File, error) {
+	r.mu.Lock()
+	f, err := r.client(ctx, p)
+	r.mu.Unlock()
+	if err != nil {
+		return File{}, err
+	}
+	if _, err = f.NewObject(ctx, name); err == nil {
+		return File{}, errors.New("target_conflict")
+	} else if !errors.Is(err, fs.ErrorObjectNotFound) {
+		return File{}, errors.New("remote_unavailable")
+	}
+	o, err := f.Put(ctx, in, object.NewStaticObjectInfo(name, time.Now(), n, true, nil, f))
+	if err != nil {
+		return File{}, classifyOneDriveError(err)
+	}
+	ider, ok := o.(fs.IDer)
+	if !ok {
+		return File{}, errors.New("invalid_file_metadata")
+	}
+	id := ider.ID()
+	if pos := strings.LastIndex(id, "#"); pos >= 0 {
+		id = id[pos+1:]
+	}
+	return r.Stat(ctx, p, id)
+}
+func (r *OneDrive) Access(ctx context.Context, p Space, f File) (string, error) {
+	i, err := r.item(ctx, p, f.ItemID, true)
+	if err != nil {
+		return "", err
+	}
+	if i.ETag != f.Version || i.Size != f.Size {
+		return "", errors.New("file_version_changed")
+	}
+	if !validDownloadURL(i.Download) {
+		return "", errors.New("download_access_unavailable")
+	}
+	return i.Download, nil
+}
+func (r *OneDrive) Open(ctx context.Context, p Space, f File) (io.ReadCloser, error) {
+	u, err := r.Access(ctx, p, f)
+	if err != nil {
+		return nil, err
+	}
+	return openDownload(ctx, u)
+}
+func validDownloadURL(raw string) bool {
+	u, e := url.Parse(raw)
+	if e != nil || u.Scheme != "https" || u.User != nil || u.Fragment != "" || u.Port() != "" {
+		return false
+	}
+	host := strings.ToLower(u.Hostname())
+	for _, suffix := range []string{".1drv.com", ".sharepoint.com", ".storage.live.com", ".onedrive.com"} {
+		if strings.HasSuffix(host, suffix) {
+			return true
+		}
+	}
+	return false
+}
+func openDownload(ctx context.Context, raw string) (io.ReadCloser, error) {
+	if !validDownloadURL(raw) {
+		return nil, errors.New("download_access_unavailable")
+	}
+	client := &http.Client{Timeout: 30 * time.Minute, Transport: &http.Transport{Proxy: nil, DialContext: publicDial}, CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		if len(via) > 3 || !validDownloadURL(req.URL.String()) {
+			return errors.New("redirect_not_allowed")
+		}
+		return nil
+	}}
+	req, err := http.NewRequestWithContext(ctx, "GET", raw, nil)
+	if err != nil {
+		return nil, errors.New("download_access_unavailable")
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, errors.New("download_unavailable")
+	}
+	if resp.StatusCode != 200 {
+		resp.Body.Close()
+		return nil, errors.New("download_unavailable")
+	}
+	return resp.Body, nil
+}
+func publicDial(ctx context.Context, network, address string) (net.Conn, error) {
+	host, port, err := net.SplitHostPort(address)
+	if err != nil {
+		return nil, err
+	}
+	ips, err := net.DefaultResolver.LookupIPAddr(ctx, host)
+	if err != nil {
+		return nil, errors.New("dns_unavailable")
+	}
+	if len(ips) == 0 {
+		return nil, errors.New("dns_unavailable")
+	}
+	for _, ip := range ips {
+		if !ip.IP.IsGlobalUnicast() || ip.IP.IsPrivate() || ip.IP.IsLoopback() || ip.IP.IsLinkLocalUnicast() {
+			return nil, errors.New("address_not_allowed")
+		}
+	}
+	return (&net.Dialer{Timeout: 20 * time.Second}).DialContext(ctx, network, net.JoinHostPort(ips[0].IP.String(), port))
+}
+
+func classifyOneDriveError(err error) error {
+	var apiError *onedriveapi.Error
+	if errors.As(err, &apiError) {
+		switch apiError.ErrorInfo.Code {
+		case "quotaLimitReached", "insufficientStorage":
+			return errors.New("quota_exceeded")
+		case "throttledRequest", "tooManyRequests", "activityLimitReached":
+			return errors.New("throttled")
+		case "unauthenticated", "invalidAuthenticationToken", "accessDenied":
+			return errors.New("authentication_required")
+		case "nameAlreadyExists":
+			return errors.New("target_conflict")
+		}
+	}
+	return errors.New("transfer_failed")
+}

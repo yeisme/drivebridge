@@ -1,0 +1,10 @@
+exec drivebridge
+stdout 'Usage: drivebridge'
+mkdir local
+exec drivebridge space-add --state $WORK/state --space creative --remote one --drive-id drive --root-id root --local-root $WORK/local --max-bytes 1048576
+stdout 'Space configured'
+exec drivebridge capabilities --state $WORK/state --json
+stdout '"enabled":false'
+stdout '"id":"creative"'
+! exec drivebridge space-add --state $WORK/state --space creative --remote two --drive-id other --root-id root --local-root $WORK/local --max-bytes 1048576
+stderr 'DriveBridge failed'
