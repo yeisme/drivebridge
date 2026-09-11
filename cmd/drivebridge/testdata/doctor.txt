@@ -1,0 +1,34 @@
+# A fresh state is not ready, with named failures and a non-zero exit.
+! exec drivebridge doctor --state $WORK/state --rclone-config $WORK/rclone.conf
+stdout 'state_dir *fail'
+stdout 'rclone_config *fail'
+stdout 'not ready \(failed: '
+! stdout 'token'
+
+# Fully configured local mode is ready.
+mkdir local
+mkdir bin
+exec sh -c 'printf "#!/bin/sh\nexit 0\n" > bin/ffprobe && chmod 0755 bin/ffprobe'
+env PATH=$WORK/bin:${PATH}
+exec sh -c 'umask 177; printf "[one]\ntype = onedrive\n" > rclone.conf'
+exec drivebridge space-add --state $WORK/state --space creative --remote one --drive-id drive --root-id root --local-root $WORK/local --max-bytes 1048576
+exec drivebridge doctor --state $WORK/state --rclone-config $WORK/rclone.conf --json
+stdout '"mode":"local"'
+stdout '"ready":true'
+stdout '"status":"success"'
+
+# Human mode still prints per-check lines.
+exec drivebridge doctor --state $WORK/state --rclone-config $WORK/rclone.conf
+stdout 'state_dir *pass'
+stdout 'ready\.$'
+
+# Declaring handoff intent without a running listener blocks readiness.
+! exec drivebridge doctor --state $WORK/state --rclone-config $WORK/rclone.conf --json --handoff
+stdout '"ready":false'
+stdout 'handoff_socket_missing'
+
+# An over-exposed state directory is rejected without creating anything.
+mkdir exposed
+chmod 0755 exposed
+! exec drivebridge doctor --state $WORK/exposed --rclone-config $WORK/rclone.conf
+stdout 'state_dir *fail *state_dir_not_private'

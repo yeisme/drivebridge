@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -23,13 +24,15 @@ import (
 
 func main() {
 	if err := run(); err != nil {
-		fmt.Fprintln(os.Stderr, "DriveBridge failed. Check local configuration and the documented recovery steps.")
+		if !errors.Is(err, errDoctorNotReady) {
+			fmt.Fprintln(os.Stderr, "DriveBridge failed. Check local configuration and the documented recovery steps.")
+		}
 		os.Exit(1)
 	}
 }
 func run() (err error) {
 	if len(os.Args) < 2 || os.Args[1] == "--help" || os.Args[1] == "-h" {
-		fmt.Println("Usage: drivebridge <auth|space-add|mcp|capabilities|remote> [options]")
+		fmt.Println("Usage: drivebridge <auth|space-add|mcp|capabilities|doctor|remote> [options]")
 		return nil
 	}
 	flags := flag.NewFlagSet(os.Args[1], flag.ContinueOnError)
@@ -39,7 +42,7 @@ func run() (err error) {
 	flags.BoolVar(&mode.Events, "events", false, "Print start/end NDJSON events")
 	flags.BoolVar(&mode.Explain, "explain", false, "Explain the local result")
 	defer func() {
-		if err != nil && (mode.JSON || mode.Agent || mode.Events || mode.Explain) {
+		if err != nil && !errors.Is(err, errDoctorNotReady) && (mode.JSON || mode.Agent || mode.Events || mode.Explain) {
 			_ = mode.write(os.Args[1], "failed", "Command failed; check configuration and recovery instructions.", nil)
 		}
 	}()
@@ -67,6 +70,14 @@ func run() (err error) {
 	actor := flags.String("actor", "", "Authorized Scaena actor reference")
 	if err = flags.Parse(os.Args[2:]); err != nil {
 		return err
+	}
+	// doctor is read-only: it must not create state, take the process lock, or
+	// open the database for writes, so it branches before both.
+	if os.Args[1] == "doctor" {
+		return runDoctor(mode, doctorConfig{
+			State: *state, RcloneConfig: *rcloneConfig, ScaenaURL: *scaenaBase, ScaenaTokenFile: *scaenaTokenFile,
+			Handoff: *handoff, RemoteURL: *remoteURL, RemoteTokenFile: *remoteToken, LocalRoot: *local,
+		})
 	}
 	if *remoteURL != "" {
 		adapter, e := remoteclient.New(*remoteURL, *remoteToken, *local)

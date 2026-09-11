@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
+	"strings"
 )
 
 type outputMode struct{ JSON, Agent, Events, Explain bool }
@@ -42,6 +44,23 @@ func (m outputMode) write(command, status, summary string, data any) error {
 		return enc.Encode(envelope)
 	case "agent":
 		fmt.Printf("spec_version=1.0\nmode=agent\ncommand=drivebridge.%s\nstatus=%s\n", command, status)
+		// Scalar facts only; nested payloads stay in --json.
+		if data, ok := envelope["data"].(map[string]any); ok {
+			keys := make([]string, 0, len(data))
+			for k := range data {
+				keys = append(keys, k)
+			}
+			sort.Strings(keys)
+			for _, k := range keys {
+				switch v := data[k].(type) {
+				case string, bool, int, int64, float64:
+					if s, isStr := v.(string); isStr && strings.ContainsAny(s, "\n") {
+						continue
+					}
+					fmt.Printf("fact.%s=%v\n", k, v)
+				}
+			}
+		}
 	case "explain":
 		fmt.Printf("Conclusion: %s\nEvidence: Local application projection; no live provider readiness is inferred.\n", summary)
 	default:

@@ -13,6 +13,14 @@ go build -o drivebridge ./cmd/drivebridge
 
 `auth` 调用内置 rclone 的交互配置器：选择 OneDrive 并完成用户 OAuth。已有 rclone 配置可直接使用 `--rclone-config /absolute/path/rclone.conf`，无需重新登录。此命令只在用户终端操作；不要通过 MCP 读取或打印配置。DriveBridge 与 Graph 不保存第二份 token，Graph 在 rclone 完成认证/刷新后借用当前 access token。默认仅支持微软 global 云区域；其他区域明确拒绝。
 
+配置后与激活前用只读预检确认就绪（支持 `--remote-url` 远程模式；不做真实账号探测）：
+
+```bash
+./drivebridge doctor --state <state> --rclone-config <rclone.conf>
+```
+
+首次真实使用步骤见 [docs/activation-local.md](docs/activation-local.md)。
+
 空间由操作者显式配置。以下尖括号参数需要替换为实际账号与目录标识；`root-id` 是允许目录的真实 item ID，不能使用显示名称或 `root` 占位符。
 
 ```bash
