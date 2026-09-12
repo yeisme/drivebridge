@@ -48,3 +48,13 @@ cobra+ viper 重构后旧行为等价：旗标名不变、`space-add` 为隐藏�
 - testscript workspace.txt：config 驱动 CLI 全链（mkdir→upload --dir→轮询 ls→重试幂等→逃逸拒绝→install generic 无 token）。
 
 OneDrive 目录路径（Graph path 寻址/逐段 mkdir/graphPost）经 fake Graph 单测；真实 OneDrive 目录操作由用户实机验收。CLI 传输命令的 --enabled 门豁免=用户本人终端语义（spec 固化）。
+
+## soft-delete + discovery 批次一（2026-09-12）
+
+- `temp/integration-test-runs/20260912T141339Z-39c64e8c/`：go test -race 全量（软删除全生命周期：trash→trashed stat→下载拒绝→purge 两步门→引用消失→restore 回读；search 大小写/垃圾过滤；changes 订阅窗口/零游标不回放/cursor_ahead）。
+- `temp/integration-test-runs/20260912T141414Z-dbac0587/`：go vet。
+- `temp/integration-test-runs/20260912T141416Z-3f7c7102/`：CGO_ENABLED=0 构建。
+- `temp/integration-test-runs/20260912T141419Z-7a469ac9/`：真实 stdio MCP 冒烟（新增 search/changes/trash/restore 工具 schema 一致）。
+- testscript：find/changes/trash/purge 双旗标门/restore 全链；CLI 传输命令改为同步终态（排队即退会在进程退出时取消后台传输——竞态修复）。
+
+OneDrive Move/Delete（Graph PATCH parentReference/DELETE）经类型化错误映射实现；真实 OneDrive 移动/删除由用户实机验收。AGENTS 边界改写：禁止永久删除（软删除+恢复限空间内）。

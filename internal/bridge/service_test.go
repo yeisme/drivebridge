@@ -39,6 +39,8 @@ func (f *fakeProvider) List(ctx context.Context, p Space, dir string) ([]File, e
 	return out, nil
 }
 func (f *fakeProvider) Mkdir(context.Context, Space, string) error { return nil }
+func (f *fakeProvider) Move(context.Context, Space, File, string, string) error { return nil }
+func (f *fakeProvider) Delete(context.Context, Space, File) error { return nil }
 func (f *fakeProvider) Stat(ctx context.Context, p Space, id string) (File, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -360,6 +362,7 @@ func (b blockingProvider) List(ctx context.Context, p Space, dir string) ([]File
 	return nil, nil
 }
 func (b blockingProvider) Mkdir(context.Context, Space, string) error { return nil }
+
 type blockingProvider struct {
 	*fakeProvider
 	started chan struct{}

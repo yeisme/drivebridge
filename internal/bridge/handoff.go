@@ -39,6 +39,9 @@ func (s *Service) reference(ctx context.Context, q HandoffRequest) (File, Space,
 	if p.Kind() != "onedrive" {
 		return f, p, errors.New("handoff_not_available")
 	}
+	if f.Trashed != nil {
+		return f, p, errors.New("file_trashed")
+	}
 	if !s.Handoff || p.Project == "" || p.Actor == "" || p.Project != q.Project || p.Actor != q.Actor {
 		return f, p, errors.New("secure_handoff_unavailable")
 	}

@@ -280,3 +280,146 @@ func TestWorkspaceDirectories(t *testing.T) {
 		t.Fatalf("absolute path must be rejected: %v", e)
 	}
 }
+
+func TestSoftDeleteLifecycle(t *testing.T) {
+	s, local, remoteRoot := genericFixture(t)
+	if e := s.AddSpace(Space{ID: "nas", Remote: "nas", Backend: "generic", LocalRoot: local, MaxBytes: 1 << 20}); e != nil {
+		t.Fatal(e)
+	}
+	ctx := context.Background()
+	if e := os.WriteFile(filepath.Join(local, "t.bin"), []byte("trashable"), 0600); e != nil {
+		t.Fatal(e)
+	}
+	op, e := s.Upload(ctx, "nas", "", filepath.Join(local, "t.bin"), "t.bin", "k")
+	if e != nil {
+		t.Fatal(e)
+	}
+	op = waitCompleted(t, s, op.ID)
+	ref := op.FileRef
+
+	// Trash keeps the reference queryable, blocks consumption, keeps bytes.
+	if _, e = s.Trash(ctx, ref); e != nil {
+		t.Fatal(e)
+	}
+	stat, e := s.Stat(ctx, ref)
+	if e != nil || stat.Trashed == nil {
+		t.Fatalf("trashed stat: %v %+v", e, stat)
+	}
+	if _, e = s.Download(ctx, ref, filepath.Join(local, "nope.bin"), "k2"); e == nil || e.Error() != "file_trashed" {
+		t.Fatalf("download must reject trashed: %v", e)
+	}
+	matches, _ := filepath.Glob(filepath.Join(remoteRoot, ".drivebridge-trash", "*", "*-t.bin"))
+	if len(matches) != 1 {
+		t.Fatalf("object should sit in dated trash: %v", matches)
+	}
+
+	// Purge refuses un-trashed refs and removes trashed ones permanently.
+	if e = s.Purge(ctx, "drivebridge://file/none"); e == nil {
+		t.Fatal("unknown ref must fail")
+	}
+	fresh, e := s.Upload(ctx, "nas", "", filepath.Join(local, "t.bin"), "t2.bin", "k2")
+	if e != nil {
+		t.Fatal(e)
+	}
+	fresh = waitCompleted(t, s, fresh.ID)
+	if e = s.Purge(ctx, fresh.FileRef); e == nil || e.Error() != "file_not_trashed" {
+		t.Fatalf("purge is two-step: %v", e)
+	}
+	if _, e = s.Trash(ctx, fresh.FileRef); e != nil {
+		t.Fatal(e)
+	}
+	if e = s.Purge(ctx, fresh.FileRef); e != nil {
+		t.Fatal(e)
+	}
+	if _, e = s.Stat(ctx, fresh.FileRef); e == nil || e.Error() != "reference_not_found" {
+		t.Fatalf("purged ref must vanish: %v", e)
+	}
+
+	// Restore returns the original reference without overwriting.
+	restored, e := s.Restore(ctx, ref)
+	if e != nil || restored.Trashed != nil {
+		t.Fatalf("restore: %v %+v", e, restored)
+	}
+	if b, _ := os.ReadFile(filepath.Join(remoteRoot, restored.Name)); string(b) != "trashable" {
+		t.Fatal("restored bytes mismatch")
+	}
+	target := filepath.Join(local, "back.bin")
+	dop, e := s.Download(ctx, ref, target, "k3")
+	if e != nil {
+		t.Fatal(e)
+	}
+	waitCompleted(t, s, dop.ID)
+}
+
+func TestSearchAndChangesFeed(t *testing.T) {
+	s, local, _ := genericFixture(t)
+	if e := s.AddSpace(Space{ID: "nas", Remote: "nas", Backend: "generic", LocalRoot: local, MaxBytes: 1 << 20}); e != nil {
+		t.Fatal(e)
+	}
+	ctx := context.Background()
+	// Zero cursor: current position, no history replay.
+	_, cursor, e := s.Changes("nas", 0)
+	if e != nil || cursor != 0 {
+		t.Fatalf("empty feed: %v %d", e, cursor)
+	}
+	for _, name := range []string{"hero-a.png", "hero-b.png", "side-c.png"} {
+		if e := os.WriteFile(filepath.Join(local, name), []byte(name), 0600); e != nil {
+			t.Fatal(e)
+		}
+		op, e := s.Upload(ctx, "nas", "", filepath.Join(local, name), name, "k-"+name)
+		if e != nil {
+			t.Fatal(e)
+		}
+		waitCompleted(t, s, op.ID)
+	}
+	// Search by case-insensitive substring over the index.
+	hits, e := s.Search("nas", "HERO", "")
+	if e != nil || len(hits) != 2 {
+		t.Fatalf("search: %v %+v", e, hits)
+	}
+	// Capture the live cursor before further mutations.
+	_, live, e := s.Changes("nas", 0)
+	if e != nil {
+		t.Fatal(e)
+	}
+	// Trashed files drop out of search.
+	trashedRef := hits[0].Ref
+	if _, e = s.Trash(ctx, trashedRef); e != nil {
+		t.Fatal(e)
+	}
+	hits, e = s.Search("nas", "hero", "")
+	if e != nil || len(hits) != 1 {
+		t.Fatalf("search after trash: %v %+v", e, hits)
+	}
+	// The feed is subscription-style: events strictly after a live cursor.
+	if e := os.WriteFile(filepath.Join(local, "late.png"), []byte("late"), 0600); e != nil {
+		t.Fatal(e)
+	}
+	late, e := s.Upload(ctx, "nas", "", filepath.Join(local, "late.png"), "late.png", "k-late")
+	if e != nil {
+		t.Fatal(e)
+	}
+	waitCompleted(t, s, late.ID)
+	events, cursor2, e := s.Changes("nas", live)
+	if e != nil {
+		t.Fatal(e)
+	}
+	kinds := map[string]int{}
+	for _, ev := range events {
+		kinds[ev.Kind]++
+	}
+	if kinds["file_added"] != 1 || kinds["file_trashed"] != 1 || kinds["operation_completed"] < 1 {
+		t.Fatalf("feed kinds: %v", kinds)
+	}
+	if _, _, e = s.Changes("nas", cursor2+1); e == nil || e.Error() != "cursor_ahead" {
+		t.Fatalf("ahead cursor must fail: %v", e)
+	}
+	// Restore surfaces as its own event.
+	if _, e = s.Restore(ctx, trashedRef); e != nil {
+		t.Fatal(e)
+	}
+	events, _, e = s.Changes("nas", cursor2)
+	if e != nil || len(events) != 1 || events[0].Kind != "file_restored" {
+		t.Fatalf("restore event: %v %+v", e, events)
+	}
+}

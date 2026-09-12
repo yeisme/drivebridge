@@ -323,7 +323,20 @@ func newTransferCommands(c *cli) []*cobra.Command {
 			if err != nil {
 				return err
 			}
-			return c.mode.write("upload", "queued", fmt.Sprintf("Operation %s queued; poll with 'drivebridge operation %s'.", op.ID, op.ID), op)
+			// The CLI is synchronous for the user: wait for the terminal state
+			// instead of leaving the transfer behind in a dying process.
+			op = awaitTerminal(s, op.ID)
+			status, message := op.Status, fmt.Sprintf("%s %d/%d bytes.", op.ID, op.Transferred, op.Bytes)
+			if op.Status == "completed" {
+				status, message = "success", fmt.Sprintf("Uploaded %s -> %s.", op.ID, op.FileRef)
+			}
+			if err := c.mode.write("upload", status, message, op); err != nil {
+				return err
+			}
+			if op.Status != "completed" {
+				return fmt.Errorf("operation %s: %s", op.ID, op.Status)
+			}
+			return nil
 		},
 	}
 	upload.Flags().String("space", "", "Space identifier")
@@ -351,7 +364,18 @@ func newTransferCommands(c *cli) []*cobra.Command {
 			if err != nil {
 				return err
 			}
-			return c.mode.write("download", "queued", fmt.Sprintf("Operation %s queued; poll with 'drivebridge operation %s'.", op.ID, op.ID), op)
+			op = awaitTerminal(s, op.ID)
+			status, message := op.Status, fmt.Sprintf("%s %d/%d bytes.", op.ID, op.Transferred, op.Bytes)
+			if op.Status == "completed" {
+				status, message = "success", fmt.Sprintf("Downloaded via %s.", op.ID)
+			}
+			if err := c.mode.write("download", status, message, op); err != nil {
+				return err
+			}
+			if op.Status != "completed" {
+				return fmt.Errorf("operation %s: %s", op.ID, op.Status)
+			}
+			return nil
 		},
 	}
 	download.Flags().String("ref", "", "Stable file reference")
@@ -442,7 +466,122 @@ func newTransferCommands(c *cli) []*cobra.Command {
 	mkdir.Flags().String("space", "", "Space identifier")
 	mkdir.Flags().String("path", "", "Workspace directory path")
 
-	return []*cobra.Command{upload, download, list, stat, op, mkdir}
+	find := &cobra.Command{
+		Use:   "find",
+		Short: "Search the space index by name; verify hits with stat.",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			space, _ := cmd.Flags().GetString("space")
+			query, _ := cmd.Flags().GetString("query")
+			path, _ := cmd.Flags().GetString("path")
+			s, release, err := c.openService(true)
+			if err != nil {
+				return err
+			}
+			defer release()
+			files, err := s.Search(space, query, path)
+			if err != nil {
+				return err
+			}
+			if !(c.mode.JSON || c.mode.Agent || c.mode.Events || c.mode.Explain) {
+				for _, f := range files {
+					fmt.Printf("%-40s %10d  %s\n", f.Name, f.Size, f.Ref)
+				}
+			}
+			return c.mode.write("find", "success", fmt.Sprintf("%d hit(s).", len(files)), map[string]any{"count": len(files), "files": files})
+		},
+	}
+	find.Flags().String("space", "", "Space identifier")
+	find.Flags().String("query", "", "Case-insensitive name substring")
+	find.Flags().String("path", "", "Restrict to one workspace directory")
+
+	feed := &cobra.Command{
+		Use:   "changes",
+		Short: "Poll incremental events since a cursor (0 = current position).",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			space, _ := cmd.Flags().GetString("space")
+			since, _ := cmd.Flags().GetUint64("since")
+			s, release, err := c.openService(true)
+			if err != nil {
+				return err
+			}
+			defer release()
+			events, cursor, err := s.Changes(space, since)
+			if err != nil {
+				return err
+			}
+			if !(c.mode.JSON || c.mode.Agent || c.mode.Events || c.mode.Explain) {
+				for _, ev := range events {
+					fmt.Printf("%d %s %s %s\n", ev.ID, ev.Kind, ev.Ref, ev.Detail)
+				}
+			}
+			return c.mode.write("changes", "success", fmt.Sprintf("%d event(s); cursor=%d.", len(events), cursor), map[string]any{"events": events, "cursor": cursor})
+		},
+	}
+	feed.Flags().String("space", "", "Space identifier")
+	feed.Flags().Uint64("since", 0, "Cursor from a previous changes call")
+
+	trashCmd := &cobra.Command{
+		Use:   "trash",
+		Short: "Soft-delete a reference inside its space (restorable).",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			ref, _ := cmd.Flags().GetString("ref")
+			s, release, err := c.openService(true)
+			if err != nil {
+				return err
+			}
+			defer release()
+			f, err := s.Trash(context.Background(), ref)
+			if err != nil {
+				return err
+			}
+			return c.mode.write("trash", "success", "Reference trashed; restore with 'drivebridge restore'.", f)
+		},
+	}
+	trashCmd.Flags().String("ref", "", "Stable file reference")
+
+	restore := &cobra.Command{
+		Use:   "restore",
+		Short: "Move a trashed reference back (same-name conflicts get a suffix).",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			ref, _ := cmd.Flags().GetString("ref")
+			s, release, err := c.openService(true)
+			if err != nil {
+				return err
+			}
+			defer release()
+			f, err := s.Restore(context.Background(), ref)
+			if err != nil {
+				return err
+			}
+			return c.mode.write("restore", "success", "Reference restored.", f)
+		},
+	}
+	restore.Flags().String("ref", "", "Stable file reference")
+
+	purge := &cobra.Command{
+		Use:   "purge",
+		Short: "Permanently delete an already-trashed reference (owner-only).",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			ref, _ := cmd.Flags().GetString("ref")
+			owner, _ := cmd.Flags().GetBool("i-am-the-owner")
+			if !owner {
+				return fmt.Errorf("permanent deletion requires --i-am-the-owner")
+			}
+			s, release, err := c.openService(true)
+			if err != nil {
+				return err
+			}
+			defer release()
+			if err = s.Purge(context.Background(), ref); err != nil {
+				return err
+			}
+			return c.mode.write("purge", "success", "Reference permanently deleted.", nil)
+		},
+	}
+	purge.Flags().String("ref", "", "Already-trashed stable reference")
+	purge.Flags().Bool("i-am-the-owner", false, "Explicit human-owner confirmation; permanent deletion never runs through the MCP surface")
+
+	return []*cobra.Command{upload, download, list, stat, op, mkdir, find, feed, trashCmd, restore, purge}
 }
 
 // newInstallCommand registers the stdio MCP server with a local client. It
@@ -495,6 +634,22 @@ func newInstallCommand(c *cli) *cobra.Command {
 	}
 	cmd.Flags().StringVar(&client, "client", "claude-code", "MCP client: claude-code, codex or generic")
 	return cmd
+}
+
+// awaitTerminal polls an operation until it leaves the queued/transferring
+// states; interrupted CLI runs surface the state for an explicit retry.
+func awaitTerminal(s *bridge.Service, id string) bridge.Operation {
+	for {
+		op, err := s.Get(id)
+		if err != nil {
+			return bridge.Operation{ID: id, Status: "operation_not_found"}
+		}
+		switch op.Status {
+		case "completed", "failed", "cancelled", "interrupted":
+			return op
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
 }
 
 // stableKey derives a deterministic CLI idempotency key so retries of the

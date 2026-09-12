@@ -81,6 +81,13 @@ agent 与终端用户共享同一套目录语义：`list`/`ls` 接受 `--path`�
 
 doctor 新增 `config_file` 检查（来源与 0600 建议，info 级，永不阻塞就绪）。
 
+### 检索、增量与软删除（存储交互）
+
+- `find`/MCP `search(space_id, query[, path])`：空间索引内大小写不敏感子串检索（trashed 不出现）；命中消费前先 `stat` 校验（索引未命中不代表远端没有）。
+- `changes`/MCP `changes(space_id, since)`：订阅式增量游标（file_added/file_changed/file_trashed/file_restored/file_purged/operation_*）；`since=0` 只取当前位置不回放历史，游标单调、超前报 `cursor_ahead`。
+- `trash`/`restore`/MCP `trash(file_ref)`/`restore(file_ref)`：软删除移入空间内 `.drivebridge-trash/<日期>/`，引用保持可查（stat 带 `trashed_at`）、下载/交接拒绝（`file_trashed`）、配额仍占用；恢复回原目录，同名冲突加短后缀不覆盖。
+- `purge --ref <ref> --i-am-the-owner`：**永久删除仅用户本人** CLI 两步门（必须先 trash）；MCP/Agent 面无此工具。
+
 ## Agent 操作合同
 
 通过 `tools/list` 或 `drivebridge://capabilities` 发现真实工具/schema。能力资源与工具注册表共用定义。`authorization_status` 和 `storage_status` 的 `not_probed` 不代表已连通。

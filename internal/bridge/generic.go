@@ -6,12 +6,14 @@ import (
 	"io"
 	"path"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/rclone/rclone/fs"
 	"github.com/rclone/rclone/fs/config"
 	"github.com/rclone/rclone/fs/object"
+	"github.com/rclone/rclone/fs/operations"
 )
 
 // Generic is the transfer-only provider for any configured rclone remote
@@ -121,6 +123,64 @@ func (g *Generic) Mkdir(ctx context.Context, p Space, dir string) error {
 		return err
 	}
 	if err := f.Mkdir(ctx, dir); err != nil {
+		return errors.New("backend_unavailable")
+	}
+	return nil
+}
+
+// Move renames within the same remote (server-side where the backend
+// supports it); the destination directory must already exist.
+func (g *Generic) Move(ctx context.Context, p Space, f File, destDir, destName string) error {
+	remote, err := g.remote(p)
+	if err != nil {
+		return err
+	}
+	if destDir, err = remoteDir(destDir); err != nil {
+		return err
+	}
+	if !safeName(path.Base(destName)) {
+		return errors.New("path_not_allowed")
+	}
+	src, err := remote.NewObject(ctx, g.sourcePath(f))
+	if err != nil {
+		return errors.New("remote_not_found")
+	}
+	dest := destName
+	if destDir != "" {
+		dest = destDir + "/" + destName
+	}
+	if _, err = operations.Move(ctx, remote, nil, dest, src); err != nil {
+		if strings.Contains(err.Error(), "exists") {
+			return errors.New("target_conflict")
+		}
+		return errors.New("backend_unavailable")
+	}
+	return nil
+}
+
+// sourcePath resolves where the object currently lives: the original path
+// until trashed, the trash path afterwards.
+func (g *Generic) sourcePath(f File) string {
+	if f.Trashed != nil && f.TrashPath != "" {
+		return f.TrashPath
+	}
+	if f.Dir != "" {
+		return f.Dir + "/" + f.Name
+	}
+	return f.Name
+}
+
+// Delete permanently removes the object at its current location.
+func (g *Generic) Delete(ctx context.Context, p Space, f File) error {
+	remote, err := g.remote(p)
+	if err != nil {
+		return err
+	}
+	obj, err := remote.NewObject(ctx, g.sourcePath(f))
+	if err != nil {
+		return errors.New("remote_not_found")
+	}
+	if err = obj.Remove(ctx); err != nil {
 		return errors.New("backend_unavailable")
 	}
 	return nil

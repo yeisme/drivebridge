@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strconv"
 	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -22,6 +23,10 @@ func (s *Service) Tools() []mcp.Tool {
 		tool("capabilities", "Discover allowed spaces, exact tool schemas, transfer limits and recovery."),
 		tool("list", "List files in the space root or a workspace subdirectory.", "space_id"),
 		tool("mkdir", "Create a workspace directory (idempotent); existing files with the name are a conflict.", "space_id", "path"),
+		tool("search", "Search the space index by name (case-insensitive substring); verify hits with stat before consuming.", "space_id", "query"),
+		tool("changes", "Poll incremental events since a cursor; a zero cursor returns the current position without history.", "space_id", "since"),
+		tool("trash", "Soft-delete a reference inside the space; it stays queryable and restorable.", "file_ref"),
+		tool("restore", "Move a trashed reference back into its directory; same-name conflicts get a suffix, never an overwrite.", "file_ref"),
 		tool("stat", "Verify a stable reference and detect replacement or moves outside the space.", "file_ref"),
 		tool("upload", "Upload a local file. The destination is an operation-prefixed name inside an optional directory; existing files are not replaced. Poll operation_get.", "space_id", "local_path", "name", "idempotency_key"),
 		tool("download", "Download into an allowed local directory without replacing a different file. Poll operation_get.", "file_ref", "local_path", "idempotency_key"),
@@ -53,6 +58,19 @@ func (s *Service) Call(ctx context.Context, name string, args map[string]any) (a
 		return map[string]any{"status": "created", "path": text("path")}, nil
 	case "stat":
 		return s.Stat(ctx, text("file_ref"))
+	case "search":
+		return s.Search(text("space_id"), text("query"), text("path"))
+	case "changes":
+		since, _ := strconv.ParseUint(text("since"), 10, 64)
+		events, cursor, e := s.Changes(text("space_id"), since)
+		if e != nil {
+			return nil, e
+		}
+		return map[string]any{"events": events, "cursor": cursor}, nil
+	case "trash":
+		return s.Trash(ctx, text("file_ref"))
+	case "restore":
+		return s.Restore(ctx, text("file_ref"))
 	case "upload":
 		return s.Upload(ctx, text("space_id"), text("dir"), text("local_path"), text("name"), text("idempotency_key"))
 	case "download":
@@ -79,6 +97,9 @@ func (s *Service) Call(ctx context.Context, name string, args map[string]any) (a
 		}
 		if p.Kind() != "onedrive" {
 			return nil, errors.New("handoff_not_available")
+		}
+		if f.Trashed != nil {
+			return nil, errors.New("file_trashed")
 		}
 		if !s.Handoff || p.Project == "" || p.Actor == "" {
 			return nil, errors.New("secure_handoff_unavailable")

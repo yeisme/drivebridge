@@ -327,6 +327,61 @@ func (r *OneDrive) graphPost(ctx context.Context, p Space, path, body string, ou
 	}
 	return nil
 }
+func (r *OneDrive) graphPatch(ctx context.Context, p Space, path, body string, out any) error {
+	err := r.graphMutate(ctx, http.MethodPatch, p, path, body, out)
+	return err
+}
+func (r *OneDrive) graphDelete(ctx context.Context, p Space, path string) error {
+	return r.graphMutate(ctx, http.MethodDelete, p, path, "", nil)
+}
+func (r *OneDrive) graphMutate(ctx context.Context, method string, p Space, path, body string, out any) error {
+	getToken := r.token
+	if r.authToken != nil {
+		getToken = r.authToken
+	}
+	token, err := getToken(ctx, p)
+	if err != nil {
+		return err
+	}
+	var reader io.Reader
+	if body != "" {
+		reader = strings.NewReader(body)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, "https://graph.microsoft.com/v1.0/drives/"+url.PathEscape(p.DriveID)+"/"+path, reader)
+	if err != nil {
+		return errors.New("invalid_graph_request")
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	if body != "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	response, err := r.HTTP.Do(req)
+	if err != nil {
+		return errors.New("graph_unreachable")
+	}
+	defer response.Body.Close()
+	switch response.StatusCode {
+	case 200, 201, 204:
+	case 401, 403:
+		return errors.New("authentication_required")
+	case 404:
+		return errors.New("remote_not_found")
+	case 409:
+		return errors.New("target_conflict")
+	case 429:
+		return errors.New("throttled")
+	case 507:
+		return errors.New("quota_exceeded")
+	default:
+		return errors.New("graph_unavailable")
+	}
+	if out != nil {
+		if json.NewDecoder(io.LimitReader(response.Body, 1<<20)).Decode(out) != nil {
+			return errors.New("invalid_graph_response")
+		}
+	}
+	return nil
+}
 func (r *OneDrive) Stat(ctx context.Context, p Space, id string) (File, error) {
 	i, err := r.item(ctx, p, id, false)
 	if err != nil {
@@ -455,4 +510,38 @@ func classifyOneDriveError(err error) error {
 		}
 	}
 	return errors.New("transfer_failed")
+}
+
+// Move relocates an item by its stable id: parentReference + name via PATCH.
+// The destination directory must already exist inside the pinned root.
+func (r *OneDrive) Move(ctx context.Context, p Space, f File, destDir, destName string) error {
+	if _, err := remoteDir(destDir); err != nil {
+		return err
+	}
+	if !safeName(destName) {
+		return errors.New("path_not_allowed")
+	}
+	destID, err := r.folder(ctx, p, destDir)
+	if err != nil {
+		return err
+	}
+	source := f.ItemID
+	if f.Trashed != nil && f.TrashPath != "" {
+		// Restoring from trash: the item kept its id, no extra lookup needed.
+		source = f.ItemID
+	}
+	var moved driveItem
+	body := `{"parentReference":{"id":` + strconv.Quote(destID) + `},"name":` + strconv.Quote(destName) + `}`
+	if err = r.graphPatch(ctx, p, "items/"+url.PathEscape(source), body, &moved); err != nil {
+		return err
+	}
+	if moved.ID == "" || moved.Parent.Drive != p.DriveID {
+		return errors.New("remote_outside_space")
+	}
+	return nil
+}
+
+// Delete permanently removes the item by its stable id.
+func (r *OneDrive) Delete(ctx context.Context, p Space, f File) error {
+	return r.graphDelete(ctx, p, "items/"+url.PathEscape(f.ItemID))
 }

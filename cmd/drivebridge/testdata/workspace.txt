@@ -20,15 +20,16 @@ stdout 'Directory ready'
 # Upload through the CLI lands inside the directory.
 exec sh -c 'printf "payload" > local/a.bin'
 exec drivebridge upload --space nas --file a.bin --dir refs/2026 --json
-stdout '"status":"queued"'
+stdout '"status":"success"'
 exists $WORK/remote-files/refs/2026
 
 # The deterministic CLI key makes a retry idempotent, not a duplicate.
 exec drivebridge upload --space nas --file a.bin --dir refs/2026 --json
-stdout '"status":"queued"'
+stdout '"status":"success"'
 
-# ls lists by path once the async upload lands.
-exec sh -c 'for i in $(seq 1 50); do drivebridge ls --space nas --path refs/2026 --json | grep -q "\"count\":1" && exit 0; sleep 0.1; done; exit 1'
+# ls lists by path.
+exec drivebridge ls --space nas --path refs/2026 --json
+stdout '"count":1'
 
 # Traversal is rejected.
 ! exec drivebridge mkdir --space nas --path ../escape
@@ -38,3 +39,25 @@ stderr 'path_not_allowed'
 exec drivebridge install --client generic --json
 stdout '"args"'
 ! stdout 'token'
+
+# Discovery and soft-delete close the storage-interaction loop.
+exec drivebridge find --space nas --query A.BIN
+stdout 'a\.bin'
+exec drivebridge changes --space nas --since 0 --json
+stdout '"cursor"'
+
+exec sh -c 'drivebridge find --space nas --query a.bin --json | grep -o "drivebridge://file/[a-f0-9]*" | head -1 > ref.txt'
+exec sh -c 'test -s ref.txt'
+exec sh -c 'drivebridge trash --ref "$(cat ref.txt)"'
+stdout 'trashed'
+! exec drivebridge purge --ref "$(cat ref.txt)"
+stderr 'i-am-the-owner'
+exec sh -c 'drivebridge purge --ref "$(cat ref.txt)" --i-am-the-owner'
+stdout 'permanently deleted'
+exec sh -c 'printf "second" > local/b.bin'
+exec drivebridge upload --space nas --file b.bin --dir refs/2026 --json
+stdout '"status":"success"'
+exec sh -c 'drivebridge find --space nas --query b.bin --json | grep -o "drivebridge://file/[a-f0-9]*" | head -1 > ref2.txt'
+exec sh -c 'test -s ref2.txt'
+exec sh -c 'drivebridge trash --ref "$(cat ref2.txt)" >/dev/null && drivebridge restore --ref "$(cat ref2.txt)"'
+stdout 'restored'

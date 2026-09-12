@@ -74,6 +74,9 @@ func (s *Service) Download(ctx context.Context, ref, path, key string) (Operatio
 	if err != nil {
 		return Operation{}, err
 	}
+	if f.Trashed != nil {
+		return Operation{}, errors.New("file_trashed")
+	}
 	p, err := s.Space(f.SpaceID)
 	if err != nil {
 		return Operation{}, err
@@ -215,13 +218,14 @@ func (s *Service) run(ctx context.Context, op Operation) {
 		op.Transferred = op.Bytes
 	}
 	_ = s.DB.Save(&op).Error
+	s.emit(op.SpaceID, "operation_"+op.Status, op.FileRef, op.ID)
 }
 func safeError(err error) string {
 	if err == nil {
 		return ""
 	}
 	switch err.Error() {
-	case "transfer_capacity_unavailable", "disabled", "idempotency_conflict", "idempotency_key_required", "invalid_upload", "file_size_invalid", "local_file_unavailable", "local_root_unavailable", "state_unavailable", "operation_not_found", "operation_cancelled", "unknown_tool", "output_adapter_unavailable", "output_not_ready", "output_not_allowed", "output_grant_invalid", "scaena_unavailable", "graph_unavailable", "graph_unreachable", "download_unavailable", "download_access_unavailable", "media_probe_failed", "media_type_unsupported", "media_duration_invalid", "region_not_supported", "source_changed", "file_version_changed", "target_conflict", "space_not_allowed", "reference_not_found", "quota_exceeded", "throttled", "authentication_required", "path_not_allowed", "invalid_file_metadata", "remote_not_found", "remote_outside_space", "secure_handoff_unavailable", "handoff_not_available", "access_unsupported", "backend_unavailable", "symlink_rejected", "invalid_space", "space_conflict", "content_mismatch":
+	case "file_trashed", "file_not_trashed", "cursor_ahead", "invalid_search", "transfer_capacity_unavailable", "disabled", "idempotency_conflict", "idempotency_key_required", "invalid_upload", "file_size_invalid", "local_file_unavailable", "local_root_unavailable", "state_unavailable", "operation_not_found", "operation_cancelled", "unknown_tool", "output_adapter_unavailable", "output_not_ready", "output_not_allowed", "output_grant_invalid", "scaena_unavailable", "graph_unavailable", "graph_unreachable", "download_unavailable", "download_access_unavailable", "media_probe_failed", "media_type_unsupported", "media_duration_invalid", "region_not_supported", "source_changed", "file_version_changed", "target_conflict", "space_not_allowed", "reference_not_found", "quota_exceeded", "throttled", "authentication_required", "path_not_allowed", "invalid_file_metadata", "remote_not_found", "remote_outside_space", "secure_handoff_unavailable", "handoff_not_available", "access_unsupported", "backend_unavailable", "symlink_rejected", "invalid_space", "space_conflict", "content_mismatch":
 		return err.Error()
 	}
 	return "transfer_failed"
@@ -347,6 +351,7 @@ func (s *Service) transfer(ctx context.Context, op *Operation) error {
 		return errors.New("content_mismatch")
 	}
 	remote.SHA256 = h
+	remote.Dir = scanDir
 	f, e := s.remember(p, remote)
 	if e != nil {
 		return e

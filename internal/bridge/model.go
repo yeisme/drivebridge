@@ -43,17 +43,31 @@ func (p Space) Kind() string {
 }
 
 type File struct {
-	Ref      string `json:"ref" gorm:"primaryKey"`
-	SpaceID  string `json:"space_id"`
-	DriveID  string `json:"drive_id"`
-	ItemID   string `json:"item_id"`
-	Version  string `json:"version"`
-	Name     string `json:"name"`
-	Size     int64  `json:"size_bytes"`
-	SHA256   string `json:"sha256,omitempty"`
-	MIME     string `json:"mime_type"`
-	Duration int    `json:"duration_seconds,omitempty"`
-	Verified bool   `json:"-"`
+	Ref       string     `json:"ref" gorm:"primaryKey"`
+	SpaceID   string     `json:"space_id"`
+	DriveID   string     `json:"drive_id"`
+	ItemID    string     `json:"item_id"`
+	Version   string     `json:"version"`
+	Name      string     `json:"name"`
+	Dir       string     `json:"dir,omitempty"`
+	Size      int64      `json:"size_bytes"`
+	SHA256    string     `json:"sha256,omitempty"`
+	MIME      string     `json:"mime_type"`
+	Duration  int        `json:"duration_seconds,omitempty"`
+	TrashPath string     `json:"-"`
+	Trashed   *time.Time `json:"trashed_at,omitempty" gorm:"column:trashed_at"`
+	Verified  bool       `json:"-"`
+}
+
+// Event is the monotonic changes feed: file additions/changes and terminal
+// operation states. IDs are autoincrement cursors, never reused.
+type Event struct {
+	ID      uint64    `json:"id" gorm:"primaryKey"`
+	SpaceID string    `json:"space_id"`
+	Kind    string    `json:"kind"`
+	Ref     string    `json:"ref,omitempty"`
+	Detail  string    `json:"detail,omitempty"`
+	At      time.Time `json:"at"`
 }
 type Operation struct {
 	SourceRef   string    `json:"source_ref,omitempty"`
@@ -80,6 +94,10 @@ type Provider interface {
 	Upload(context.Context, Space, string, io.Reader, int64) (File, error)
 	Open(context.Context, Space, File) (io.ReadCloser, error)
 	Access(context.Context, Space, File) (string, error)
+	// Move relocates a file inside the same space; destDir is workspace-relative
+	// and must already exist. Delete permanently removes it (owner-only surface).
+	Move(context.Context, Space, File, string, string) error
+	Delete(context.Context, Space, File) error
 }
 type Service struct {
 	DB       *gorm.DB
@@ -120,7 +138,7 @@ func New(state string, provider Provider, enabled bool) (*Service, error) {
 		return nil, err
 	}
 	sqlDB.SetMaxOpenConns(1)
-	if err = db.AutoMigrate(&Space{}, &File{}, &Operation{}); err != nil {
+	if err = db.AutoMigrate(&Space{}, &File{}, &Operation{}, &Event{}); err != nil {
 		return nil, errors.New("state_unavailable")
 	}
 	if err = os.Chmod(filepath.Join(state, "state.sqlite"), 0600); err != nil {
@@ -244,7 +262,8 @@ func (s *Service) remember(p Space, f File) (File, error) {
 	// A reference pins an immutable version: re-observing it through a plain
 	// listing must not drop the cached digest or the verified media probe.
 	var old File
-	if s.DB.First(&old, "ref = ?", f.Ref).Error == nil {
+	existed := s.DB.First(&old, "ref = ?", f.Ref).Error == nil
+	if existed {
 		if f.SHA256 == "" {
 			f.SHA256 = old.SHA256
 		}
@@ -252,9 +271,20 @@ func (s *Service) remember(p Space, f File) (File, error) {
 			f.MIME, f.Duration = old.MIME, old.Duration
 		}
 		f.Verified = f.Verified || old.Verified
+		if f.Dir == "" {
+			f.Dir = old.Dir
+		}
+		if f.Trashed == nil {
+			f.Trashed, f.TrashPath = old.Trashed, old.TrashPath
+		}
 	}
 	if err := s.DB.Save(&f).Error; err != nil {
 		return File{}, errors.New("state_unavailable")
+	}
+	if !existed {
+		s.emit(p.ID, "file_added", f.Ref, f.Name)
+	} else if old.Version != f.Version {
+		s.emit(p.ID, "file_changed", f.Ref, f.Name)
 	}
 	return f, nil
 }
@@ -278,6 +308,7 @@ func (s *Service) List(ctx context.Context, space, dir string) ([]File, error) {
 		if f.Size <= 0 || f.Size > p.MaxBytes {
 			continue
 		}
+		f.Dir = dir
 		f, e = s.remember(p, f)
 		if e != nil {
 			return nil, e
@@ -309,6 +340,11 @@ func (s *Service) Stat(ctx context.Context, ref string) (File, error) {
 	var old File
 	if s.DB.First(&old, "ref = ?", ref).Error != nil {
 		return File{}, errors.New("reference_not_found")
+	}
+	// A trashed reference stays queryable by design; the object lives in the
+	// trash location, so remote verification by its original identity is off.
+	if old.Trashed != nil {
+		return old, nil
 	}
 	p, e := s.Space(old.SpaceID)
 	if e != nil {
