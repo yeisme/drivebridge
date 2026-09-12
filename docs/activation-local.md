@@ -54,10 +54,10 @@ go build -o drivebridge ./cmd/drivebridge
 ./drivebridge config init && $EDITOR ~/.config/drivebridge/config.yaml
 ./drivebridge config show            # 核对每键来源
 ./drivebridge capabilities --json    # 确认工具面与空间
-./drivebridge mcp --enabled --handoff
+./drivebridge install --client claude-code   # 或 codex / generic
 ```
 
-把上面的 `mcp` 命令注册进本机 MCP 客户端（Claude Code / Codex / 其他宿主）；配置就绪后无需再传 `--state/--rclone-config`。`--enabled/--handoff` 是"默认关闭的写入口开关"，设计上**只能**显式命令行、不进配置文件。不加 `--enabled` 时只有能力发现与回执查询。
+`install` 写入客户端注册（Claude Code user scope / Codex config.toml / 打印片段）；此后由客户端拉起 `drivebridge mcp --enabled --handoff`，配置就绪后无需再传 `--state/--rclone-config`。`--enabled/--handoff` 是"默认关闭的写入口开关"，设计上**只能**显式命令行、不进配置文件。不加 `--enabled` 时只有能力发现与回执查询。
 
 ## 6. Scaena 接线（可选：参考交接与回存）
 
