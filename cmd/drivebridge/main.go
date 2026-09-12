@@ -1,15 +1,20 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/spf13/cobra"
 )
 
 func main() {
-	if err := newRootCommand().Execute(); err != nil {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	if err := newRootCommand().ExecuteContext(ctx); err != nil {
 		// All surfaced errors here are our typed codes or wrapped config
 		// errors; third-party raw errors are discarded further down.
 		if !errors.Is(err, errDoctorNotReady) {
@@ -50,8 +55,19 @@ func newRootCommand() *cobra.Command {
 	pf.BoolVar(&c.mode.Explain, "explain", false, "Explain the local result")
 
 	for name, command := range map[string]*cobra.Command{
+		"view":         newViewCommand(c),
+		"usage":        newUsageCommand(c),
+		"audit":        newAuditCommand(c),
 		"auth":         newAuthCommand(c),
+		"resume":       newRecoveryCommand(c, "resume"),
+		"cancel":       newRecoveryCommand(c, "cancel"),
+		"recent":       newRecentCommand(c),
+		"setup":        newSetupCommand(c),
 		"doctor":       newDoctorCommand(c),
+		"pin":          newPinCommand(c),
+		"gc":           newGCCommand(c),
+		"link":         newLinkCommand(c),
+		"sync":         newSyncCommand(c),
 		"capabilities": newCapabilitiesCommand(c),
 		"mcp":          newMCPCommand(c),
 		"remote":       newRemoteCommand(c),

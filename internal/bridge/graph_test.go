@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rclone/rclone/fs/config"
 	"github.com/rclone/rclone/fs/config/configmap"
 	"github.com/rclone/rclone/lib/oauthutil"
 )
@@ -85,5 +86,28 @@ func TestRcloneRefreshSharesOneCredentialMapper(t *testing.T) {
 	current, e := oauthutil.GetToken("fixture", mapper)
 	if e != nil || !current.Valid() || refreshed.Load() != 1 {
 		t.Fatal("shared refreshed token was not reusable")
+	}
+}
+
+func TestDiscoverSelectedRoot(t *testing.T) {
+	const remote = "discovery-fixture"
+	config.Data().SetValue(remote, "drive_id", "drive")
+	defer config.Data().DeleteSection(remote)
+	p := NewOneDrive()
+	p.authToken = func(context.Context, Space) (string, error) { return "fixture", nil }
+	p.HTTP.Transport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		if r.URL.Host != "graph.microsoft.com" || r.URL.Path != "/v1.0/drives/drive/root:/Projects/My folder" {
+			t.Fatal("unexpected discovery target")
+		}
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"id":"chosen","folder":{},"parentReference":{"driveId":"drive"}}`)), Header: make(http.Header)}, nil
+	})
+	drive, id, err := p.DiscoverRoot(context.Background(), remote, "Projects/My folder")
+	if err != nil || drive != "drive" || id != "chosen" {
+		t.Fatalf("discovery failed: %v", err)
+	}
+	for _, path := range []string{"", "../outside", "/root"} {
+		if _, _, err := p.DiscoverRoot(context.Background(), remote, path); err == nil {
+			t.Fatal("unsafe folder accepted")
+		}
 	}
 }

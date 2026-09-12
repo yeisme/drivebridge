@@ -26,7 +26,7 @@ type Generic struct {
 
 func NewGeneric() *Generic { return &Generic{clients: map[string]fs.Fs{}} }
 
-func (g *Generic) remote(p Space) (fs.Fs, error) {
+func (g *Generic) remote(p Space, contexts ...context.Context) (fs.Fs, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if f, ok := g.clients[p.ID]; ok {
@@ -36,7 +36,11 @@ func (g *Generic) remote(p Space) (fs.Fs, error) {
 	if kind == "" {
 		return nil, errors.New("backend_unavailable")
 	}
-	f, err := fs.NewFs(context.Background(), p.Remote+":"+p.RootID)
+	ctx := context.Background()
+	if len(contexts) > 0 {
+		ctx = contexts[0]
+	}
+	f, err := fs.NewFs(ctx, p.Remote+":"+p.RootID)
 	if err != nil {
 		return nil, errors.New("backend_unavailable")
 	}

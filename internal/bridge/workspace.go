@@ -17,7 +17,7 @@ func (s *Service) emit(space, kind, ref, detail string) {
 
 // Search returns matching references from the local index. Hits are not
 // remotely verified: consume them through stat (stale-index honesty).
-func (s *Service) Search(space, query, dir string) ([]File, error) {
+func (s *Service) Search(space, query, dir string, options ...SearchOptions) ([]File, error) {
 	if !s.Enabled {
 		return nil, errors.New("disabled")
 	}
@@ -34,6 +34,14 @@ func (s *Service) Search(space, query, dir string) ([]File, error) {
 	tx := s.DB.Where("space_id = ? AND trashed_at IS NULL", space)
 	if dir != "" {
 		tx = tx.Where("dir = ?", dir)
+	}
+	if len(options) > 0 {
+		if options[0].MIME != "" {
+			tx = tx.Where("mime = ?", options[0].MIME)
+		}
+		if !options[0].After.IsZero() {
+			tx = tx.Where("observed_at >= ?", options[0].After)
+		}
 	}
 	if needle != "" {
 		tx = tx.Where("LOWER(name) LIKE ?", "%"+needle+"%")
@@ -72,7 +80,7 @@ func (s *Service) Changes(space string, since uint64) ([]Event, uint64, error) {
 
 // Trash soft-deletes a reference inside the space: the object moves to a
 // dated trash directory, the reference stays queryable, quota stays occupied.
-func (s *Service) Trash(ctx context.Context, ref string) (File, error) {
+func (s *Service) Trash(ctx context.Context, ref string) (result File, resultErr error) {
 	if !s.Enabled {
 		return File{}, errors.New("disabled")
 	}
@@ -83,6 +91,12 @@ func (s *Service) Trash(ctx context.Context, ref string) (File, error) {
 	if f.Trashed != nil {
 		return f, nil
 	}
+	finishAudit, auditErr := s.beginFileAudit(f.SpaceID, "files.trash", ref)
+	if auditErr != nil {
+		return File{}, auditErr
+	}
+	defer func() { finishAudit(resultErr) }()
+	defer s.CaptureUsage()
 	p, err := s.Space(f.SpaceID)
 	if err != nil {
 		return File{}, err
@@ -114,7 +128,7 @@ func (s *Service) Trash(ctx context.Context, ref string) (File, error) {
 
 // Restore moves a trashed file back to its original directory; a same-name
 // conflict resolves with a suffix, never an overwrite.
-func (s *Service) Restore(ctx context.Context, ref string) (File, error) {
+func (s *Service) Restore(ctx context.Context, ref string) (result File, resultErr error) {
 	if !s.Enabled {
 		return File{}, errors.New("disabled")
 	}
@@ -125,6 +139,12 @@ func (s *Service) Restore(ctx context.Context, ref string) (File, error) {
 	if f.Trashed == nil {
 		return f, nil
 	}
+	finishAudit, auditErr := s.beginFileAudit(f.SpaceID, "files.restore", ref)
+	if auditErr != nil {
+		return File{}, auditErr
+	}
+	defer func() { finishAudit(resultErr) }()
+	defer s.CaptureUsage()
 	p, err := s.Space(f.SpaceID)
 	if err != nil {
 		return File{}, err
@@ -153,7 +173,7 @@ func (s *Service) Restore(ctx context.Context, ref string) (File, error) {
 
 // Purge permanently deletes. It is deliberately NOT exposed as an MCP tool:
 // permanent deletion stays with the human owner (CLI flag / web trash).
-func (s *Service) Purge(ctx context.Context, ref string) error {
+func (s *Service) Purge(ctx context.Context, ref string) (resultErr error) {
 	if !s.Enabled {
 		return errors.New("disabled")
 	}
@@ -161,6 +181,12 @@ func (s *Service) Purge(ctx context.Context, ref string) error {
 	if s.DB.First(&f, "ref = ?", ref).Error != nil {
 		return errors.New("reference_not_found")
 	}
+	finishAudit, auditErr := s.beginFileAudit(f.SpaceID, "files.purge", ref)
+	if auditErr != nil {
+		return auditErr
+	}
+	defer func() { finishAudit(resultErr) }()
+	defer s.CaptureUsage()
 	p, err := s.Space(f.SpaceID)
 	if err != nil {
 		return err

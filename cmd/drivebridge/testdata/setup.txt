@@ -1,0 +1,31 @@
+# Existing generic credentials can bootstrap a space with no internal IDs.
+mkdir local
+mkdir remote
+mkdir remote/outputs
+exec sh -c 'printf "[nas]\ntype = alias\nremote = %s\n" "$1" > rclone.conf' sh $WORK/remote
+chmod 0600 rclone.conf
+exec drivebridge --state $WORK/state --rclone-config $WORK/rclone.conf setup --remote nas --remote-path outputs --local-root $WORK/local --json
+stdout 'success'
+stdout '"command":"drivebridge.setup"'
+exec drivebridge --state $WORK/auto --rclone-config $WORK/rclone.conf setup --remote-path outputs --local-root $WORK/local --json
+stdout 'success'
+exec drivebridge --state $WORK/state --rclone-config $WORK/rclone.conf space list --json
+stdout 'personal'
+! exec drivebridge --state $WORK/other --rclone-config $WORK/rclone.conf setup --remote nas --local-root $WORK/local
+stderr 'folder_path_required'
+# Config writes are authored by the CLI and preserve unrelated supported keys.
+exec drivebridge --config $WORK/config.yaml config init
+exec drivebridge --config $WORK/config.yaml config set state $WORK/state
+exec drivebridge --config $WORK/config.yaml config set rclone_config $WORK/rclone.conf
+exec drivebridge --config $WORK/config.yaml config set local_root $WORK/local
+exec drivebridge --config $WORK/config.yaml setup --remote nas --remote-path outputs --space configured --json
+stdout '"space_id":"configured"'
+stdout '/local"'
+exec drivebridge --config $WORK/config.yaml config show --json
+stdout 'rclone.conf'
+! exec drivebridge --config $WORK/config.yaml config set enabled true
+stderr 'unknown_config_key'
+# Registration carries the resolved paths, not the invoking shell environment.
+exec drivebridge --config $WORK/config.yaml install --client generic --read-only --json
+stdout 'rclone-config'
+! stdout '"--enabled"'

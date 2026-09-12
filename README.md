@@ -174,3 +174,11 @@ python3 scripts/check.py -- python3 scripts/remote_system.py
 ```
 
 该验证启动真实服务/OIDC fixture 和本机 stdio MCP，覆盖授权、上传下载、重放、目录隔离和撤销；不会访问真实存储或产生 Provider 费用。
+
+## 个人 Agent 文件闭环（增量）
+
+新入口 `setup` 自动发现 OneDrive 目录身份；`config set` 写入非秘密配置；upload 支持可选 caller/task-ref，stat/find 保留来源；recent/resume/cancel 提供恢复入口。普通传输命令支持配置驱动的远程路由，固定版本引用解析不升级版本。
+
+使用方法、模式差异、并发边界与三场景验证见 [个人文件闭环](docs/personal-agent-loop.md)；试用和收费验证准备见 [市场验证](docs/market-validation.md)。均为本地候选，未发布或执行真实账号操作。
+
+用量、图表、扫描与安全审计见[使用说明](docs/insights-audit.md)。

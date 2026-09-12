@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/glebarez/sqlite"
+	"github.com/yeisme/drivebridge-server/sdk/insights"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
@@ -43,20 +44,22 @@ func (p Space) Kind() string {
 }
 
 type File struct {
-	Ref       string     `json:"ref" gorm:"primaryKey"`
-	SpaceID   string     `json:"space_id"`
-	DriveID   string     `json:"drive_id"`
-	ItemID    string     `json:"item_id"`
-	Version   string     `json:"version"`
-	Name      string     `json:"name"`
-	Dir       string     `json:"dir,omitempty"`
-	Size      int64      `json:"size_bytes"`
-	SHA256    string     `json:"sha256,omitempty"`
-	MIME      string     `json:"mime_type"`
-	Duration  int        `json:"duration_seconds,omitempty"`
-	TrashPath string     `json:"-"`
-	Trashed   *time.Time `json:"trashed_at,omitempty" gorm:"column:trashed_at"`
-	Verified  bool       `json:"-"`
+	Provenance
+	ObservedAt time.Time  `json:"observed_at,omitempty"`
+	Ref        string     `json:"ref" gorm:"primaryKey"`
+	SpaceID    string     `json:"space_id"`
+	DriveID    string     `json:"drive_id"`
+	ItemID     string     `json:"item_id"`
+	Version    string     `json:"version"`
+	Name       string     `json:"name"`
+	Dir        string     `json:"dir,omitempty"`
+	Size       int64      `json:"size_bytes"`
+	SHA256     string     `json:"sha256,omitempty"`
+	MIME       string     `json:"mime_type"`
+	Duration   int        `json:"duration_seconds,omitempty"`
+	TrashPath  string     `json:"-"`
+	Trashed    *time.Time `json:"trashed_at,omitempty" gorm:"column:trashed_at"`
+	Verified   bool       `json:"-"`
 }
 
 // Event is the monotonic changes feed: file additions/changes and terminal
@@ -70,6 +73,7 @@ type Event struct {
 	At      time.Time `json:"at"`
 }
 type Operation struct {
+	Provenance
 	SourceRef   string    `json:"source_ref,omitempty"`
 	ID          string    `json:"id" gorm:"primaryKey"`
 	Key         string    `json:"-" gorm:"uniqueIndex"`
@@ -100,15 +104,19 @@ type Provider interface {
 	Delete(context.Context, Space, File) error
 }
 type Service struct {
-	DB       *gorm.DB
-	Provider Provider
-	Generic  Provider
-	Output   OutputSource
-	Enabled  bool
-	Handoff  bool
-	mu       sync.Mutex
-	jobs     map[string]context.CancelFunc
-	wg       sync.WaitGroup
+	Insights      *insights.Store
+	insightOnce   sync.Once
+	insightCancel context.CancelFunc
+	insightWG     sync.WaitGroup
+	DB            *gorm.DB
+	Provider      Provider
+	Generic       Provider
+	Output        OutputSource
+	Enabled       bool
+	Handoff       bool
+	mu            sync.Mutex
+	jobs          map[string]context.CancelFunc
+	wg            sync.WaitGroup
 }
 
 // providerFor routes each space to its provider family; OneDrive keeps the
@@ -151,15 +159,26 @@ func New(state string, provider Provider, enabled bool) (*Service, error) {
 	if err = db.Model(&Operation{}).Where("status = ?", "cancelling").Updates(map[string]any{"status": "cancelled", "error": "operation_cancelled"}).Error; err != nil {
 		return nil, err
 	}
-	return &Service{DB: db, Provider: provider, Generic: NewGeneric(), Enabled: enabled, jobs: map[string]context.CancelFunc{}}, nil
+	store, err := insights.Open(db)
+	if err != nil {
+		return nil, err
+	}
+	return &Service{DB: db, Insights: store, Provider: provider, Generic: NewGeneric(), Enabled: enabled, jobs: map[string]context.CancelFunc{}}, nil
 }
 func (s *Service) Close() {
+	if s.insightCancel != nil {
+		s.insightCancel()
+	}
+	s.insightWG.Wait()
 	s.mu.Lock()
 	for _, cancel := range s.jobs {
 		cancel()
 	}
 	s.mu.Unlock()
 	s.wg.Wait()
+	if s.Insights != nil {
+		s.Insights.Close()
+	}
 	db, _ := s.DB.DB()
 	_ = db.Close()
 }
@@ -197,6 +216,9 @@ func (s *Service) AddSpace(p Space) error {
 		return errors.New("invalid_local_root")
 	}
 	p.LocalRoot = root
+	if err = s.auditLocal(p.ID, "space.add", "", "intent"); err != nil {
+		return err
+	}
 	// Existing space identities cannot be silently rebound.
 	if err = s.DB.Create(&p).Error; err != nil {
 		return errors.New("space_conflict")
@@ -264,6 +286,10 @@ func (s *Service) remember(p Space, f File) (File, error) {
 	var old File
 	existed := s.DB.First(&old, "ref = ?", f.Ref).Error == nil
 	if existed {
+		if f.Provenance == (Provenance{}) {
+			f.Provenance = old.Provenance
+		}
+		f.ObservedAt = old.ObservedAt
 		if f.SHA256 == "" {
 			f.SHA256 = old.SHA256
 		}
@@ -277,6 +303,9 @@ func (s *Service) remember(p Space, f File) (File, error) {
 		if f.Trashed == nil {
 			f.Trashed, f.TrashPath = old.Trashed, old.TrashPath
 		}
+	}
+	if f.ObservedAt.IsZero() {
+		f.ObservedAt = time.Now().UTC()
 	}
 	if err := s.DB.Save(&f).Error; err != nil {
 		return File{}, errors.New("state_unavailable")
@@ -360,6 +389,10 @@ func (s *Service) Stat(ctx context.Context, ref string) (File, error) {
 	f.Ref = ref
 	f.SpaceID = p.ID
 	f.SHA256 = old.SHA256
+	f.Provenance, f.ObservedAt = old.Provenance, old.ObservedAt
+	if f.Dir == "" {
+		f.Dir = old.Dir
+	}
 	return f, nil
 }
 func (s *Service) Get(id string) (Operation, error) {

@@ -5,13 +5,21 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"github.com/yeisme/drivebridge-server/sdk/insights"
 	"io"
 	"os"
 	"path/filepath"
 	"time"
 )
 
-func (s *Service) Upload(ctx context.Context, space, dir, path, name, key string) (Operation, error) {
+func (s *Service) Upload(ctx context.Context, space, dir, path, name, key string, metadata ...Provenance) (Operation, error) {
+	var provenance Provenance
+	if len(metadata) > 0 {
+		provenance = metadata[0]
+	}
+	if err := provenance.Validate(); err != nil {
+		return Operation{}, err
+	}
 	if !s.Enabled {
 		return Operation{}, errors.New("disabled")
 	}
@@ -59,7 +67,7 @@ func (s *Service) Upload(ctx context.Context, space, dir, path, name, key string
 	if dir != "" {
 		target = dir + "/" + target
 	}
-	op := Operation{ID: id, SpaceID: space, Kind: "upload", Key: operationKey(space, "upload", key), Status: "queued", LocalPath: rel, Target: target, Fingerprint: fingerprint, Bytes: n}
+	op := Operation{Provenance: provenance, ID: id, SpaceID: space, Kind: "upload", Key: operationKey(space, "upload", key), Status: "queued", LocalPath: rel, Target: target, Fingerprint: fingerprint, Bytes: n}
 	return s.enqueue(op)
 }
 func operationKey(space, kind, key string) string {
@@ -92,7 +100,7 @@ func (s *Service) enqueue(op Operation) (Operation, error) {
 	defer s.mu.Unlock()
 	var old Operation
 	if s.DB.First(&old, "key = ?", op.Key).Error == nil {
-		if old.Fingerprint != op.Fingerprint || (op.Kind != "save_output" && old.LocalPath != op.LocalPath) {
+		if old.Provenance != op.Provenance || (op.Kind == "upload" && filepath.Dir(old.Target) != filepath.Dir(op.Target)) || old.Fingerprint != op.Fingerprint || (op.Kind != "save_output" && old.LocalPath != op.LocalPath) {
 			return old, errors.New("idempotency_conflict")
 		}
 		return old, nil
@@ -217,6 +225,19 @@ func (s *Service) run(ctx context.Context, op Operation) {
 		op.Error = ""
 		op.Transferred = op.Bytes
 	}
+	if s.Insights != nil {
+		if op.Status == "completed" {
+			direction := "ingest"
+			if op.Kind == "download" {
+				direction = "egress"
+			}
+			_ = s.Insights.Record(insights.Fact{ID: "completed-" + op.ID, Dimensions: s.usageDims(op), Metric: "effective_bytes", Direction: direction, Purpose: op.Kind, Bytes: op.Bytes})
+		} else if op.Status == "failed" || op.Status == "interrupted" {
+			_ = s.Insights.Record(insights.Fact{Dimensions: s.usageDims(op), Metric: "failed_attempt", Purpose: op.Kind})
+		}
+		_ = s.Insights.Log(insights.AuditEvent{Owner: localOwner, Space: op.SpaceID, Actor: "local-user", ActorKind: "local_user", Action: "transfer." + op.Kind, Resource: refID(op.FileRef), Operation: op.ID, Outcome: op.Status, Entry: "local", Correlation: op.ID})
+	}
+	s.CaptureUsage()
 	_ = s.DB.Save(&op).Error
 	s.emit(op.SpaceID, "operation_"+op.Status, op.FileRef, op.ID)
 }
@@ -225,7 +246,7 @@ func safeError(err error) string {
 		return ""
 	}
 	switch err.Error() {
-	case "file_trashed", "file_not_trashed", "cursor_ahead", "invalid_search", "transfer_capacity_unavailable", "disabled", "idempotency_conflict", "idempotency_key_required", "invalid_upload", "file_size_invalid", "local_file_unavailable", "local_root_unavailable", "state_unavailable", "operation_not_found", "operation_cancelled", "unknown_tool", "output_adapter_unavailable", "output_not_ready", "output_not_allowed", "output_grant_invalid", "scaena_unavailable", "graph_unavailable", "graph_unreachable", "download_unavailable", "download_access_unavailable", "media_probe_failed", "media_type_unsupported", "media_duration_invalid", "region_not_supported", "source_changed", "file_version_changed", "target_conflict", "space_not_allowed", "reference_not_found", "quota_exceeded", "throttled", "authentication_required", "path_not_allowed", "invalid_file_metadata", "remote_not_found", "remote_outside_space", "secure_handoff_unavailable", "handoff_not_available", "access_unsupported", "backend_unavailable", "symlink_rejected", "invalid_space", "space_conflict", "content_mismatch":
+	case "audit_unavailable", "insights_unavailable", "file_trashed", "file_not_trashed", "cursor_ahead", "invalid_search", "transfer_capacity_unavailable", "disabled", "idempotency_conflict", "idempotency_key_required", "invalid_upload", "file_size_invalid", "local_file_unavailable", "local_root_unavailable", "state_unavailable", "operation_not_found", "operation_cancelled", "unknown_tool", "output_adapter_unavailable", "output_not_ready", "output_not_allowed", "output_grant_invalid", "scaena_unavailable", "graph_unavailable", "graph_unreachable", "download_unavailable", "download_access_unavailable", "media_probe_failed", "media_type_unsupported", "media_duration_invalid", "region_not_supported", "source_changed", "file_version_changed", "target_conflict", "space_not_allowed", "reference_not_found", "quota_exceeded", "throttled", "authentication_required", "path_not_allowed", "invalid_file_metadata", "remote_not_found", "remote_outside_space", "secure_handoff_unavailable", "handoff_not_available", "access_unsupported", "backend_unavailable", "symlink_rejected", "invalid_space", "space_conflict", "content_mismatch":
 		return err.Error()
 	}
 	return "transfer_failed"
@@ -274,6 +295,9 @@ func (s *Service) transfer(ctx context.Context, op *Operation) error {
 		if e != nil {
 			out.Close()
 			return e
+		}
+		if s.Insights != nil {
+			in = s.observedBody(*op, in, "download")
 		}
 		h, n, e := digestReader(io.TeeReader(io.LimitReader(&progressReader{r: in, s: s, id: op.ID}, p.MaxBytes+1), out))
 		in.Close()
@@ -336,7 +360,9 @@ func (s *Service) transfer(ctx context.Context, op *Operation) error {
 		}
 	}
 	if remote.ItemID == "" {
-		remote, e = s.providerFor(p).Upload(ctx, p, op.Target, &progressReader{r: source, s: s, id: op.ID}, n)
+		meter := &insights.ObservedReader{Reader: source}
+		remote, e = s.providerFor(p).Upload(ctx, p, op.Target, &progressReader{r: meter, s: s, id: op.ID}, n)
+		s.observe(*op, "local_to_storage", "transfer", meter.Bytes)
 		if e != nil {
 			return e
 		}
@@ -345,11 +371,15 @@ func (s *Service) transfer(ctx context.Context, op *Operation) error {
 	if e != nil {
 		return e
 	}
+	if s.Insights != nil {
+		in = s.observedBody(*op, in, "verification")
+	}
 	remoteHash, remoteN, e := digestReader(io.LimitReader(in, p.MaxBytes+1))
 	in.Close()
 	if e != nil || remoteHash != h || remoteN != n {
 		return errors.New("content_mismatch")
 	}
+	remote.Provenance = op.Provenance
 	remote.SHA256 = h
 	remote.Dir = scanDir
 	f, e := s.remember(p, remote)

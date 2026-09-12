@@ -10,3 +10,5 @@ active change：`drivebridge-seamless-onedrive-auth-v1`（device-code 登录+自
 - [首次真实使用 runbook](activation-local.md)
 - [本地验证记录](verification.md)
 - [远程模式验证](remote-verification.md)
+
+用量、图表、扫描与安全审计见[使用说明](insights-audit.md)。

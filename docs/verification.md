@@ -58,3 +58,18 @@ OneDrive 目录路径（Graph path 寻址/逐段 mkdir/graphPost）经 fake Grap
 - testscript：find/changes/trash/purge 双旗标门/restore 全链；CLI 传输命令改为同步终态（排队即退会在进程退出时取消后台传输——竞态修复）。
 
 OneDrive Move/Delete（Graph PATCH parentReference/DELETE）经类型化错误映射实现；真实 OneDrive 移动/删除由用户实机验收。AGENTS 边界改写：禁止永久删除（软删除+恢复限空间内）。
+
+## personal-agent-loop-v1（2026-09-12）
+
+- Go 全量/race：`temp/integration-test-runs/20260912T161936Z-1555c6da/`。
+- 首用自动 remote 发现和配置默认目录补充回归：`temp/integration-test-runs/20260912T162303Z-54d8e786/`；setup 输出命令名检查：`temp/integration-test-runs/20260912T162538Z-6e845b3c/`。
+- Go vet：`temp/integration-test-runs/20260912T162054Z-88fd0701/`。
+- 三场景文件闭环：`temp/integration-test-runs/20260912T162206Z-8864d582/`，报告、代码压缩包、图片使用相同空间、上传/下载、来源、固定引用、重放和回收站恢复合同，含 recent 与恢复已完成操作。
+- 真实 fixture 服务＋OIDC＋stdio MCP＋普通远程 CLI：`temp/integration-test-runs/20260912T162443Z-bdcb1864/`，配置由 CLI 写入，上传回执/来源、固定引用下载、检索、幂等、撤销、禁止远程回退本地状态均通过。
+- Linux/macOS amd64/arm64 四目标 CGO_ENABLED=0 分发构建：`temp/integration-test-runs/20260912T162442Z-a1488efc/`。
+- 分发包 SHA-256、内容校验与本机 Linux amd64 二进制 smoke：`temp/integration-test-runs/20260912T162650Z-c0b38b42/`。其余目标为交叉编译证据，不声称实机运行。
+- OpenSpec 严格校验通过；原始失败证据 `20260912T160838Z-0f7ab935` 保留，初次场景暴露 stat 丢失来源，已在公共查询路径修复并回归。
+
+增量合同包括可选 caller/task_ref、observed_at、setup/config set/recent/resume/cancel、检索过滤和远程引用替代参数。无存量删除或引用迁移，旧来源缺省请求保持兼容。回滚保留文件、回执、可选列和凭据。远程 mkdir/changes/purge 仍明确 unsupported；本机独占 state、generic/加密空间交接限制未被绕过。changes 未升级为可靠自动触发器。
+
+分发文件在 temp/distribution，未发布、推送或部署；真实账号和市场验证没有执行。试用演示与指标方案见 market-validation.md，不将准备材料计为市场验证成绩。

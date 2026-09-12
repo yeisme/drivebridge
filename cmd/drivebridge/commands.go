@@ -11,31 +11,19 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/mark3labs/mcp-go/server"
+	"github.com/pelletier/go-toml/v2"
 	rcloneconfig "github.com/rclone/rclone/fs/config"
 	"github.com/spf13/cobra"
 	"github.com/yeisme/drivebridge/internal/bridge"
 	dbconfig "github.com/yeisme/drivebridge/internal/config"
 	remoteclient "github.com/yeisme/drivebridge/internal/remote"
 )
-
-func newAuthCommand(c *cli) *cobra.Command {
-	return &cobra.Command{
-		Use:   "auth",
-		Short: "Open the embedded rclone configurator to sign in to a backend.",
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			if err := c.installRclone(); err != nil {
-				return err
-			}
-			// The configurator is interactive by design; it runs in the user
-			// terminal only and never prints through the output contract.
-			return rcloneconfig.EditConfig(context.Background())
-		},
-	}
-}
 
 func newCapabilitiesCommand(c *cli) *cobra.Command {
 	var remoteURL, remoteToken, localRoot string
@@ -61,7 +49,7 @@ func newCapabilitiesCommand(c *cli) *cobra.Command {
 }
 
 func newMCPCommand(c *cli) *cobra.Command {
-	var enabled, handoff bool
+	var enabled, handoff, usage bool
 	var scaenaBase, scaenaTokenFile, remoteURL, remoteToken, localRoot string
 	cmd := &cobra.Command{
 		Use:   "mcp",
@@ -89,6 +77,18 @@ func newMCPCommand(c *cli) *cobra.Command {
 					return err
 				}
 			}
+			if usage {
+				s.StartInsights()
+				srv, e := s.ListenInsights(filepath.Join(c.effective.Values["state"], "insights.sock"))
+				if e != nil {
+					return e
+				}
+				defer func() {
+					ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+					defer cancel()
+					srv.Shutdown(ctx)
+				}()
+			}
 			s.Handoff = handoff
 			if handoff {
 				socket := filepath.Join(c.effective.Values["state"], "handoff.sock")
@@ -105,6 +105,7 @@ func newMCPCommand(c *cli) *cobra.Command {
 			return server.ServeStdio(s.MCP())
 		},
 	}
+	cmd.Flags().BoolVar(&usage, "insights", false, "Enable the private insights control socket and opted-in daily scans")
 	cmd.Flags().BoolVar(&enabled, "enabled", false, "Explicitly enable file operations")
 	cmd.Flags().BoolVar(&handoff, "handoff", false, "Enable a private local owner socket; requires --enabled")
 	cmd.Flags().StringVar(&scaenaBase, "scaena-url", "", "Scaena owner URL for output recovery")
@@ -173,10 +174,11 @@ func scaenaTokenReader(path string) func() (string, error) {
 }
 
 func spaceAddCommand(c *cli, use string) *cobra.Command {
-	var space, remote, backend, drive, rootID, remotePath, local string
+	var space, remote, backend, drive, rootID, rootPath, remotePath, local string
 	var limit int64
 	var project, actor string
-	var followSymlinks bool
+	var followSymlinks, auto bool
+	var rootName string
 	cmd := &cobra.Command{
 		Use:   use,
 		Short: "Register a space bound to an allowed local directory and backend root.",
@@ -187,13 +189,39 @@ func spaceAddCommand(c *cli, use string) *cobra.Command {
 			}
 			defer release()
 			root := rootID
+			if backend != "generic" {
+				drive, root, err = discoverSpaceRoot(cmd.Context(), remote, rootPath, drive, rootID)
+				if err != nil {
+					return err
+				}
+			}
+			if backend != "generic" && (auto || rootName != "") {
+				if rootPath != "" || rootID != "" || (auto && rootName != "") {
+					return fmt.Errorf("root_selection_conflict")
+				}
+				drive = rcloneconfig.GetValue(remote, "drive_id")
+				if drive == "" {
+					return fmt.Errorf("authentication_required: run 'drivebridge auth --auto' first")
+				}
+				if auto {
+					if root = rcloneconfig.GetValue(remote, "root_folder_id"); root == "" {
+						return fmt.Errorf("authentication_required: run 'drivebridge auth --auto' first")
+					}
+				} else if root, err = bridge.NewOneDrive().SelectRootFolderOnRemote(cmd.Context(), remote, rootName); err != nil {
+					return err
+				}
+			}
 			if backend == "generic" {
 				root = remotePath
 			}
 			if err = s.AddSpace(bridge.Space{ID: space, Remote: remote, Backend: backend, DriveID: drive, RootID: root, LocalRoot: local, MaxBytes: limit, Project: project, Actor: actor, FollowSymlinks: followSymlinks}); err != nil {
 				return err
 			}
-			return c.mode.write("space-add", "success", "Space configured.", nil)
+			action := "space-add"
+			if use == "setup" {
+				action = "setup"
+			}
+			return c.mode.write(action, "success", "Space configured; file roundtrip has not been verified.", map[string]any{"configured": true, "roundtrip_status": "not_verified", "space_id": space, "local_root": local, "max_bytes": limit})
 		},
 	}
 	f := cmd.Flags()
@@ -201,6 +229,9 @@ func spaceAddCommand(c *cli, use string) *cobra.Command {
 	f.StringVar(&remote, "remote", "", "Existing rclone remote name")
 	f.StringVar(&backend, "backend", "", "Backend kind: empty for OneDrive, or 'generic' for any transfer-only rclone remote")
 	f.StringVar(&drive, "drive-id", "", "OneDrive drive ID")
+	f.StringVar(&rootPath, "root-path", "", "Existing OneDrive folder path; discovers drive and folder IDs")
+	f.BoolVar(&auto, "auto", false, "Use the drive and root discovered by 'drivebridge auth --auto'")
+	f.StringVar(&rootName, "root-name", "", "Select the allowed root folder by exact name under the drive root")
 	f.StringVar(&rootID, "root-id", "", "Allowed root item ID")
 	f.StringVar(&remotePath, "remote-path", "", "Generic backend root path inside the remote (empty = remote root)")
 	f.BoolVar(&followSymlinks, "follow-symlinks", false, "Materialize symbolic links on upload for this space")
@@ -221,10 +252,14 @@ func newSpaceAddCommand(c *cli) *cobra.Command {
 func newSpaceCommand(c *cli) *cobra.Command {
 	root := &cobra.Command{Use: "space", Short: "Manage configured spaces."}
 	root.AddCommand(spaceAddCommand(c, "add"))
+	root.AddCommand(newSpaceTTLCommand(c))
 	list := &cobra.Command{
 		Use:   "list",
 		Short: "List configured spaces and their backend kinds.",
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if url := c.effective.Values["remote_url"]; url != "" {
+				return runRemoteCall(c, url, c.effective.Values["remote_token_file"], c.effective.Values["local_root"], "spaces", nil)
+			}
 			s, release, err := c.openService(false)
 			if err != nil {
 				return err
@@ -294,7 +329,7 @@ func newConfigCommand(c *cli) *cobra.Command {
 		},
 	}
 	show.Flags().String("local-root", "", "Resolve this key from a flag to preview precedence")
-	root.AddCommand(show, init)
+	root.AddCommand(show, init, configSetCommand(c))
 	return root
 }
 
@@ -319,7 +354,16 @@ func newTransferCommands(c *cli) []*cobra.Command {
 				return err
 			}
 			defer release()
-			op, err := s.Upload(context.Background(), space, dir, file, name, key)
+			caller, _ := cmd.Flags().GetString("caller")
+			taskRef, _ := cmd.Flags().GetString("task-ref")
+			var op bridge.Operation
+			if caller == "" && taskRef == "" {
+				// Without declared provenance the upload may reuse content
+				// that is already stored in the space (content-addressed).
+				op, err = s.ReuseUpload(context.Background(), space, dir, file, name, key)
+			} else {
+				op, err = s.Upload(context.Background(), space, dir, file, name, key, bridge.Provenance{Caller: caller, TaskRef: taskRef})
+			}
 			if err != nil {
 				return err
 			}
@@ -339,6 +383,8 @@ func newTransferCommands(c *cli) []*cobra.Command {
 			return nil
 		},
 	}
+	upload.Flags().String("caller", "", "Caller label (opaque identifier, not authentication)")
+	upload.Flags().String("task-ref", "", "External task identifier; no prompts, URLs or credentials")
 	upload.Flags().String("space", "", "Space identifier")
 	upload.Flags().String("file", "", "Local file path inside the space's local root or absolute")
 	upload.Flags().String("dir", "", "Remote directory inside the space (default root)")
@@ -478,7 +524,16 @@ func newTransferCommands(c *cli) []*cobra.Command {
 				return err
 			}
 			defer release()
-			files, err := s.Search(space, query, path)
+			mime, _ := cmd.Flags().GetString("mime-type")
+			afterText, _ := cmd.Flags().GetString("after")
+			after := time.Time{}
+			if afterText != "" {
+				after, err = time.Parse(time.RFC3339, afterText)
+				if err != nil {
+					return fmt.Errorf("invalid_time")
+				}
+			}
+			files, err := s.Search(space, query, path, bridge.SearchOptions{MIME: mime, After: after})
 			if err != nil {
 				return err
 			}
@@ -490,6 +545,8 @@ func newTransferCommands(c *cli) []*cobra.Command {
 			return c.mode.write("find", "success", fmt.Sprintf("%d hit(s).", len(files)), map[string]any{"count": len(files), "files": files})
 		},
 	}
+	find.Flags().String("mime-type", "", "Exact MIME type filter")
+	find.Flags().String("after", "", "Observed since RFC3339 time (index observation, not remote modification)")
 	find.Flags().String("space", "", "Space identifier")
 	find.Flags().String("query", "", "Case-insensitive name substring")
 	find.Flags().String("path", "", "Restrict to one workspace directory")
@@ -581,13 +638,18 @@ func newTransferCommands(c *cli) []*cobra.Command {
 	purge.Flags().String("ref", "", "Already-trashed stable reference")
 	purge.Flags().Bool("i-am-the-owner", false, "Explicit human-owner confirmation; permanent deletion never runs through the MCP surface")
 
-	return []*cobra.Command{upload, download, list, stat, op, mkdir, find, feed, trashCmd, restore, purge}
+	commands := []*cobra.Command{upload, download, list, stat, op, mkdir, find, feed, trashCmd, restore, purge}
+	for _, cmd := range commands {
+		routeTransfer(c, cmd)
+	}
+	return commands
 }
 
 // newInstallCommand registers the stdio MCP server with a local client. It
 // writes only the registration entry; secrets are never involved.
 func newInstallCommand(c *cli) *cobra.Command {
 	var client string
+	var readOnly bool
 	cmd := &cobra.Command{
 		Use:   "install",
 		Short: "Register the local stdio MCP server with an MCP client.",
@@ -597,12 +659,32 @@ func newInstallCommand(c *cli) *cobra.Command {
 				return err
 			}
 			binary = mustAbs(binary)
+			if readOnly && c.effective.Values["remote_url"] != "" {
+				return fmt.Errorf("remote_read_only_requires_scoped_token")
+			}
+			args := []string{"mcp"}
+			if !readOnly {
+				args = append(args, "--enabled", "--handoff")
+			}
+			// Persist resolved locations, not process-local environment assumptions.
+			for _, key := range []string{"state", "rclone_config", "remote_url", "remote_token_file", "local_root", "scaena_url", "scaena_token_file"} {
+				if value := c.effective.Values[key]; value != "" {
+					if key != "remote_url" && key != "scaena_url" {
+						absolute, err := filepath.Abs(value)
+						if err != nil {
+							return fmt.Errorf("invalid_config_path")
+						}
+						value = absolute
+					}
+					args = append(args, "--"+flagNames[key], value)
+				}
+			}
 			switch client {
 			case "claude-code":
 				if _, err := exec.LookPath("claude"); err != nil {
-					return c.mode.write("install", "manual", "claude CLI not found; run: claude mcp add -s user drivebridge -- "+binary+" mcp --enabled --handoff", map[string]any{"client": client, "command": binary})
+					return c.mode.write("install", "manual", "Client CLI unavailable; register the command and args from --json in your MCP client.", map[string]any{"client": client, "command": binary, "args": args})
 				}
-				out, err := exec.Command("claude", "mcp", "add", "-s", "user", "drivebridge", "--", binary, "mcp", "--enabled", "--handoff").CombinedOutput()
+				out, err := exec.Command("claude", append([]string{"mcp", "add", "-s", "user", "drivebridge", "--", binary}, args...)...).CombinedOutput()
 				if err != nil {
 					return fmt.Errorf("claude mcp add failed: %s", firstLine(out))
 				}
@@ -613,10 +695,33 @@ func newInstallCommand(c *cli) *cobra.Command {
 					return err
 				}
 				target := filepath.Join(home, ".codex", "config.toml")
-				if body, err := os.ReadFile(target); err == nil && strings.Contains(string(body), "[mcp_servers.drivebridge]") {
-					return c.mode.write("install", "success", "Already registered in "+target+".", map[string]any{"client": client, "path": target})
+				if body, err := os.ReadFile(target); err == nil {
+					var conf struct {
+						Servers map[string]struct {
+							Command string   `toml:"command"`
+							Args    []string `toml:"args"`
+						} `toml:"mcp_servers"`
+					}
+					if toml.Unmarshal(body, &conf) != nil {
+						return fmt.Errorf("invalid_client_config")
+					}
+					if existing, ok := conf.Servers["drivebridge"]; ok {
+						if existing.Command != binary || !reflect.DeepEqual(existing.Args, args) {
+							return fmt.Errorf("registration_conflict: existing entry differs; review client configuration")
+						}
+						return c.mode.write("install", "success", "Existing registration matches.", map[string]any{"client": client, "path": target})
+					}
+				} else if !os.IsNotExist(err) {
+					return fmt.Errorf("client_config_unavailable")
 				}
-				entry := "\n[mcp_servers.drivebridge]\ncommand = \"" + binary + "\"\nargs = [\"mcp\", \"--enabled\", \"--handoff\"]\n"
+				quoted := make([]string, len(args))
+				for i, arg := range args {
+					quoted[i] = strconv.Quote(arg)
+				}
+				entry := "\n[mcp_servers.drivebridge]\ncommand = " + strconv.Quote(binary) + "\nargs = [" + strings.Join(quoted, ", ") + "]\n"
+				if err := os.MkdirAll(filepath.Dir(target), 0700); err != nil {
+					return err
+				}
 				f, err := os.OpenFile(target, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
 				if err != nil {
 					return err
@@ -627,11 +732,12 @@ func newInstallCommand(c *cli) *cobra.Command {
 				}
 				return c.mode.write("install", "success", "Appended drivebridge to "+target+".", map[string]any{"client": client, "path": target})
 			case "generic":
-				return c.mode.write("install", "manual", "Register this stdio command with your MCP client:", map[string]any{"command": binary, "args": []string{"mcp", "--enabled", "--handoff"}})
+				return c.mode.write("install", "manual", "Register this stdio command with your MCP client:", map[string]any{"command": binary, "args": args})
 			}
 			return fmt.Errorf("unknown client: %s", client)
 		},
 	}
+	cmd.Flags().BoolVar(&readOnly, "read-only", false, "Register without enabling local file operations or the owner socket")
 	cmd.Flags().StringVar(&client, "client", "claude-code", "MCP client: claude-code, codex or generic")
 	return cmd
 }

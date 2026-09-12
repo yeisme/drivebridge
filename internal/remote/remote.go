@@ -12,6 +12,8 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -21,6 +23,13 @@ import (
 type Adapter struct {
 	Client *sdk.Client
 	Root   *os.Root
+}
+
+// UploadResult is the typed upload receipt: callers that need synchronous
+// terminal semantics can poll the embedded operation by its ID.
+type UploadResult struct {
+	sdk.Operation
+	FileRef string `json:"file_ref"`
 }
 
 func New(endpoint, credentialFile, localRoot string) (*Adapter, error) {
@@ -54,6 +63,32 @@ func bytesTrim(b []byte) []byte {
 func (a *Adapter) Close() { a.Root.Close() }
 func (a *Adapter) Call(ctx context.Context, name string, args map[string]any) (any, error) {
 	text := func(k string) string { v, _ := args[k].(string); return v }
+	if args == nil {
+		args = map[string]any{}
+	}
+	if text("ref") == "" && text("file_ref") != "" {
+		args["ref"] = text("file_ref")
+	}
+	if text("ref") != "" {
+		var resolved struct {
+			File sdk.File `json:"file"`
+			Ref  string   `json:"ref"`
+		}
+		if err := a.Client.JSON(ctx, "GET", "/api/v1/references?ref="+url.QueryEscape(text("ref")), "", nil, &resolved); err != nil {
+			return nil, err
+		}
+		if text("file_id") != "" && text("file_id") != resolved.File.ID {
+			return nil, errors.New("reference_conflict")
+		}
+		if text("version_id") != "" && text("version_id") != resolved.File.VersionID {
+			return nil, errors.New("reference_conflict")
+		}
+		args["file_id"], args["version_id"] = resolved.File.ID, resolved.File.VersionID
+		if name == "stat" {
+			return resolved, nil
+		}
+	}
+
 	var out any
 	method, path := "GET", ""
 	switch name {
@@ -61,12 +96,23 @@ func (a *Adapter) Call(ctx context.Context, name string, args map[string]any) (a
 		path = "/api/v1/capabilities"
 	case "spaces":
 		path = "/api/v1/spaces"
-	case "files":
-		path = "/api/v1/files?space_id=" + url.QueryEscape(text("space_id"))
+	case "files", "list", "search":
+		q := url.Values{"space_id": {text("space_id")}, "prefix": {text("path")}, "q": {text("query")}, "mime_type": {text("mime_type")}, "after": {text("after")}}
+		path = "/api/v1/files?" + q.Encode()
+	case "trash", "restore":
+		method, path = "POST", "/api/v1/files/"+url.PathEscape(text("file_id"))+"/"+name
+	case "mkdir", "changes", "purge":
+		return nil, errors.New("remote_unsupported")
 	case "stat":
 		path = "/api/v1/files/" + url.PathEscape(text("file_id"))
 	case "operations":
-		path = "/api/v1/operations"
+		path = "/api/v1/operations?space_id=" + url.QueryEscape(text("space_id"))
+		if args["pending"] == true {
+			path += "&pending=true"
+		}
+		if limit, ok := args["limit"].(int); ok {
+			path += "&limit=" + strconv.Itoa(limit)
+		}
 	case "operation_get":
 		path = "/api/v1/operations/" + url.PathEscape(text("operation_id"))
 	case "resume", "cancel":
@@ -86,7 +132,21 @@ func (a *Adapter) Call(ctx context.Context, name string, args map[string]any) (a
 		if e != nil || !info.Mode().IsRegular() {
 			return nil, errors.New("local_file_unavailable")
 		}
-		return a.Client.Upload(ctx, sdk.UploadRequest{SpaceID: text("space_id"), Path: text("path"), FileID: text("file_id"), ExpectedVersion: text("expected_version")}, text("idempotency_key"), f, nil)
+		op, err := a.Client.Upload(ctx, sdk.UploadRequest{Caller: text("caller"), TaskRef: text("task_ref"), SpaceID: text("space_id"), Path: text("path"), FileID: text("file_id"), ExpectedVersion: text("expected_version")}, text("idempotency_key"), f, nil)
+		if err != nil {
+			return nil, err
+		}
+		var item struct {
+			Ref string `json:"ref"`
+		}
+		if err = a.Client.JSON(ctx, "GET", "/api/v1/files/"+url.PathEscape(op.FileID), "", nil, &item); err != nil {
+			// A write-only grant must still receive its successful operation receipt.
+			return op, nil
+		}
+		if i := strings.LastIndex(item.Ref, "/version/"); i >= 0 {
+			item.Ref = item.Ref[:i] + "/version/" + op.VersionID
+		}
+		return UploadResult{op, item.Ref}, nil
 	case "download":
 		local := text("local_path")
 		if !filepath.IsLocal(local) {
@@ -145,7 +205,7 @@ func (a *Adapter) MCP() *server.MCPServer {
 	defs := []struct {
 		name   string
 		fields []string
-	}{{"capabilities", nil}, {"spaces", nil}, {"files", []string{"space_id"}}, {"stat", []string{"file_id"}}, {"operations", nil}, {"operation_get", []string{"operation_id"}}, {"resume", []string{"operation_id"}}, {"cancel", []string{"operation_id"}}, {"upload", []string{"space_id", "local_path", "path", "idempotency_key"}}, {"download", []string{"file_id", "local_path"}}}
+	}{{"list", []string{"space_id"}}, {"search", []string{"space_id", "query"}}, {"trash", []string{"file_id"}}, {"restore", []string{"file_id"}}, {"capabilities", nil}, {"spaces", nil}, {"files", []string{"space_id"}}, {"stat", []string{"file_id"}}, {"operations", nil}, {"operation_get", []string{"operation_id"}}, {"resume", []string{"operation_id"}}, {"cancel", []string{"operation_id"}}, {"upload", []string{"space_id", "local_path", "path", "idempotency_key"}}, {"download", []string{"file_id", "local_path"}}}
 	tools := []mcp.Tool{}
 	for _, def := range defs {
 		name := def.name
@@ -153,7 +213,20 @@ func (a *Adapter) MCP() *server.MCPServer {
 		for _, field := range def.fields {
 			opts = append(opts, mcp.WithString(field, mcp.Required()))
 		}
+		if name == "stat" || name == "download" || name == "trash" || name == "restore" {
+			// file_id and ref are alternatives; runtime enforces their consistency.
+			opts = []mcp.ToolOption{mcp.WithDescription("Use file_id or a pinned ref; local paths stay inside the adapter root."), mcp.WithString("file_id"), mcp.WithString("ref"), mcp.WithString("file_ref")}
+			if name == "download" {
+				opts = append(opts, mcp.WithString("local_path", mcp.Required()))
+			}
+		}
+		if name == "files" || name == "list" || name == "search" {
+			for _, field := range []string{"path", "mime_type", "after"} {
+				opts = append(opts, mcp.WithString(field))
+			}
+		}
 		if name == "upload" {
+			opts = append(opts, mcp.WithString("caller"), mcp.WithString("task_ref"))
 			opts = append(opts, mcp.WithString("file_id"), mcp.WithString("expected_version"))
 		}
 		if name == "download" {
@@ -188,7 +261,7 @@ func (a *Adapter) MCP() *server.MCPServer {
 		if e != nil {
 			return nil, e
 		}
-		b, _ := json.Marshal(map[string]any{"tools": tools, "service": out, "local_file_access": true})
+		b, _ := json.Marshal(map[string]any{"tools": tools, "service": out, "local_file_access": true, "unsupported_actions": []string{"mkdir", "changes", "purge"}, "after_semantics": "file_updated_at", "list_path_semantics": "recursive_prefix", "provenance": "caller_declared_labels"})
 		return []mcp.ResourceContents{mcp.TextResourceContents{URI: q.Params.URI, MIMEType: "application/json", Text: string(b)}}, nil
 	})
 	return srv

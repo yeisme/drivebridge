@@ -545,3 +545,29 @@ func (r *OneDrive) Move(ctx context.Context, p Space, f File, destDir, destName 
 func (r *OneDrive) Delete(ctx context.Context, p Space, f File) error {
 	return r.graphDelete(ctx, p, "items/"+url.PathEscape(f.ItemID))
 }
+
+// DiscoverRoot resolves a user-selected folder using the existing rclone
+// identity. It does not create another OAuth credential or change the remote.
+func (r *OneDrive) DiscoverRoot(ctx context.Context, remote, folder string) (string, string, error) {
+	folder, err := remoteDir(folder)
+	if err != nil || folder == "" {
+		return "", "", errors.New("folder_path_required")
+	}
+	drive := config.GetValue(remote, "drive_id")
+	if drive == "" {
+		return "", "", errors.New("authentication_required")
+	}
+	p := Space{ID: "discovery-" + remote, Remote: remote, DriveID: drive}
+	parts := strings.Split(folder, "/")
+	for i := range parts {
+		parts[i] = url.PathEscape(parts[i])
+	}
+	var item driveItem
+	if err = r.graph(ctx, p, "root:/"+strings.Join(parts, "/")+"?$select=id,parentReference,folder", &item); err != nil {
+		return "", "", err
+	}
+	if item.ID == "" || item.Folder == nil || (item.Parent.Drive != "" && item.Parent.Drive != drive) {
+		return "", "", errors.New("folder_not_found")
+	}
+	return drive, item.ID, nil
+}

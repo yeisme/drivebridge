@@ -4,7 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -19,7 +22,7 @@ func tool(name, description string, required ...string) mcp.Tool {
 	return mcp.NewTool(name, opts...)
 }
 func (s *Service) Tools() []mcp.Tool {
-	return []mcp.Tool{
+	tools := []mcp.Tool{
 		tool("capabilities", "Discover allowed spaces, exact tool schemas, transfer limits and recovery."),
 		tool("list", "List files in the space root or a workspace subdirectory.", "space_id"),
 		tool("mkdir", "Create a workspace directory (idempotent); existing files with the name are a conflict.", "space_id", "path"),
@@ -28,7 +31,8 @@ func (s *Service) Tools() []mcp.Tool {
 		tool("trash", "Soft-delete a reference inside the space; it stays queryable and restorable.", "file_ref"),
 		tool("restore", "Move a trashed reference back into its directory; same-name conflicts get a suffix, never an overwrite.", "file_ref"),
 		tool("stat", "Verify a stable reference and detect replacement or moves outside the space.", "file_ref"),
-		tool("upload", "Upload a local file. The destination is an operation-prefixed name inside an optional directory; existing files are not replaced. Poll operation_get.", "space_id", "local_path", "name", "idempotency_key"),
+		tool("upload", "Upload a local file. The destination is an operation-prefixed name inside an optional directory; existing files are not replaced; same-content objects are reused without retransfer. Poll operation_get.", "space_id", "local_path", "name", "idempotency_key"),
+		tool("link", "Register an explicit reference to an existing object in another space on the same drive; no bytes are copied and the source is never modified.", "file_ref", "space_id"),
 		tool("download", "Download into an allowed local directory without replacing a different file. Poll operation_get.", "file_ref", "local_path", "idempotency_key"),
 		tool("operation_get", "Recover the original transfer result before starting another operation.", "operation_id"),
 		tool("resume", "Resume an interrupted or failed transfer; may retransmit bytes. Never creates a generation task.", "operation_id"),
@@ -36,16 +40,58 @@ func (s *Service) Tools() []mcp.Tool {
 		tool("save_output", "Save an existing succeeded/imported Scaena task artifact to OneDrive. Never submits generation. Poll operation_get.", "space_id", "submission_ref", "idempotency_key"),
 		tool("prepare_reference", "Verify a file and report handoff readiness. No URL is returned. The authorized local owner acquires access just before submission.", "file_ref"),
 	}
+	for i := range tools {
+		fields := []string{}
+		switch tools[i].Name {
+		case "upload":
+			fields = []string{"dir", "caller", "task_ref"}
+		case "link":
+			fields = []string{"dir", "name"}
+		case "search":
+			fields = []string{"path", "mime_type", "after"}
+		case "list":
+			fields = []string{"path"}
+		}
+		for _, field := range fields {
+			tools[i].InputSchema.Properties[field] = map[string]any{"type": "string"}
+		}
+	}
+	for _, name := range []string{"usage_summary", "usage_series", "usage_breakdown", "usage_scans", "audit_events"} {
+		t := tool(name, "Read local usage/audit projections; caller labels are not authenticated Agent identities.")
+		if t.InputSchema.Properties == nil {
+			t.InputSchema.Properties = map[string]any{}
+		}
+		for _, field := range []string{"space_id", "connection_id", "from", "to", "actor", "caller", "direction", "purpose", "group", "action", "outcome"} {
+			t.InputSchema.Properties[field] = map[string]any{"type": "string"}
+		}
+		tools = append(tools, t)
+	}
+	t := tool("usage_scan", "Run an already-enabled local inventory with its existing budget; cannot enable scanning.", "space_id")
+	t.InputSchema.Properties["resume_id"] = map[string]any{"type": "string"}
+	tools = append(tools, t)
+	return tools
 }
 func (s *Service) Capabilities() any {
 	kinds := map[string]bool{}
 	for _, p := range s.Spaces() {
 		kinds[p.Kind()] = true
 	}
-	return map[string]any{"spec_version": "0.1", "enabled": s.Enabled, "spaces": s.Spaces(), "tools": s.Tools(), "backend_capabilities": map[string]any{"onedrive": map[string]any{"transfer": true, "direct_url": true, "reference_handoff": true}, "generic": map[string]any{"transfer": true, "direct_url": false, "reference_handoff": false}}, "configured_backend_kinds": kinds, "secure_handoff": s.Enabled && s.Handoff, "output_adapter_enabled": s.Enabled && s.Output != nil, "authorization_status": "not_probed", "storage_status": "not_probed", "provider_consumption_status": "not_verified", "handoff_transport": "owner_unix_socket", "download_url_ttl": "unknown", "cli_required_on_mcp_client": false, "recovery": "operation_get_then_resume", "scope": "local_single_user", "generation_owner": "scaena"}
+	return map[string]any{"provenance": "caller_declared_labels", "search_scope": "observed_index_not_full_remote", "after_semantics": "first_observed_at", "history": "pinned_identity_not_snapshot", "concurrency": "single_process_per_state", "spec_version": "0.1", "enabled": s.Enabled, "spaces": s.Spaces(), "tools": s.Tools(), "backend_capabilities": map[string]any{"onedrive": map[string]any{"transfer": true, "direct_url": true, "reference_handoff": true}, "generic": map[string]any{"transfer": true, "direct_url": false, "reference_handoff": false}}, "configured_backend_kinds": kinds, "secure_handoff": s.Enabled && s.Handoff, "output_adapter_enabled": s.Enabled && s.Output != nil, "authorization_status": "not_probed", "storage_status": "not_probed", "provider_consumption_status": "not_verified", "handoff_transport": "owner_unix_socket", "download_url_ttl": "unknown", "cli_required_on_mcp_client": false, "recovery": "operation_get_then_resume", "scope": "local_single_user", "generation_owner": "scaena"}
 }
 func (s *Service) Call(ctx context.Context, name string, args map[string]any) (any, error) {
 	text := func(k string) string { v, _ := args[k].(string); return v }
+	if name == "usage_scan" {
+		return s.Scan(ctx, text("space_id"), text("resume_id"))
+	}
+	if strings.HasPrefix(name, "usage_") || name == "audit_events" {
+		q := url.Values{}
+		for _, field := range []string{"space_id", "connection_id", "from", "to", "actor", "caller", "direction", "purpose", "group", "action", "outcome"} {
+			if text(field) != "" {
+				q.Set(field, text(field))
+			}
+		}
+		return s.Usage(strings.TrimPrefix(name, "usage_"), q)
+	}
 	switch name {
 	case "capabilities":
 		return s.Capabilities(), nil
@@ -59,7 +105,15 @@ func (s *Service) Call(ctx context.Context, name string, args map[string]any) (a
 	case "stat":
 		return s.Stat(ctx, text("file_ref"))
 	case "search":
-		return s.Search(text("space_id"), text("query"), text("path"))
+		after := time.Time{}
+		if text("after") != "" {
+			var err error
+			after, err = time.Parse(time.RFC3339, text("after"))
+			if err != nil {
+				return nil, fmt.Errorf("invalid_time")
+			}
+		}
+		return s.Search(text("space_id"), text("query"), text("path"), SearchOptions{MIME: text("mime_type"), After: after})
 	case "changes":
 		since, _ := strconv.ParseUint(text("since"), 10, 64)
 		events, cursor, e := s.Changes(text("space_id"), since)
@@ -72,7 +126,14 @@ func (s *Service) Call(ctx context.Context, name string, args map[string]any) (a
 	case "restore":
 		return s.Restore(ctx, text("file_ref"))
 	case "upload":
-		return s.Upload(ctx, text("space_id"), text("dir"), text("local_path"), text("name"), text("idempotency_key"))
+		if text("caller") == "" && text("task_ref") == "" {
+			// Without declared provenance the upload may reuse content that
+			// is already stored in the space (content-addressed).
+			return s.ReuseUpload(ctx, text("space_id"), text("dir"), text("local_path"), text("name"), text("idempotency_key"))
+		}
+		return s.Upload(ctx, text("space_id"), text("dir"), text("local_path"), text("name"), text("idempotency_key"), Provenance{Caller: text("caller"), TaskRef: text("task_ref")})
+	case "link":
+		return s.LinkRef(ctx, text("file_ref"), text("space_id"), text("dir"), text("name"))
 	case "download":
 		return s.Download(ctx, text("file_ref"), text("local_path"), text("idempotency_key"))
 	case "operation_get":

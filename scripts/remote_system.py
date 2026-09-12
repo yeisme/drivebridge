@@ -57,6 +57,30 @@ with tempfile.TemporaryDirectory(prefix='drivebridge-remote-') as temporary:
         result=tool(6,'download',{'file_id':file_id,'local_path':'copy.txt'});assert not result.get('isError'), 'Identical download replay failed'
         escape=tool(7,'upload',{**arguments,'local_path':'../agent-token','idempotency_key':'escape'});assert escape.get('isError'), 'Local root escape accepted'
         state=tool(8,'operation_get',{'operation_id':op.get('id',op.get('ID'))});encoded=json.dumps(state);assert grant['token'] not in encoded and 'X-Amz-' not in encoded, 'Sensitive output escaped'
+        # The normal CLI consumes the same remote configuration, without a local DB.
+        config=temp/'client.yaml'
+        cli_env={k:v for k,v in os.environ.items() if not k.startswith('DRIVEBRIDGE_')}
+        def cli(*args,ok=True):
+            proc=subprocess.run([str(temp/'bridge'),'--config',str(config),*args,'--json'],cwd=temp,env=cli_env,capture_output=True,text=True,timeout=45)
+            if not ok:
+                assert proc.returncode!=0,'Unsupported remote command succeeded'
+                return proc.stderr
+            assert proc.returncode==0,'Remote CLI failed: '+proc.stderr
+            return json.loads(proc.stdout)
+        cli('config','init')
+        for key,value in [('remote_url',base),('remote_token_file',str(token)),('local_root',str(files)),('state',str(temp/'must-not-open-local-state'))]:
+            cli('config','set',key,value)
+        args=('upload','--space',space['id'],'--file','source.txt','--dir','reports','--caller','report-agent','--task-ref','task:report')
+        report=cli(*args)['data'];assert report['status']=='completed' and report['task_ref']=='task:report'
+        assert cli(*args)['data']['id']==report['id'],'Remote CLI replay duplicated the operation'
+        ref=report['file_ref'];assert ref.startswith('drivebridge://')
+        assert cli('stat','--ref',ref)['data']['file']['task_ref']=='task:report'
+        cli('download','--ref',ref,'--out','cli-copy.txt')
+        assert (files/'cli-copy.txt').read_bytes()==(files/'source.txt').read_bytes()
+        assert cli('find','--space',space['id'],'--query','SOURCE','--path','reports')['data']['count']==1
+        assert 'remote_unsupported' in cli('changes','--space',space['id'],ok=False)
+        assert not (temp/'must-not-open-local-state').exists(),'Remote command opened local state'
+        print('PASS: config-authored remote CLI upload -> provenance -> pinned download -> search -> unsupported capability; no local state.')
         call('/agents/'+grant['agent']['id']+'/revoke',{},me['csrf_token']);result=tool(9,'files',{'space_id':space['id']});assert result.get('isError'), 'Revoked credential accepted'
         print('PASS: OIDC -> scoped token -> real stdio upload/download/replay -> revocation; no product CLI required on the MCP client.')
     finally:
