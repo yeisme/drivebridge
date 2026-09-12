@@ -1,5 +1,5 @@
 exec drivebridge
-stdout 'Usage: drivebridge'
+stdout 'drivebridge \[command\]'
 mkdir local
 exec drivebridge space-add --state $WORK/state --space creative --remote one --drive-id drive --root-id root --local-root $WORK/local --max-bytes 1048576
 stdout 'Space configured'

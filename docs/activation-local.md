@@ -48,12 +48,16 @@ go build -o drivebridge ./cmd/drivebridge
 
 ## 5. 注册 MCP 客户端（本机 stdio）
 
+先把常用路径写进配置文件（一次即可，state/rclone/回存端点全部复用）：
+
 ```bash
-./drivebridge capabilities --json   # 确认工具面与空间
-./drivebridge mcp --enabled         # 需要参考交接时加 --handoff
+./drivebridge config init && $EDITOR ~/.config/drivebridge/config.yaml
+./drivebridge config show            # 核对每键来源
+./drivebridge capabilities --json    # 确认工具面与空间
+./drivebridge mcp --enabled --handoff
 ```
 
-把上面的 `mcp` 命令注册进本机 MCP 客户端（Claude Code / Codex / 其他宿主）。不加 `--enabled` 时只有能力发现与回执查询。
+把上面的 `mcp` 命令注册进本机 MCP 客户端（Claude Code / Codex / 其他宿主）；配置就绪后无需再传 `--state/--rclone-config`。`--enabled/--handoff` 是"默认关闭的写入口开关"，设计上**只能**显式命令行、不进配置文件。不加 `--enabled` 时只有能力发现与回执查询。
 
 ## 6. Scaena 接线（可选：参考交接与回存）
 

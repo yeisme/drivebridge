@@ -29,3 +29,12 @@ doctor 预检只读：不创建 state、不取进程锁、`mode=ro` 打开 state
 - `temp/integration-test-runs/20260911T183907Z-7ac80f65/`：真实 stdio MCP 冒烟（tools/list、能力资源、默认关闭）。
 
 generic 空间验证离线完成于 alias 后端（本地目录钉根），代表任意 rclone 远端的注册表行为；真实 Google Drive/Dropbox/S3/SMB 等账号登录与传输由用户按 README 步骤单独验收，不以 alias fixture 宣称云账号链路可用。remember 现保留同版本的缓存摘要与已验证媒体探测（此前纯列表会清空 SHA-256，属既有缺陷修复）。
+
+## cli-config（2026-09-12）
+
+- `temp/integration-test-runs/20260912T055022Z-428b9422/`：go test -race 全量（含 internal/config 发现序/严格键/优先级单测与 testscript 配置全链：init 拒绝覆盖、show 来源、env/flag 压栈、未知键拒绝、配置驱动 space-add、space list）。
+- `temp/integration-test-runs/20260912T055053Z-ce371648/`：go vet。
+- `temp/integration-test-runs/20260912T055054Z-eb922992/`：CGO_ENABLED=0 构建。
+- `temp/integration-test-runs/20260912T055104Z-6dd69275/`：真实 stdio MCP 冒烟（cobra 树下 tools/list/能力资源/默认关闭）。
+
+cobra+ viper 重构后旧行为等价：旗标名不变、`space-add` 为隐藏别名、无配置文件时纯默认。`--enabled/--handoff`/secret 不可来自文件或 env（spec 固化）。

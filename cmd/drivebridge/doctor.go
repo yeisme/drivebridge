@@ -14,6 +14,7 @@ import (
 	"time"
 
 	_ "github.com/glebarez/sqlite"
+	"github.com/spf13/cobra"
 )
 
 // errDoctorNotReady keeps the CLI exit code non-zero after the report has
@@ -29,6 +30,38 @@ type doctorConfig struct {
 	RemoteURL       string
 	RemoteTokenFile string
 	LocalRoot       string
+	ConfigPath      string
+}
+
+// newDoctorCommand wires the read-only preflight; config-file defaults are
+// resolved through the shared configuration surface.
+func newDoctorCommand(c *cli) *cobra.Command {
+	var handoff bool
+	var scaenaURL, scaenaTokenFile, remoteURL, remoteToken, localRoot string
+	cmd := &cobra.Command{
+		Use:   "doctor",
+		Short: "Read-only preflight: report named pass/fail checks, never probe accounts.",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return runDoctor(c.mode, doctorConfig{
+				State:           c.effective.Values["state"],
+				RcloneConfig:    c.effective.Values["rclone_config"],
+				ScaenaURL:       c.effective.Values["scaena_url"],
+				ScaenaTokenFile: c.effective.Values["scaena_token_file"],
+				Handoff:         handoff,
+				RemoteURL:       c.effective.Values["remote_url"],
+				RemoteTokenFile: c.effective.Values["remote_token_file"],
+				LocalRoot:       c.effective.Values["local_root"],
+				ConfigPath:      c.effective.Path,
+			})
+		},
+	}
+	cmd.Flags().BoolVar(&handoff, "handoff", false, "Declare handoff intent so a missing listener becomes a failure")
+	cmd.Flags().StringVar(&scaenaURL, "scaena-url", "", "Scaena owner URL for output recovery")
+	cmd.Flags().StringVar(&scaenaTokenFile, "scaena-token-file", "", "Private file containing the existing Scaena API credential")
+	cmd.Flags().StringVar(&remoteURL, "remote-url", "", "Remote DriveBridge service origin")
+	cmd.Flags().StringVar(&remoteToken, "remote-token-file", "", "Private scoped Agent token file")
+	cmd.Flags().StringVar(&localRoot, "local-root", "", "Allowed absolute local directory")
+	return cmd
 }
 
 type doctorCheck struct {
@@ -218,6 +251,17 @@ func doctorLocal(cfg doctorConfig) doctorReport {
 		}
 	}
 	add("onedrive_cloud", "info", "global cloud only in this version")
+
+	// Optional configuration file: informational only, never a gate.
+	if cfg.ConfigPath == "" {
+		add("config_file", "info", "no config file; flags, environment and defaults only")
+	} else if info, e := os.Lstat(cfg.ConfigPath); e != nil || !info.Mode().IsRegular() {
+		add("config_file", "info", "path resolved but unreadable: "+cfg.ConfigPath)
+	} else if info.Mode().Perm()&0077 != 0 {
+		add("config_file", "pass", cfg.ConfigPath+" (group/other readable; 0600 recommended)")
+	} else {
+		add("config_file", "pass", cfg.ConfigPath)
+	}
 	return r
 }
 

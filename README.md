@@ -47,6 +47,28 @@ go build -o drivebridge ./cmd/drivebridge
 
 内嵌后端清单见 `internal/bridge/backends.go`（alias/local/box/dropbox/drive/pcloud/s3/smb/sftp/webdav + OneDrive）；新增后端=补一行 import，无需其他接线。
 
+## 配置文件与命令树（cobra/viper）
+
+常用路径与 URL 可进配置文件，一次写好、所有命令复用：
+
+```bash
+./drivebridge config init          # 写 ~/.config/drivebridge/config.yaml（模板含注释）
+$EDITOR ~/.config/drivebridge/config.yaml
+./drivebridge config show          # 每键来源：flag / env / file / default
+```
+
+发现序：`--config <path>` > `DRIVEBRIDGE_CONFIG` > `./drivebridge.{yaml,yml,json,toml}` > `~/.config/drivebridge/config.*`；解析优先级：显式旗标 > `DRIVEBRIDGE_STATE` 等 env > 文件 > 默认。**未知键直接报错**（防打错键名静默失效）；可配置键只有 `state/rclone_config/scaena_url/scaena_token_file/remote_url/remote_token_file/local_root`。
+
+安全边界：`--enabled/--handoff` 等"默认关闭的写入口开关"只能显式命令行，不进文件；任何 secret 永不入文件（token 文件路径可以）。
+
+命令树：`auth`、`space add|list`（旧 `space-add` 为隐藏别名）、`doctor`、`capabilities`、`mcp`、`remote`、`config show|init`、`completion`（bash/zsh/fish）。所有旗标名与旧版一致；配置就绪后 MCP 注册只需：
+
+```bash
+./drivebridge mcp --enabled --handoff
+```
+
+doctor 新增 `config_file` 检查（来源与 0600 建议，info 级，永不阻塞就绪）。
+
 ## Agent 操作合同
 
 通过 `tools/list` 或 `drivebridge://capabilities` 发现真实工具/schema。能力资源与工具注册表共用定义。`authorization_status` 和 `storage_status` 的 `not_probed` 不代表已连通。

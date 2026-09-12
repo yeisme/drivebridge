@@ -1,0 +1,39 @@
+# config init writes a starter file once and refuses to overwrite.
+exec drivebridge config init --config $WORK/configs/drivebridge.yaml
+stdout 'Wrote'
+! exec drivebridge config init --config $WORK/configs/drivebridge.yaml
+chmod 0600 $WORK/configs/drivebridge.yaml
+
+# config show reports each key's source; the file wins over defaults.
+exec drivebridge config show --config $WORK/configs/drivebridge.yaml --json
+stdout '"source.state":"file"'
+stdout '"source.scaena_url":"default"'
+
+# Environment beats the file; flags beat the environment.
+env DRIVEBRIDGE_LOCAL_ROOT=/env/root
+exec drivebridge config show --config $WORK/configs/drivebridge.yaml --json
+stdout '"source.local_root":"env"'
+exec drivebridge config show --config $WORK/configs/drivebridge.yaml --local-root /flag/root --json
+stdout '"source.local_root":"flag"'
+
+# A config file with unknown keys is rejected loudly.
+exec sh -c 'printf "state: /s\nenabled: true\n" > bad.yaml'
+chmod 0600 bad.yaml
+! exec drivebridge capabilities --config bad.yaml
+stderr 'unknown keys: enabled'
+
+# The starter file drives a real command: space-add picks state from config.
+mkdir local
+mkdir remotes
+exec sh -c 'printf "[nas]\ntype = alias\nremote = %s\n" "$1" > rclone.conf' sh $WORK/remotes
+chmod 0600 rclone.conf
+exec sh -c 'printf "state: %s\nrclone_config: %s\n" "$1" "$2" > drivebridge.yaml' sh $WORK/from-config $WORK/rclone.conf
+chmod 0600 drivebridge.yaml
+exec drivebridge space add --space nas --backend generic --remote nas --local-root $WORK/local --max-bytes 1048576
+stdout 'Space configured'
+exists $WORK/from-config/state.sqlite
+
+# space list reports the space and its backend kind.
+exec drivebridge space list --config drivebridge.yaml --json
+stdout '"backend":"generic"'
+stdout '"count":1'
