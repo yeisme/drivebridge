@@ -8,23 +8,35 @@
 - 需要参考交接/成品回存时：本机 Scaena 服务（见第 6 步）
 - 仅支持微软 global 云区域与 Linux/macOS
 
-## 1. 微软 OAuth（用户终端）
+## 1. 微软 OAuth（用户终端，一条命令）
 
 ```bash
 go build -o drivebridge ./cmd/drivebridge
 ./drivebridge auth
 ```
 
-在交互配置器中选择 OneDrive 完成登录；已有 rclone 配置可直接 `--rclone-config /absolute/path/rclone.conf`，无需重新登录。凭据只保存在 rclone 配置里，DriveBridge 不保存第二份 token。
+`auth` 默认走 device-code 流：终端打印验证页地址与一次性代码，你在浏览器完成登录即可——无需注册应用、无需安装向导。凭据只保存在 rclone 配置里，DriveBridge 不保存第二份 token，也不打印任何凭据。默认 remote 名为 `onedrive`（`--remote` 可改）；已有同名凭据会被拒绝，换名或先删除旧节。旧 rclone 交互配置器保留为 `auth --rclone-interactive`；已有 rclone 配置可直接 `--rclone-config /absolute/path/rclone.conf`，无需重新登录。
 
-## 2. 获取真实 drive-id 与 root-id
+## 2. drive-id 与 root-id 自动发现（原手抄步骤已折叠）
 
-- **drive-id**：认证完成后 rclone 配置中该 remote 的 `drive_id =` 值（也可用 Graph Explorer 查询 `GET /me/drive`）。
-- **root-id**：允许目录的真实 item ID，**不能**用显示名称或 `root` 占位符。用 Graph Explorer `GET /me/drive/root/children` 找到目标目录条目的 `id` 字段（Graph Explorer 用同一账号登录即可，无需管理员）。
+- `./drivebridge auth --auto`：登录后自动发现默认 drive 与其根目录，写入 rclone 配置（`drive_id`/`root_folder_id`）并打印。
+- `./drivebridge auth --root-name '<文件夹名>'`：按根目录下文件夹**精确名称**选择允许根，同样落盘。
+- 需要更深的路径时用 `./drivebridge space add --root-path 'Projects/My folder'`（按路径发现 item ID）。Graph Explorer 手查 `GET /me/drive`、`GET /me/drive/root/children` 仍是兜底手段，不再是必经路径。
 
 ## 3. 配置空间
 
 ```bash
+# 首选：消费 auth --auto 发现的身份
+./drivebridge space add --space creative \
+  --remote onedrive --auto \
+  --local-root /absolute/path/creative-files \
+  --max-bytes 1073741824 \
+  --project '<scaena-project>' --actor '<scaena-actor>'
+
+# 或按根目录下文件夹名选择（同一 remote 的非等价路径）
+./drivebridge space add --space creative --remote onedrive --root-name 'Projects' --local-root ... --max-bytes ...
+
+# 或显式手抄 ID（兼容旧流程）
 ./drivebridge space-add --space creative \
   --remote '<rclone-remote>' --drive-id '<drive-id>' --root-id '<folder-item-id>' \
   --local-root /absolute/path/creative-files \
@@ -32,7 +44,7 @@ go build -o drivebridge ./cmd/drivebridge
   --project '<scaena-project>' --actor '<scaena-actor>'
 ```
 
-`--project/--actor` 仅成品回存需要；纯传输空间可省略。`--max-bytes` 按你的域/模型已验证上限设置。空间身份绑定后不可改绑。
+`--auto/--root-name/--root-path/--root-id` 互斥（root_selection_conflict）。`--project/--actor` 仅成品回存需要；纯传输空间可省略。`--max-bytes` 按你的域/模型已验证上限设置。空间身份绑定后不可改绑。
 
 ## 4. 预检（新命令）
 
@@ -40,7 +52,7 @@ go build -o drivebridge ./cmd/drivebridge
 ./drivebridge doctor --state ~/.config/drivebridge --rclone-config ~/.config/rclone/rclone.conf
 ```
 
-按名输出 `pass/fail/info`，ready 以 0 退出；支持 `--json/--agent/--events/--explain`。doctor 只读：不创建 state、不取进程锁、不做真实账号探测——`authorization not probed` 是预期。远程个人空间模式预检：
+按名输出 `pass/fail/info`，ready 以 0 退出；支持 `--json/--agent/--events/--explain`。doctor 只读：不创建 state、不取进程锁、默认不做真实账号探测——`authorization not probed` 是预期；可选 `--probe-auth` 显式发起一次经过 rclone 凭据路径的认证请求（默认仍不探测）。远程个人空间模式预检：
 
 ```bash
 ./drivebridge doctor --remote-url https://files.example.com --remote-token-file /absolute/private/agent-token --local-root /absolute/allowed/files
@@ -87,6 +99,8 @@ python3 scripts/check.py -- python3 scripts/mcp_smoke.py
 |---|---|
 | `state_dir_not_private` | `chmod 0700 <state>` |
 | `rclone_config_missing` | 先 `./drivebridge auth` |
+| `no_onedrive_remote` | 先 `./drivebridge auth --auto`（探测需要已落盘的 drive_id 与凭据） |
+| `authentication_required` | 凭据失效：重跑 `./drivebridge auth`（换 `--remote` 名或先删旧节） |
 | `rclone_remote_missing` | space-add 的 remote 名与 rclone 配置节名不一致 |
 | `no_spaces` / `state_database_missing` | 先 `space-add` |
 | `local_root_not_writable` | 修正目录或权限 |

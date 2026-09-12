@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -103,5 +104,37 @@ func TestDoctorLocalReport(t *testing.T) {
 	report = buildDoctorReport(doctorConfig{State: state, RcloneConfig: rclone})
 	if c := findCheck(report, "rclone_config"); c == nil || c.Status != "fail" {
 		t.Fatalf("open rclone config must fail: %+v", c)
+	}
+}
+
+func TestDoctorAuthProbe(t *testing.T) {
+	dir := t.TempDir()
+	state := filepath.Join(dir, "state")
+	if err := os.Mkdir(state, 0700); err != nil {
+		t.Fatal(err)
+	}
+	rclone := filepath.Join(dir, "rclone.conf")
+	writeFile(t, rclone, "[RCLONE]\n[one]\ntype = onedrive\n", 0600)
+
+	// The default report stays honest: the credential is never probed.
+	report := buildDoctorReport(doctorConfig{State: state, RcloneConfig: rclone})
+	if c := findCheck(report, "onedrive_auth"); c == nil || c.Status != "info" || !strings.Contains(c.Detail, "not probed") {
+		t.Fatalf("default probe state: %+v", c)
+	}
+	// Opting in without a complete OneDrive remote reports guidance, not a
+	// fabricated failure.
+	report = buildDoctorReport(doctorConfig{State: state, RcloneConfig: rclone, ProbeAuth: true})
+	if c := findCheck(report, "onedrive_auth"); c == nil || c.Status != "info" || !strings.Contains(c.Detail, "no_onedrive_remote") {
+		t.Fatalf("probe without remote: %+v", c)
+	}
+	// The presence scan selects a complete remote without reading values.
+	writeFile(t, rclone, "[RCLONE]\n[one]\ntype = onedrive\ndrive_id = drive\ntoken = obscured-fixture\n", 0600)
+	if name, detail, ok := onedriveRemote(rclone); !ok || name != "one" || detail != "" {
+		t.Fatalf("remote selection: %q %q %v", name, detail, ok)
+	}
+	// Incomplete sections (missing drive id or token) are skipped.
+	writeFile(t, rclone, "[RCLONE]\n[partial]\ntype = onedrive\ndrive_id = drive\n", 0600)
+	if _, detail, ok := onedriveRemote(rclone); ok || detail == "" {
+		t.Fatalf("incomplete remote accepted: %q %v", detail, ok)
 	}
 }

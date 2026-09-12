@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -10,11 +11,15 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
 	_ "github.com/glebarez/sqlite"
+	rcloneconfig "github.com/rclone/rclone/fs/config"
+	"github.com/rclone/rclone/fs/config/configfile"
 	"github.com/spf13/cobra"
+	"github.com/yeisme/drivebridge/internal/bridge"
 )
 
 // errDoctorNotReady keeps the CLI exit code non-zero after the report has
@@ -31,12 +36,13 @@ type doctorConfig struct {
 	RemoteTokenFile string
 	LocalRoot       string
 	ConfigPath      string
+	ProbeAuth       bool
 }
 
 // newDoctorCommand wires the read-only preflight; config-file defaults are
 // resolved through the shared configuration surface.
 func newDoctorCommand(c *cli) *cobra.Command {
-	var handoff bool
+	var handoff, probeAuth bool
 	var scaenaURL, scaenaTokenFile, remoteURL, remoteToken, localRoot string
 	cmd := &cobra.Command{
 		Use:   "doctor",
@@ -52,10 +58,12 @@ func newDoctorCommand(c *cli) *cobra.Command {
 				RemoteTokenFile: c.effective.Values["remote_token_file"],
 				LocalRoot:       c.effective.Values["local_root"],
 				ConfigPath:      c.effective.Path,
+				ProbeAuth:       probeAuth,
 			})
 		},
 	}
 	cmd.Flags().BoolVar(&handoff, "handoff", false, "Declare handoff intent so a missing listener becomes a failure")
+	cmd.Flags().BoolVar(&probeAuth, "probe-auth", false, "Opt in to one authenticated request against the configured OneDrive remote; the default stays not probed")
 	cmd.Flags().StringVar(&scaenaURL, "scaena-url", "", "Scaena owner URL for output recovery")
 	cmd.Flags().StringVar(&scaenaTokenFile, "scaena-token-file", "", "Private file containing the existing Scaena API credential")
 	cmd.Flags().StringVar(&remoteURL, "remote-url", "", "Remote DriveBridge service origin")
@@ -252,6 +260,24 @@ func doctorLocal(cfg doctorConfig) doctorReport {
 	}
 	add("onedrive_cloud", "info", "global cloud only in this version")
 
+	// Optional credential probe: the default report stays read-only with no
+	// account access; --probe-auth is an explicit opt-in to one authenticated
+	// request through the rclone credential path.
+	if cfg.ProbeAuth {
+		remote, detail, ok := onedriveRemote(cfg.RcloneConfig)
+		if !ok {
+			add("onedrive_auth", "info", detail)
+		} else {
+			if e := probeOneDriveAuth(cfg.RcloneConfig, remote); e != "" {
+				add("onedrive_auth", "fail", e)
+			} else {
+				add("onedrive_auth", "pass", "probe succeeded through "+remote)
+			}
+		}
+	} else {
+		add("onedrive_auth", "info", "not probed; pass --probe-auth to verify the stored credential")
+	}
+
 	// Optional configuration file: informational only, never a gate.
 	if cfg.ConfigPath == "" {
 		add("config_file", "info", "no config file; flags, environment and defaults only")
@@ -314,6 +340,72 @@ func rcloneSections(path string) (map[string]bool, error) {
 		}
 	}
 	return sections, nil
+}
+
+// onedriveRemote finds the first OneDrive-typed remote that stores both a
+// token and a drive id. Only key names are inspected; credential values are
+// never read.
+func onedriveRemote(path string) (string, string, bool) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return "", "no_onedrive_remote: run 'drivebridge auth' first", false
+	}
+	type sectionState struct {
+		onedrive, token, driveID bool
+	}
+	order := []string{}
+	states := map[string]*sectionState{}
+	current := ""
+	for _, line := range splitLines(b) {
+		trimmed := strings.TrimSpace(line)
+		if len(trimmed) > 2 && trimmed[0] == '[' && trimmed[len(trimmed)-1] == ']' {
+			current = trimmed[1 : len(trimmed)-1]
+			if current != "RCLONE" && states[current] == nil {
+				states[current] = &sectionState{}
+				order = append(order, current)
+			}
+			continue
+		}
+		if current == "" || current == "RCLONE" {
+			continue
+		}
+		st := states[current]
+		i := strings.Index(trimmed, "=")
+		if st == nil || i <= 0 {
+			continue
+		}
+		switch strings.TrimSpace(trimmed[:i]) {
+		case "type":
+			if strings.TrimSpace(trimmed[i+1:]) == "onedrive" {
+				st.onedrive = true
+			}
+		case "token":
+			st.token = true
+		case "drive_id":
+			st.driveID = true
+		}
+	}
+	for _, name := range order {
+		if st := states[name]; st.onedrive && st.token && st.driveID {
+			return name, "", true
+		}
+	}
+	return "", "no_onedrive_remote: run 'drivebridge auth --auto' first", false
+}
+
+// probeOneDriveAuth performs one authenticated request through the embedded
+// rclone credential path; tokens refresh inside rclone as usual. The empty
+// string means the probe passed.
+func probeOneDriveAuth(rcloneConfigPath, remote string) string {
+	configfile.Install()
+	if err := rcloneconfig.SetConfigPath(rcloneConfigPath); err != nil {
+		return "authentication_required: rclone config unavailable"
+	}
+	provider := bridge.NewOneDrive()
+	if err := provider.Probe(context.Background(), remote); err != nil {
+		return "authentication_required: " + err.Error() + " (re-run 'drivebridge auth')"
+	}
+	return ""
 }
 
 func splitLines(b []byte) []string {
