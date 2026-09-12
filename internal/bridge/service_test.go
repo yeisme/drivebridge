@@ -24,6 +24,8 @@ type fakeProvider struct {
 	files        map[string]File
 	data         map[string][]byte
 	uploads      int
+	copies       int
+	copyErr      error
 	failAfterPut bool
 	accesses     int
 }

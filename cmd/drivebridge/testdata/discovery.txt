@@ -1,0 +1,54 @@
+# Content-addressed reuse, explicit links and manual retention run end to
+# end on generic spaces over a persistent alias backend.
+mkdir local
+mkdir remote-files
+exec sh -c 'printf "[nas]\ntype = alias\nremote = %s\n" "$1" > rclone.conf' sh $WORK/remote-files
+chmod 0600 rclone.conf
+
+exec sh -c 'printf "state: %s\nrclone_config: %s\n" "$1" "$2" > drivebridge.yaml' sh $WORK/state $WORK/rclone.conf
+
+exec drivebridge space add --space nas --backend generic --remote nas --local-root $WORK/local --max-bytes 1048576
+stdout 'Space configured'
+exec drivebridge space add --space nas2 --backend generic --remote nas --local-root $WORK/local --max-bytes 1048576
+stdout 'Space configured'
+
+# A plain upload registers a stable reference.
+exec sh -c 'printf "payload" > local/a.bin'
+exec drivebridge upload --space nas --file a.bin --json
+stdout '"status":"success"'
+exec sh -c 'drivebridge upload --space nas --file a.bin --json | sed -n "s/.*\"file_ref\":\"\([^\"]*\)\".*/\1/p" > ref.txt'
+exec sh -c 'test -s ref.txt'
+
+# Re-uploading the same content under a new name either reuses the stored
+# object server-side or falls back to a byte transfer: the alias backend has
+# no server-side copy, so the honest fallback stores a second object.
+exec sh -c 'cp local/a.bin local/b.bin'
+exec drivebridge upload --space nas --file b.bin --name b.bin --json
+stdout '"status":"success"'
+exec sh -c 'ls remote-files | wc -l'
+stdout '2'
+
+# An explicit link registers a reference in the second space without copying.
+exec sh -c 'drivebridge link --link-ref "$(cat ref.txt)" --space nas2 --name linked.bin --json'
+stdout '"status":"success"'
+exec sh -c 'drivebridge stat --ref "$(cat ref.txt)" --json'
+stdout '"status":"success"'
+exec sh -c 'ls remote-files | wc -l'
+stdout '2'
+
+# Retention: a TTL keeps scratch spaces collectable, pins protect references
+# and gc is manual, dry-runnable and only ever trashes.
+exec drivebridge space ttl --space nas --days 1 --json
+stdout '"ttl_days":1'
+exec drivebridge gc --space nas --dry-run --json
+stdout '"dry_run":true'
+stdout '"candidates":\[\]'
+exec sh -c 'drivebridge pin --ref "$(cat ref.txt)" --json'
+stdout '"pinned":true'
+exec drivebridge gc --space nas --json
+stdout '"collected":\[\]'
+# Permanent spaces (the default) never collect.
+exec drivebridge space ttl --space nas2 --days 0 --json
+stdout '"ttl_days":0'
+exec drivebridge gc --space nas2 --json
+stdout '"ttl_days":0'
