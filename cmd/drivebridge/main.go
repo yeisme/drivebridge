@@ -58,9 +58,13 @@ func newRootCommand() *cobra.Command {
 		"space":        newSpaceCommand(c),
 		"space-add":    newSpaceAddCommand(c),
 		"config":       newConfigCommand(c),
+		"install":      newInstallCommand(c),
 	} {
 		root.AddCommand(command)
 		_ = name
+	}
+	for _, command := range newTransferCommands(c) {
+		root.AddCommand(command)
 	}
 	root.InitDefaultCompletionCmd()
 	return root

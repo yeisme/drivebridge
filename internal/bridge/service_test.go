@@ -29,7 +29,7 @@ type fakeProvider struct {
 }
 
 func fake() *fakeProvider { return &fakeProvider{files: map[string]File{}, data: map[string][]byte{}} }
-func (f *fakeProvider) List(ctx context.Context, p Space) ([]File, error) {
+func (f *fakeProvider) List(ctx context.Context, p Space, dir string) ([]File, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	out := []File{}
@@ -38,6 +38,7 @@ func (f *fakeProvider) List(ctx context.Context, p Space) ([]File, error) {
 	}
 	return out, nil
 }
+func (f *fakeProvider) Mkdir(context.Context, Space, string) error { return nil }
 func (f *fakeProvider) Stat(ctx context.Context, p Space, id string) (File, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -128,7 +129,7 @@ func waitOp(t *testing.T, s *Service, id string) Operation {
 }
 func uploadFixture(t *testing.T, s *Service, local string) Operation {
 	t.Helper()
-	op, e := s.Upload(context.Background(), "creative", fixture(t, local), "reference.png", "input")
+	op, e := s.Upload(context.Background(), "creative", "", fixture(t, local), "reference.png", "input")
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -141,7 +142,7 @@ func uploadFixture(t *testing.T, s *Service, local string) Operation {
 func TestUploadResumeAfterLostAcknowledgement(t *testing.T) {
 	s, p, local, _ := setup(t)
 	p.failAfterPut = true
-	op, e := s.Upload(context.Background(), "creative", fixture(t, local), "reference.png", "key")
+	op, e := s.Upload(context.Background(), "creative", "", fixture(t, local), "reference.png", "key")
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -160,11 +161,11 @@ func TestUploadResumeAfterLostAcknowledgement(t *testing.T) {
 	if p.uploads != 1 {
 		t.Fatal("duplicate remote file")
 	}
-	replay, e := s.Upload(context.Background(), "creative", filepath.Join(local, "reference.png"), "reference.png", "key")
+	replay, e := s.Upload(context.Background(), "creative", "", filepath.Join(local, "reference.png"), "reference.png", "key")
 	if e != nil || replay.ID != op.ID {
 		t.Fatal("lost idempotency")
 	}
-	if _, e = s.Upload(context.Background(), "creative", filepath.Join(local, "reference.png"), "changed.png", "key"); e == nil {
+	if _, e = s.Upload(context.Background(), "creative", "", filepath.Join(local, "reference.png"), "changed.png", "key"); e == nil {
 		t.Fatal("changed request reused key")
 	}
 }
@@ -175,11 +176,11 @@ func TestIsolationVersionAndNonOverwrite(t *testing.T) {
 	os.WriteFile(outside, []byte("outside"), 0600)
 	os.Symlink(outside, filepath.Join(local, "escape"))
 	for _, path := range []string{outside, "../secret", "escape"} {
-		if _, e := s.Upload(context.Background(), "creative", path, "x", "escape-"+path); e == nil {
+		if _, e := s.Upload(context.Background(), "creative", "", path, "x", "escape-"+path); e == nil {
 			t.Fatal("escaped local root")
 		}
 	}
-	if _, e := s.Upload(context.Background(), "another", "reference.png", "x", "wrong-space"); e == nil {
+	if _, e := s.Upload(context.Background(), "another", "", "reference.png", "x", "wrong-space"); e == nil {
 		t.Fatal("space bypass")
 	}
 	os.WriteFile(filepath.Join(local, "existing.png"), []byte("preserve"), 0600)
@@ -251,7 +252,7 @@ func TestPrivateHandoffNeverReturnsURLThroughMCP(t *testing.T) {
 func TestFalseMIMEAndURLRestrictions(t *testing.T) {
 	s, _, local, _ := setup(t)
 	os.WriteFile(filepath.Join(local, "fake.png"), []byte("not media"), 0600)
-	op, e := s.Upload(context.Background(), "creative", "fake.png", "fake.png", "fake")
+	op, e := s.Upload(context.Background(), "creative", "", "fake.png", "fake.png", "fake")
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -355,6 +356,10 @@ func TestScaenaOutputUsesOnlyExistingTaskAndPrivateGrant(t *testing.T) {
 	}
 }
 
+func (b blockingProvider) List(ctx context.Context, p Space, dir string) ([]File, error) {
+	return nil, nil
+}
+func (b blockingProvider) Mkdir(context.Context, Space, string) error { return nil }
 type blockingProvider struct {
 	*fakeProvider
 	started chan struct{}
@@ -369,7 +374,7 @@ func TestCancelIsDurableAndNeverResumes(t *testing.T) {
 	s, p, local, _ := setup(t)
 	started := make(chan struct{})
 	s.Provider = blockingProvider{p, started}
-	op, e := s.Upload(context.Background(), "creative", fixture(t, local), "reference.png", "cancel")
+	op, e := s.Upload(context.Background(), "creative", "", fixture(t, local), "reference.png", "cancel")
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -389,7 +394,7 @@ func TestCancelIsDurableAndNeverResumes(t *testing.T) {
 func TestCancelledBeforeWorkerStarts(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		s, _, local, _ := setup(t)
-		op, e := s.Upload(context.Background(), "creative", fixture(t, local), "reference.png", "early")
+		op, e := s.Upload(context.Background(), "creative", "", fixture(t, local), "reference.png", "early")
 		if e != nil {
 			t.Fatal(e)
 		}
@@ -411,7 +416,7 @@ func TestRealMP4ReferenceProbe(t *testing.T) {
 	if e := command.Run(); e != nil {
 		t.Fatal("MP4 fixture generation failed")
 	}
-	op, e := s.Upload(context.Background(), "creative", path, "reference.mp4", "video")
+	op, e := s.Upload(context.Background(), "creative", "", path, "reference.mp4", "video")
 	if e != nil {
 		t.Fatal(e)
 	}

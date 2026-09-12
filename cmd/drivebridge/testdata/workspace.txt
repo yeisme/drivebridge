@@ -1,0 +1,40 @@
+# Workspace directories and the transfer CLI work end to end on a generic space.
+mkdir local
+mkdir remote-files
+exec sh -c 'printf "[nas]\ntype = alias\nremote = %s\n" "$1" > rclone.conf' sh $WORK/remote-files
+chmod 0600 rclone.conf
+
+# A workspace config file in the working directory drives every command.
+exec sh -c 'printf "state: %s\nrclone_config: %s\n" "$1" "$2" > drivebridge.yaml' sh $WORK/state $WORK/rclone.conf
+chmod 0600 drivebridge.yaml
+
+exec drivebridge space add --space nas --backend generic --remote nas --local-root $WORK/local --max-bytes 1048576
+stdout 'Space configured'
+
+# mkdir is idempotent.
+exec drivebridge mkdir --space nas --path refs/2026
+stdout 'Directory ready'
+exec drivebridge mkdir --space nas --path refs/2026
+stdout 'Directory ready'
+
+# Upload through the CLI lands inside the directory.
+exec sh -c 'printf "payload" > local/a.bin'
+exec drivebridge upload --space nas --file a.bin --dir refs/2026 --json
+stdout '"status":"queued"'
+exists $WORK/remote-files/refs/2026
+
+# The deterministic CLI key makes a retry idempotent, not a duplicate.
+exec drivebridge upload --space nas --file a.bin --dir refs/2026 --json
+stdout '"status":"queued"'
+
+# ls lists by path once the async upload lands.
+exec sh -c 'for i in $(seq 1 50); do drivebridge ls --space nas --path refs/2026 --json | grep -q "\"count\":1" && exit 0; sleep 0.1; done; exit 1'
+
+# Traversal is rejected.
+! exec drivebridge mkdir --space nas --path ../escape
+stderr 'path_not_allowed'
+
+# Generic install prints the stdio command without touching secrets.
+exec drivebridge install --client generic --json
+stdout '"args"'
+! stdout 'token'

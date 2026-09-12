@@ -1,11 +1,15 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -292,4 +296,222 @@ func newConfigCommand(c *cli) *cobra.Command {
 	show.Flags().String("local-root", "", "Resolve this key from a flag to preview precedence")
 	root.AddCommand(show, init)
 	return root
+}
+
+func newTransferCommands(c *cli) []*cobra.Command {
+	upload := &cobra.Command{
+		Use:   "upload",
+		Short: "Upload a local file into a space (user terminal; no --enabled gate).",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			space, _ := cmd.Flags().GetString("space")
+			file, _ := cmd.Flags().GetString("file")
+			dir, _ := cmd.Flags().GetString("dir")
+			name, _ := cmd.Flags().GetString("name")
+			key, _ := cmd.Flags().GetString("idempotency-key")
+			if key == "" {
+				key = "cli-" + stableKey(space+"\x00"+file+"\x00"+name)
+			}
+			if name == "" {
+				name = filepath.Base(file)
+			}
+			s, release, err := c.openService(true)
+			if err != nil {
+				return err
+			}
+			defer release()
+			op, err := s.Upload(context.Background(), space, dir, file, name, key)
+			if err != nil {
+				return err
+			}
+			return c.mode.write("upload", "queued", fmt.Sprintf("Operation %s queued; poll with 'drivebridge operation %s'.", op.ID, op.ID), op)
+		},
+	}
+	upload.Flags().String("space", "", "Space identifier")
+	upload.Flags().String("file", "", "Local file path inside the space's local root or absolute")
+	upload.Flags().String("dir", "", "Remote directory inside the space (default root)")
+	upload.Flags().String("name", "", "Destination name (default: file base name)")
+	upload.Flags().String("idempotency-key", "", "Stable idempotency key (default: generated)")
+
+	download := &cobra.Command{
+		Use:   "download",
+		Short: "Download a stable reference into the allowed local root.",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			ref, _ := cmd.Flags().GetString("ref")
+			out, _ := cmd.Flags().GetString("out")
+			key, _ := cmd.Flags().GetString("idempotency-key")
+			if key == "" {
+				key = "cli-" + stableKey(ref+"\x00"+out)
+			}
+			s, release, err := c.openService(true)
+			if err != nil {
+				return err
+			}
+			defer release()
+			op, err := s.Download(context.Background(), ref, out, key)
+			if err != nil {
+				return err
+			}
+			return c.mode.write("download", "queued", fmt.Sprintf("Operation %s queued; poll with 'drivebridge operation %s'.", op.ID, op.ID), op)
+		},
+	}
+	download.Flags().String("ref", "", "Stable file reference")
+	download.Flags().String("out", "", "Local target path inside the space's local root")
+	download.Flags().String("idempotency-key", "", "Stable idempotency key (default: generated)")
+
+	list := &cobra.Command{
+		Use:   "ls",
+		Short: "List files in a space root or workspace directory.",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			space, _ := cmd.Flags().GetString("space")
+			path, _ := cmd.Flags().GetString("path")
+			s, release, err := c.openService(true)
+			if err != nil {
+				return err
+			}
+			defer release()
+			files, err := s.List(context.Background(), space, path)
+			if err != nil {
+				return err
+			}
+			if !(c.mode.JSON || c.mode.Agent || c.mode.Events || c.mode.Explain) {
+				for _, f := range files {
+					fmt.Printf("%-40s %10d  %s\n", f.Name, f.Size, f.Ref)
+				}
+			}
+			return c.mode.write("ls", "success", fmt.Sprintf("%d file(s).", len(files)), map[string]any{"count": len(files), "files": files})
+		},
+	}
+	list.Flags().String("space", "", "Space identifier")
+	list.Flags().String("path", "", "Workspace directory (default root)")
+
+	stat := &cobra.Command{
+		Use:   "stat",
+		Short: "Verify a stable reference and report identity, version and digest.",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			ref, _ := cmd.Flags().GetString("ref")
+			s, release, err := c.openService(true)
+			if err != nil {
+				return err
+			}
+			defer release()
+			f, err := s.Stat(context.Background(), ref)
+			if err != nil {
+				return err
+			}
+			return c.mode.write("stat", "success", fmt.Sprintf("%s %d bytes version=%s", f.Name, f.Size, f.Version), f)
+		},
+	}
+	stat.Flags().String("ref", "", "Stable file reference")
+
+	op := &cobra.Command{
+		Use:   "operation",
+		Short: "Report an operation's status and received bytes.",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			id, _ := cmd.Flags().GetString("id")
+			s, release, err := c.openService(true)
+			if err != nil {
+				return err
+			}
+			defer release()
+			o, err := s.Get(id)
+			if err != nil {
+				return err
+			}
+			return c.mode.write("operation", o.Status, fmt.Sprintf("%s %s %d/%d bytes.", o.ID, o.Status, o.Transferred, o.Bytes), o)
+		},
+	}
+	op.Flags().String("id", "", "Operation ID")
+
+	mkdir := &cobra.Command{
+		Use:   "mkdir",
+		Short: "Create a workspace directory (idempotent).",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			space, _ := cmd.Flags().GetString("space")
+			path, _ := cmd.Flags().GetString("path")
+			s, release, err := c.openService(true)
+			if err != nil {
+				return err
+			}
+			defer release()
+			if err = s.Mkdir(context.Background(), space, path); err != nil {
+				return err
+			}
+			return c.mode.write("mkdir", "success", "Directory ready.", map[string]any{"space": space, "path": path})
+		},
+	}
+	mkdir.Flags().String("space", "", "Space identifier")
+	mkdir.Flags().String("path", "", "Workspace directory path")
+
+	return []*cobra.Command{upload, download, list, stat, op, mkdir}
+}
+
+// newInstallCommand registers the stdio MCP server with a local client. It
+// writes only the registration entry; secrets are never involved.
+func newInstallCommand(c *cli) *cobra.Command {
+	var client string
+	cmd := &cobra.Command{
+		Use:   "install",
+		Short: "Register the local stdio MCP server with an MCP client.",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			binary, err := os.Executable()
+			if err != nil {
+				return err
+			}
+			binary = mustAbs(binary)
+			switch client {
+			case "claude-code":
+				if _, err := exec.LookPath("claude"); err != nil {
+					return c.mode.write("install", "manual", "claude CLI not found; run: claude mcp add -s user drivebridge -- "+binary+" mcp --enabled --handoff", map[string]any{"client": client, "command": binary})
+				}
+				out, err := exec.Command("claude", "mcp", "add", "-s", "user", "drivebridge", "--", binary, "mcp", "--enabled", "--handoff").CombinedOutput()
+				if err != nil {
+					return fmt.Errorf("claude mcp add failed: %s", firstLine(out))
+				}
+				return c.mode.write("install", "success", "Registered drivebridge with Claude Code (user scope).", map[string]any{"client": client, "command": binary})
+			case "codex":
+				home, err := os.UserHomeDir()
+				if err != nil {
+					return err
+				}
+				target := filepath.Join(home, ".codex", "config.toml")
+				if body, err := os.ReadFile(target); err == nil && strings.Contains(string(body), "[mcp_servers.drivebridge]") {
+					return c.mode.write("install", "success", "Already registered in "+target+".", map[string]any{"client": client, "path": target})
+				}
+				entry := "\n[mcp_servers.drivebridge]\ncommand = \"" + binary + "\"\nargs = [\"mcp\", \"--enabled\", \"--handoff\"]\n"
+				f, err := os.OpenFile(target, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
+				if err != nil {
+					return err
+				}
+				defer f.Close()
+				if _, err = f.WriteString(entry); err != nil {
+					return err
+				}
+				return c.mode.write("install", "success", "Appended drivebridge to "+target+".", map[string]any{"client": client, "path": target})
+			case "generic":
+				return c.mode.write("install", "manual", "Register this stdio command with your MCP client:", map[string]any{"command": binary, "args": []string{"mcp", "--enabled", "--handoff"}})
+			}
+			return fmt.Errorf("unknown client: %s", client)
+		},
+	}
+	cmd.Flags().StringVar(&client, "client", "claude-code", "MCP client: claude-code, codex or generic")
+	return cmd
+}
+
+// stableKey derives a deterministic CLI idempotency key so retries of the
+// same command reuse the original operation instead of creating a new one.
+func stableKey(v string) string {
+	sum := sha256.Sum256([]byte(v))
+	return hex.EncodeToString(sum[:8])
+}
+func mustAbs(p string) string {
+	if abs, err := filepath.Abs(p); err == nil {
+		return abs
+	}
+	return p
+}
+func firstLine(b []byte) string {
+	if i := bytes.IndexByte(b, '\n'); i >= 0 {
+		return string(b[:i])
+	}
+	return string(b)
 }

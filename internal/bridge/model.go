@@ -20,16 +20,16 @@ import (
 )
 
 type Space struct {
-	ID         string `json:"id" gorm:"primaryKey"`
-	Remote     string `json:"-"`
-	Backend    string `json:"backend,omitempty"`
-	DriveID    string `json:"drive_id"`
-	RootID     string `json:"root_id"`
-	LocalRoot  string `json:"local_root"`
-	MaxBytes   int64  `json:"max_bytes"`
-	Project    string `json:"project"`
-	Actor      string `json:"actor"`
-	FollowSymlinks bool `json:"follow_symlinks"`
+	ID             string `json:"id" gorm:"primaryKey"`
+	Remote         string `json:"-"`
+	Backend        string `json:"backend,omitempty"`
+	DriveID        string `json:"drive_id"`
+	RootID         string `json:"root_id"`
+	LocalRoot      string `json:"local_root"`
+	MaxBytes       int64  `json:"max_bytes"`
+	Project        string `json:"project"`
+	Actor          string `json:"actor"`
+	FollowSymlinks bool   `json:"follow_symlinks"`
 }
 
 // Kind reports the provider family: "" and "onedrive" are the privileged
@@ -41,6 +41,7 @@ func (p Space) Kind() string {
 	}
 	return p.Backend
 }
+
 type File struct {
 	Ref      string `json:"ref" gorm:"primaryKey"`
 	SpaceID  string `json:"space_id"`
@@ -73,7 +74,8 @@ type Operation struct {
 
 // Provider errors must be codes; raw transport errors never cross this boundary.
 type Provider interface {
-	List(context.Context, Space) ([]File, error)
+	List(context.Context, Space, string) ([]File, error)
+	Mkdir(context.Context, Space, string) error
 	Stat(context.Context, Space, string) (File, error)
 	Upload(context.Context, Space, string, io.Reader, int64) (File, error)
 	Open(context.Context, Space, File) (io.ReadCloser, error)
@@ -219,6 +221,19 @@ func localPath(p Space, name string) (string, error) {
 	}
 	return name, nil
 }
+
+// remoteDir validates a workspace-relative directory argument. Empty means
+// the space root; traversal or absolute paths are rejected.
+func remoteDir(dir string) (string, error) {
+	if dir == "" || dir == "." {
+		return "", nil
+	}
+	if !filepath.IsLocal(dir) || dir != filepath.Clean(filepath.ToSlash(dir)) {
+		return "", errors.New("path_not_allowed")
+	}
+	return filepath.ToSlash(dir), nil
+}
+
 func (s *Service) remember(p Space, f File) (File, error) {
 	if f.ItemID == "" || f.Version == "" || f.DriveID != p.DriveID || f.Size <= 0 || f.Size > p.MaxBytes {
 		return File{}, errors.New("invalid_file_metadata")
@@ -243,7 +258,7 @@ func (s *Service) remember(p Space, f File) (File, error) {
 	}
 	return f, nil
 }
-func (s *Service) List(ctx context.Context, space string) ([]File, error) {
+func (s *Service) List(ctx context.Context, space, dir string) ([]File, error) {
 	if !s.Enabled {
 		return nil, errors.New("disabled")
 	}
@@ -251,7 +266,10 @@ func (s *Service) List(ctx context.Context, space string) ([]File, error) {
 	if e != nil {
 		return nil, e
 	}
-	items, e := s.providerFor(p).List(ctx, p)
+	if dir, e = remoteDir(dir); e != nil {
+		return nil, e
+	}
+	items, e := s.providerFor(p).List(ctx, p, dir)
 	if e != nil {
 		return nil, e
 	}
@@ -267,6 +285,22 @@ func (s *Service) List(ctx context.Context, space string) ([]File, error) {
 		out = append(out, f)
 	}
 	return out, nil
+}
+func (s *Service) Mkdir(ctx context.Context, space, dir string) error {
+	if !s.Enabled {
+		return errors.New("disabled")
+	}
+	p, e := s.Space(space)
+	if e != nil {
+		return e
+	}
+	if dir, e = remoteDir(dir); e != nil {
+		return e
+	}
+	if dir == "" {
+		return errors.New("path_not_allowed")
+	}
+	return s.providerFor(p).Mkdir(ctx, p, dir)
 }
 func (s *Service) Stat(ctx context.Context, ref string) (File, error) {
 	if !s.Enabled {

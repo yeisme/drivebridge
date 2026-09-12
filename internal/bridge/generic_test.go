@@ -77,7 +77,7 @@ func TestGenericSpaceRoundtrip(t *testing.T) {
 	if e := os.WriteFile(source, []byte(content), 0600); e != nil {
 		t.Fatal(e)
 	}
-	op, e := s.Upload(context.Background(), "nas", source, "a.bin", "k1")
+	op, e := s.Upload(context.Background(), "nas", "", source, "a.bin", "k1")
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -91,7 +91,7 @@ func TestGenericSpaceRoundtrip(t *testing.T) {
 		t.Fatalf("expected uploaded object, got %v", matches)
 	}
 	// List + stat see the stable reference with a stable version.
-	files, e := s.List(context.Background(), "nas")
+	files, e := s.List(context.Background(), "nas", "")
 	if e != nil || len(files) != 1 {
 		t.Fatalf("list: %v %v", e, files)
 	}
@@ -132,7 +132,7 @@ func TestGenericSpaceRootPath(t *testing.T) {
 	if e := os.WriteFile(filepath.Join(local, "r.bin"), []byte("nested"), 0600); e != nil {
 		t.Fatal(e)
 	}
-	op, e := s.Upload(context.Background(), "nas-refs", filepath.Join(local, "r.bin"), "r.bin", "k")
+	op, e := s.Upload(context.Background(), "nas-refs", "", filepath.Join(local, "r.bin"), "r.bin", "k")
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -155,13 +155,13 @@ func TestSymlinkPolicy(t *testing.T) {
 	if e := os.Symlink(outside, escaping); e != nil {
 		t.Fatal(e)
 	}
-	if _, e := s.Upload(context.Background(), "nas", escaping, "escape.bin", "k"); e == nil || e.Error() != "symlink_rejected" {
+	if _, e := s.Upload(context.Background(), "nas", "", escaping, "escape.bin", "k"); e == nil || e.Error() != "symlink_rejected" {
 		t.Fatalf("default must reject symlinks: %v", e)
 	}
 	// Even with opt-in, a link escaping the allowed root stays blocked by
 	// os.Root containment.
 	s.DB.Model(&Space{}).Where("id = ?", "nas").Update("follow_symlinks", true)
-	if _, e := s.Upload(context.Background(), "nas", escaping, "escape.bin", "k-escape"); e == nil {
+	if _, e := s.Upload(context.Background(), "nas", "", escaping, "escape.bin", "k-escape"); e == nil {
 		t.Fatal("escaping symlink must stay rejected even with opt-in")
 	}
 	// Opt-in materializes an in-root link as a plain content copy.
@@ -173,7 +173,7 @@ func TestSymlinkPolicy(t *testing.T) {
 	if e := os.Symlink("real.bin", inside); e != nil {
 		t.Fatal(e)
 	}
-	op, e := s.Upload(context.Background(), "nas", inside, "link.bin", "k2")
+	op, e := s.Upload(context.Background(), "nas", "", inside, "link.bin", "k2")
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -193,7 +193,7 @@ func TestGenericHandoffGated(t *testing.T) {
 	if e := os.WriteFile(filepath.Join(local, "x.bin"), []byte("x"), 0600); e != nil {
 		t.Fatal(e)
 	}
-	op, e := s.Upload(context.Background(), "nas", filepath.Join(local, "x.bin"), "x.bin", "k")
+	op, e := s.Upload(context.Background(), "nas", "", filepath.Join(local, "x.bin"), "x.bin", "k")
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -219,9 +219,64 @@ func TestAddSpaceBackendValidation(t *testing.T) {
 	missingRemote := base
 	missingRemote.Backend = "generic"
 	missingRemote.Remote = "ghost"
-	if _, e := NewGeneric().List(context.Background(), missingRemote); e == nil || e.Error() != "backend_unavailable" {
+	if _, e := NewGeneric().List(context.Background(), missingRemote, ""); e == nil || e.Error() != "backend_unavailable" {
 		t.Fatalf("unconfigured remote must fail with backend_unavailable: %v", e)
 	}
 }
 
 func withBackend(p Space, backend string) Space { p.Backend = backend; return p }
+
+func TestWorkspaceDirectories(t *testing.T) {
+	s, local, remoteRoot := genericFixture(t)
+	if e := s.AddSpace(Space{ID: "nas", Remote: "nas", Backend: "generic", LocalRoot: local, MaxBytes: 1 << 20}); e != nil {
+		t.Fatal(e)
+	}
+	ctx := context.Background()
+	if e := s.Mkdir(ctx, "nas", "refs/2026"); e != nil {
+		t.Fatal(e)
+	}
+	// mkdir is idempotent for an existing folder.
+	if e := s.Mkdir(ctx, "nas", "refs/2026"); e != nil {
+		t.Fatal(e)
+	}
+	// Upload lands inside the directory and list resolves it by path.
+	if e := os.WriteFile(filepath.Join(local, "d.bin"), []byte("dir payload"), 0600); e != nil {
+		t.Fatal(e)
+	}
+	op, e := s.Upload(ctx, "nas", "refs/2026", filepath.Join(local, "d.bin"), "d.bin", "k1")
+	if e != nil {
+		t.Fatal(e)
+	}
+	op = waitCompleted(t, s, op.ID)
+	if _, e := os.Stat(filepath.Join(remoteRoot, "refs", "2026", op.ID+"-d.bin")); e != nil {
+		t.Fatalf("object should land inside the directory: %v", e)
+	}
+	files, e := s.List(ctx, "nas", "refs/2026")
+	if e != nil || len(files) != 1 || !strings.HasSuffix(files[0].Name, "-d.bin") {
+		t.Fatalf("list by path: %v %+v", e, files)
+	}
+	root, e := s.List(ctx, "nas", "")
+	if e != nil || len(root) != 0 {
+		t.Fatalf("root stays directory-free: %v %+v", e, root)
+	}
+	// Download from the directory reference round-trips.
+	target := filepath.Join(local, "back.bin")
+	dop, e := s.Download(ctx, op.FileRef, target, "k2")
+	if e != nil {
+		t.Fatal(e)
+	}
+	waitCompleted(t, s, dop.ID)
+	if b, _ := os.ReadFile(target); string(b) != "dir payload" {
+		t.Fatal("directory download mismatch")
+	}
+	// Traversal and root mkdir are rejected.
+	if e := s.Mkdir(ctx, "nas", "../escape"); e == nil || e.Error() != "path_not_allowed" {
+		t.Fatalf("traversal must be rejected: %v", e)
+	}
+	if e := s.Mkdir(ctx, "nas", ""); e == nil || e.Error() != "path_not_allowed" {
+		t.Fatalf("root mkdir must be rejected: %v", e)
+	}
+	if _, e := s.List(ctx, "nas", "/abs"); e == nil || e.Error() != "path_not_allowed" {
+		t.Fatalf("absolute path must be rejected: %v", e)
+	}
+}

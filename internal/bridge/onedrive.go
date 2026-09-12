@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -97,7 +98,8 @@ type driveItem struct {
 		ID    string `json:"id"`
 		Drive string `json:"driveId"`
 	} `json:"parentReference"`
-	File *struct {
+	Folder *struct{} `json:"folder"`
+	File   *struct {
 		MIME string `json:"mimeType"`
 	} `json:"file"`
 	Video *struct {
@@ -185,8 +187,29 @@ func (r *OneDrive) item(ctx context.Context, p Space, id string, access bool) (d
 	}
 	return i, errors.New("remote_outside_space")
 }
-func (r *OneDrive) List(ctx context.Context, p Space) ([]File, error) {
-	path := "items/" + url.PathEscape(p.RootID) + "/children?$top=200&$select=id,name,size,eTag,parentReference,file,video"
+
+// folder resolves a workspace-relative directory to its item ID; empty
+// means the space root itself. Path addressing keeps the answer inside the
+// pinned root by construction.
+func (r *OneDrive) folder(ctx context.Context, p Space, dir string) (string, error) {
+	if dir == "" {
+		return p.RootID, nil
+	}
+	var i driveItem
+	if err := r.graph(ctx, p, "root:/"+dir+":?$select=id,name,parentReference,folder", &i); err != nil {
+		return "", err
+	}
+	if i.ID == "" || i.Folder == nil || i.Parent.Drive != p.DriveID {
+		return "", errors.New("remote_not_found")
+	}
+	return i.ID, nil
+}
+func (r *OneDrive) List(ctx context.Context, p Space, dir string) ([]File, error) {
+	folderID, err := r.folder(ctx, p, dir)
+	if err != nil {
+		return nil, err
+	}
+	path := "items/" + url.PathEscape(folderID) + "/children?$top=200&$select=id,name,size,eTag,parentReference,file,video"
 	out := []File{}
 	for page := 0; page < 100; page++ {
 		var data struct {
@@ -197,7 +220,7 @@ func (r *OneDrive) List(ctx context.Context, p Space) ([]File, error) {
 			return nil, err
 		}
 		for _, i := range data.Items {
-			if i.File != nil && i.Parent.ID == p.RootID && i.Parent.Drive == p.DriveID {
+			if i.File != nil && i.Parent.ID == folderID && i.Parent.Drive == p.DriveID {
 				out = append(out, i.file(p))
 			}
 		}
@@ -211,6 +234,98 @@ func (r *OneDrive) List(ctx context.Context, p Space) ([]File, error) {
 		path = strings.TrimPrefix(data.Next, prefix)
 	}
 	return nil, errors.New("listing_limit_exceeded")
+}
+
+// Mkdir creates each path segment under the pinned root. An existing folder
+// segment is descended; an existing file with that name is a conflict.
+func (r *OneDrive) Mkdir(ctx context.Context, p Space, dir string) error {
+	folderID, err := r.folder(ctx, p, dir)
+	if err == nil {
+		_ = folderID
+		return nil
+	} else if err.Error() != "remote_not_found" {
+		return err
+	}
+	current := p.RootID
+	segments := strings.Split(dir, "/")
+	for _, segment := range segments {
+		if !safeName(segment) {
+			return errors.New("path_not_allowed")
+		}
+		var created driveItem
+		body := `{"name":` + strconv.Quote(segment) + `,"folder":{},"@name.conflictBehavior":"fail"}`
+		err := r.graphPost(ctx, p, "items/"+url.PathEscape(current)+"/children", body, &created)
+		if err != nil {
+			if err.Error() != "target_conflict" {
+				return err
+			}
+			next, listErr := r.childFolder(ctx, p, current, segment)
+			if listErr != nil {
+				return listErr
+			}
+			current = next
+			continue
+		}
+		if created.ID == "" || created.Parent.Drive != p.DriveID {
+			return errors.New("remote_outside_space")
+		}
+		current = created.ID
+	}
+	return nil
+}
+func (r *OneDrive) childFolder(ctx context.Context, p Space, parentID, name string) (string, error) {
+	var data struct {
+		Items []driveItem `json:"value"`
+	}
+	if err := r.graph(ctx, p, "items/"+url.PathEscape(parentID)+"/children?$top=200&$select=id,name,parentReference,folder", &data); err != nil {
+		return "", err
+	}
+	for _, i := range data.Items {
+		if i.Name == name && i.Folder != nil && i.Parent.Drive == p.DriveID {
+			return i.ID, nil
+		}
+	}
+	return "", errors.New("target_conflict")
+}
+func (r *OneDrive) graphPost(ctx context.Context, p Space, path, body string, out any) error {
+	getToken := r.token
+	if r.authToken != nil {
+		getToken = r.authToken
+	}
+	token, err := getToken(ctx, p)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://graph.microsoft.com/v1.0/drives/"+url.PathEscape(p.DriveID)+"/"+path, strings.NewReader(body))
+	if err != nil {
+		return errors.New("invalid_graph_request")
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	response, err := r.HTTP.Do(req)
+	if err != nil {
+		return errors.New("graph_unreachable")
+	}
+	defer response.Body.Close()
+	switch response.StatusCode {
+	case 200, 201:
+	case 401, 403:
+		return errors.New("authentication_required")
+	case 404:
+		return errors.New("remote_not_found")
+	case 409:
+		return errors.New("target_conflict")
+	case 429:
+		return errors.New("throttled")
+	case 507:
+		return errors.New("quota_exceeded")
+	default:
+		return errors.New("graph_unavailable")
+	}
+	if json.NewDecoder(io.LimitReader(response.Body, 1<<20)).Decode(out) != nil {
+		return errors.New("invalid_graph_response")
+	}
+	return nil
 }
 func (r *OneDrive) Stat(ctx context.Context, p Space, id string) (File, error) {
 	i, err := r.item(ctx, p, id, false)

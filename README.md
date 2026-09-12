@@ -61,10 +61,22 @@ $EDITOR ~/.config/drivebridge/config.yaml
 
 安全边界：`--enabled/--handoff` 等"默认关闭的写入口开关"只能显式命令行，不进文件；任何 secret 永不入文件（token 文件路径可以）。
 
-命令树：`auth`、`space add|list`（旧 `space-add` 为隐藏别名）、`doctor`、`capabilities`、`mcp`、`remote`、`config show|init`、`completion`（bash/zsh/fish）。所有旗标名与旧版一致；配置就绪后 MCP 注册只需：
+命令树：`auth`、`space add|list`、`doctor`、`capabilities`、`mcp`、`remote`、`config show|init`、`install`、`upload/download/ls/stat/operation/mkdir`（本地直连传输）、`completion`（bash/zsh/fish）。所有旗标名与旧版一致；配置就绪后 MCP 注册只需：
 
 ```bash
+./drivebridge install --client claude-code   # 或 codex / generic
 ./drivebridge mcp --enabled --handoff
+```
+
+### 工作区目录与直连传输
+
+agent 与终端用户共享同一套目录语义：`list`/`ls` 接受 `--path`（或 MCP `path` 参数）浏览子目录，`mkdir` 幂等建目录，`upload` 可指定 `--dir`（MCP `dir` 参数）落进目录——目标名保持 `<operation-id>-<name>` 不替换既有文件，路径逃逸一律 `path_not_allowed`。CLI 传输命令在用户本人终端执行（无 `--enabled` 门，该门只管 MCP 写入口）；缺省幂等键确定性派生，重试复用原操作：
+
+```bash
+./drivebridge mkdir --space creative --path refs/2026
+./drivebridge upload --space creative --file ref.png --dir refs/2026
+./drivebridge ls --space creative --path refs/2026
+./drivebridge operation <operation-id>     # 轮询进度
 ```
 
 doctor 新增 `config_file` 检查（来源与 0600 建议，info 级，永不阻塞就绪）。

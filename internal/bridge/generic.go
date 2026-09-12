@@ -52,12 +52,12 @@ func fileFromObject(ctx context.Context, p Space, o fs.Object) File {
 	return File{DriveID: p.DriveID, ItemID: o.Remote(), Name: path.Base(o.Remote()), Size: o.Size(), Version: objectVersion(o.Size(), o.ModTime(ctx))}
 }
 
-func (g *Generic) List(ctx context.Context, p Space) ([]File, error) {
+func (g *Generic) List(ctx context.Context, p Space, dir string) ([]File, error) {
 	f, err := g.remote(p)
 	if err != nil {
 		return nil, err
 	}
-	entries, err := f.List(ctx, "")
+	entries, err := f.List(ctx, dir)
 	if err != nil {
 		return nil, errors.New("remote_not_found")
 	}
@@ -111,6 +111,19 @@ func (g *Generic) Open(ctx context.Context, p Space, f File) (io.ReadCloser, err
 		return nil, errors.New("download_unavailable")
 	}
 	return handle, nil
+}
+
+// Mkdir creates a workspace directory; the rclone contract makes an existing
+// directory a success, so agents can organize idempotently.
+func (g *Generic) Mkdir(ctx context.Context, p Space, dir string) error {
+	f, err := g.remote(p)
+	if err != nil {
+		return err
+	}
+	if err := f.Mkdir(ctx, dir); err != nil {
+		return errors.New("backend_unavailable")
+	}
+	return nil
 }
 
 // Access is deliberately unsupported: temporary direct URLs stay an

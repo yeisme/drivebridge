@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-func (s *Service) Upload(ctx context.Context, space, path, name, key string) (Operation, error) {
+func (s *Service) Upload(ctx context.Context, space, dir, path, name, key string) (Operation, error) {
 	if !s.Enabled {
 		return Operation{}, errors.New("disabled")
 	}
@@ -20,6 +20,9 @@ func (s *Service) Upload(ctx context.Context, space, path, name, key string) (Op
 	}
 	p, err := s.Space(space)
 	if err != nil {
+		return Operation{}, err
+	}
+	if dir, err = remoteDir(dir); err != nil {
 		return Operation{}, err
 	}
 	rel, err := localPath(p, path)
@@ -52,7 +55,11 @@ func (s *Service) Upload(ctx context.Context, space, path, name, key string) (Op
 	}
 	fingerprint := hash + ":" + name
 	id := newID()
-	op := Operation{ID: id, SpaceID: space, Kind: "upload", Key: operationKey(space, "upload", key), Status: "queued", LocalPath: rel, Target: id + "-" + name, Fingerprint: fingerprint, Bytes: n}
+	target := id + "-" + name
+	if dir != "" {
+		target = dir + "/" + target
+	}
+	op := Operation{ID: id, SpaceID: space, Kind: "upload", Key: operationKey(space, "upload", key), Status: "queued", LocalPath: rel, Target: target, Fingerprint: fingerprint, Bytes: n}
 	return s.enqueue(op)
 }
 func operationKey(space, kind, key string) string {
@@ -297,14 +304,23 @@ func (s *Service) transfer(ctx context.Context, op *Operation) error {
 	}
 	defer source.Close()
 	h, n, e := digestReader(io.LimitReader(source, p.MaxBytes+1))
-	if e != nil || n != op.Bytes || op.Fingerprint != h+":"+op.Target[33:] {
+	targetName := filepath.Base(op.Target)
+	if len(targetName) < 34 {
+		return errors.New("source_changed")
+	}
+	if e != nil || n != op.Bytes || op.Fingerprint != h+":"+targetName[33:] {
 		return errors.New("source_changed")
 	}
 	if _, e = source.Seek(0, 0); e != nil {
 		return e
 	}
-	// The operation-specific name prevents replacing a user-selected existing file.
-	items, e := s.providerFor(p).List(ctx, p)
+	// The operation-specific name prevents replacing a user-selected existing
+	// file; the scan stays inside the operation's own directory.
+	scanDir := ""
+	if d := filepath.Dir(op.Target); d != "." {
+		scanDir = d
+	}
+	items, e := s.providerFor(p).List(ctx, p, scanDir)
 	if e != nil {
 		return e
 	}

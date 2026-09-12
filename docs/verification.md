@@ -38,3 +38,13 @@ generic 空间验证离线完成于 alias 后端（本地目录钉根），代�
 - `temp/integration-test-runs/20260912T055104Z-6dd69275/`：真实 stdio MCP 冒烟（cobra 树下 tools/list/能力资源/默认关闭）。
 
 cobra+ viper 重构后旧行为等价：旗标名不变、`space-add` 为隐藏别名、无配置文件时纯默认。`--enabled/--handoff`/secret 不可来自文件或 env（spec 固化）。
+
+## agent-workspace（2026-09-12）
+
+- `temp/integration-test-runs/20260912T133712Z-368e720a/`：go test -race 全量（含 TestWorkspaceDirectories：mkdir 幂等/目录上传/按路径 list/download 回读/逃逸与根 mkdir 拒绝）。
+- `temp/integration-test-runs/20260912T133726Z-5faf006b/`：go vet。
+- `temp/integration-test-runs/20260912T133728Z-29c038a5/`：CGO_ENABLED=0 构建。
+- `temp/integration-test-runs/20260912T133731Z-dcbfc603/`：真实 stdio MCP 冒烟（新 mkdir/path/dir 工具面 schema 一致）。
+- testscript workspace.txt：config 驱动 CLI 全链（mkdir→upload --dir→轮询 ls→重试幂等→逃逸拒绝→install generic 无 token）。
+
+OneDrive 目录路径（Graph path 寻址/逐段 mkdir/graphPost）经 fake Graph 单测；真实 OneDrive 目录操作由用户实机验收。CLI 传输命令的 --enabled 门豁免=用户本人终端语义（spec 固化）。

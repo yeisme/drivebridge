@@ -20,9 +20,10 @@ func tool(name, description string, required ...string) mcp.Tool {
 func (s *Service) Tools() []mcp.Tool {
 	return []mcp.Tool{
 		tool("capabilities", "Discover allowed spaces, exact tool schemas, transfer limits and recovery."),
-		tool("list", "List files directly in the configured OneDrive root.", "space_id"),
+		tool("list", "List files in the space root or a workspace subdirectory.", "space_id"),
+		tool("mkdir", "Create a workspace directory (idempotent); existing files with the name are a conflict.", "space_id", "path"),
 		tool("stat", "Verify a stable reference and detect replacement or moves outside the space.", "file_ref"),
-		tool("upload", "Upload a local file. The destination is an operation-prefixed name; existing files are not replaced. Poll operation_get.", "space_id", "local_path", "name", "idempotency_key"),
+		tool("upload", "Upload a local file. The destination is an operation-prefixed name inside an optional directory; existing files are not replaced. Poll operation_get.", "space_id", "local_path", "name", "idempotency_key"),
 		tool("download", "Download into an allowed local directory without replacing a different file. Poll operation_get.", "file_ref", "local_path", "idempotency_key"),
 		tool("operation_get", "Recover the original transfer result before starting another operation.", "operation_id"),
 		tool("resume", "Resume an interrupted or failed transfer; may retransmit bytes. Never creates a generation task.", "operation_id"),
@@ -44,11 +45,16 @@ func (s *Service) Call(ctx context.Context, name string, args map[string]any) (a
 	case "capabilities":
 		return s.Capabilities(), nil
 	case "list":
-		return s.List(ctx, text("space_id"))
+		return s.List(ctx, text("space_id"), text("path"))
+	case "mkdir":
+		if e := s.Mkdir(ctx, text("space_id"), text("path")); e != nil {
+			return nil, e
+		}
+		return map[string]any{"status": "created", "path": text("path")}, nil
 	case "stat":
 		return s.Stat(ctx, text("file_ref"))
 	case "upload":
-		return s.Upload(ctx, text("space_id"), text("local_path"), text("name"), text("idempotency_key"))
+		return s.Upload(ctx, text("space_id"), text("dir"), text("local_path"), text("name"), text("idempotency_key"))
 	case "download":
 		return s.Download(ctx, text("file_ref"), text("local_path"), text("idempotency_key"))
 	case "operation_get":
