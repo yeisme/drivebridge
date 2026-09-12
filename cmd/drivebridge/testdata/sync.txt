@@ -1,0 +1,47 @@
+# Guarded bidirectional sync runs end to end: first-run refusal, resync
+# baseline, dry-run preview and propagation.
+mkdir local
+mkdir remote-files
+exec sh -c 'printf "[nas]\ntype = alias\nremote = %s\n" "$1" > rclone.conf' sh $WORK/remote-files
+chmod 0600 rclone.conf
+
+exec sh -c 'printf "state: %s\nrclone_config: %s\n" "$1" "$2" > drivebridge.yaml' sh $WORK/state $WORK/rclone.conf
+
+exec drivebridge space add --space nas --backend generic --remote nas --local-root $WORK/local --max-bytes 1048576
+stdout 'Space configured'
+
+# The first run without an explicit resync is refused; nothing changes.
+exec sh -c 'printf hello > local/a.txt'
+! exec drivebridge sync --space nas
+stderr 'resync_required'
+! exists $WORK/remote-files/a.txt
+
+# --resync establishes the baseline and propagates both ways.
+exec sh -c 'printf world > remote-files/b.txt'
+exec drivebridge sync --space nas --resync --json
+stdout '"status":"success"'
+exists $WORK/remote-files/a.txt
+exists $WORK/local/b.txt
+
+# A dry run plans without touching either side.
+exec sh -c 'printf pending > local/c.txt'
+exec drivebridge sync --space nas --dry-run --json
+stdout '"dry_run":true'
+! exists $WORK/remote-files/c.txt
+
+# The real run propagates the addition and registers stable references.
+exec drivebridge sync --space nas --json
+stdout '"status":"success"'
+exists $WORK/remote-files/c.txt
+exec drivebridge find --space nas --query c.txt --json
+stdout '"count":1'
+
+# Deletions above the tightened cap abort with the exact ratio; the explicit
+# override is required to proceed.
+exec sh -c 'rm local/a.txt local/b.txt'
+! exec drivebridge sync --space nas
+stderr 'sync_deletion_cap_exceeded'
+exists $WORK/remote-files/a.txt
+exec drivebridge sync --space nas --max-delete 100 --json
+stdout '"status":"success"'
+! exists $WORK/remote-files/a.txt

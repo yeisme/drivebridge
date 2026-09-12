@@ -5,8 +5,11 @@ go 1.26.4
 require (
 	github.com/glebarez/sqlite v1.11.0
 	github.com/mark3labs/mcp-go v0.45.0
+	github.com/pelletier/go-toml/v2 v2.2.4
 	github.com/rclone/rclone v1.70.3
 	github.com/rogpeppe/go-internal v1.14.1
+	github.com/spf13/cobra v1.10.2
+	github.com/spf13/viper v1.21.0
 	gorm.io/gorm v1.30.0
 )
 
@@ -17,6 +20,7 @@ require (
 	github.com/Azure/go-ntlmssp v0.0.0-20221128193559-754e69321358 // indirect
 	github.com/IBM/go-sdk-core/v5 v5.20.0 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
+	github.com/aalpar/deheap v0.0.0-20210914013432-0cc84d79dec3 // indirect
 	github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2 // indirect
 	github.com/aws/aws-sdk-go-v2 v1.41.12 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.13 // indirect
@@ -72,14 +76,11 @@ require (
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/ncw/swift/v2 v2.0.4 // indirect
 	github.com/oklog/ulid v1.3.1 // indirect
-	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/pkg/sftp v1.13.9 // indirect
 	github.com/pkg/xattr v0.4.10 // indirect
 	github.com/sagikazarmark/locafero v0.11.0 // indirect
 	github.com/sourcegraph/conc v0.3.1-0.20240121214520-5f936abd7ae8 // indirect
 	github.com/spf13/afero v1.15.0 // indirect
-	github.com/spf13/cobra v1.10.2 // indirect
-	github.com/spf13/viper v1.21.0 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/xanzy/ssh-agent v0.3.3 // indirect
 	github.com/youmark/pkcs8 v0.0.0-20240726163527-a2c0da244d78 // indirect
