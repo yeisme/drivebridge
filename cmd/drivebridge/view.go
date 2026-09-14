@@ -80,11 +80,17 @@ func newViewCommand(c *cli) *cobra.Command {
 		handler := viewerHandler(c, store, web, origin, bootstrap, session, csrf)
 		srv := &http.Server{Handler: handler, ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 30 * time.Second}
 		if !noOpen {
-			program := "xdg-open"
-			if runtime.GOOS == "darwin" {
-				program = "open"
+			var child *exec.Cmd
+			switch runtime.GOOS {
+			case "darwin":
+				child = exec.Command("open", launch)
+			case "windows":
+				// start treats a quoted first argument as the window title;
+				// pass an empty title before the private launch URL.
+				child = exec.Command("cmd", "/c", "start", "", launch)
+			default:
+				child = exec.Command("xdg-open", launch)
 			}
-			child := exec.Command(program, launch)
 			if e = child.Start(); e == nil {
 				go child.Wait()
 			} else {

@@ -4,7 +4,7 @@
 
 ## 本机启动
 
-需要 Go 1.26；视频参考校验需要 `ffprobe`。无需安装 Eikona、Scaena 或 rclone CLI。首版支持 Linux/macOS 的 stdio 和 Unix socket；不提供 Windows/远程多租户服务。
+需要 Go 1.26；视频参考校验需要 `ffprobe`。无需安装 Eikona、Scaena 或 rclone CLI。首版支持 Linux/macOS 的 stdio 和 Unix socket；Windows 提供交叉编译分发候选（`build.py --target windows/amd64|windows/arm64`，含 view 浏览器启动分支），但 state 目录权限与 socket 隐私语义未在实机验收，不宣称可用；不提供远程多租户服务。跨平台定位见 `client/drivebridge-client/docs/cross-platform-client.md`。
 
 ```bash
 go build -o drivebridge ./cmd/drivebridge

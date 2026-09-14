@@ -10,7 +10,7 @@ DriveBridge 让已连接的 Agent 在允许目录内取用文件，把报告、�
 python3 scripts/build.py --target linux/amd64
 ```
 
-输出为 `temp/distribution/` 的压缩包、SHA256SUMS 与 CLI 生成的清单。解压后把 drivebridge 放入 PATH。支持构建 linux/amd64、linux/arm64、darwin/amd64、darwin/arm64；交叉编译通过不等于目标机器实机验收。
+输出为 `temp/distribution/` 的压缩包、SHA256SUMS 与 CLI 生成的清单。解压后把 drivebridge 放入 PATH。支持构建 linux/amd64、linux/arm64、darwin/amd64、darwin/arm64、windows/amd64、windows/arm64（Windows 为 zip + `drivebridge.exe`，标记 `local-candidate-windows-unverified-on-machine`）；交叉编译通过不等于目标机器实机验收。
 
 先在本人终端完成 OAuth；已有 rclone 配置可以复用，不建立第二份 OAuth token。首轮沿用 rclone 认证，不声称设备码免配置已实现。
 

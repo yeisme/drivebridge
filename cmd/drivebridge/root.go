@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"syscall"
 
 	rcloneconfig "github.com/rclone/rclone/fs/config"
 	"github.com/rclone/rclone/fs/config/configfile"
@@ -91,7 +90,7 @@ func (c *cli) openService(enabled bool) (*bridge.Service, func(), error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	if err = syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+	if err = lockFile(lock, lockExclusive|lockNonBlocking); err != nil {
 		lock.Close()
 		return nil, nil, err
 	}
@@ -100,7 +99,7 @@ func (c *cli) openService(enabled bool) (*bridge.Service, func(), error) {
 		return nil, nil, err
 	}
 	release := func() {
-		_ = syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
+		_ = lockFile(lock, lockRelease)
 		lock.Close()
 	}
 	// Third-party raw errors can contain bearer URLs. Only our typed error

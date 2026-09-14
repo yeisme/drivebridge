@@ -12,7 +12,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"time"
 
 	_ "github.com/glebarez/sqlite"
@@ -459,7 +458,7 @@ func writableRoot(path string) (string, bool) {
 	if err != nil || !info.IsDir() {
 		return "local_root_unavailable: directory required", false
 	}
-	if err := syscall.Access(path, 2 /* W_OK, identical on linux and darwin */); err != nil {
+	if err := writable(path); err != nil {
 		return "local_root_not_writable", false
 	}
 	return "", true
