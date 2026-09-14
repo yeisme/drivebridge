@@ -50,7 +50,7 @@ func newViewCommand(c *cli) *cobra.Command {
 			return e
 		}
 		if _, e = os.Stat(filepath.Join(web, "insights.html")); e != nil {
-			return fmt.Errorf("viewer_assets_missing: provide --web-dir with the built DriveBridge Web directory")
+			return fmt.Errorf("viewer_assets_missing: provide --web-dir with the built DriveBridge Client directory")
 		}
 		ln, e := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
 		if e != nil {

@@ -15,7 +15,7 @@ parser.add_argument("--output", default="temp/distribution")
 args = parser.parse_args()
 root = Path(__file__).resolve().parents[1]
 out = Path(args.output).resolve(); out.mkdir(parents=True, exist_ok=True)
-web = root.parents[1] / "client" / "drivebridge-web"
+web = root.parents[1] / "client" / "drivebridge-client"
 subprocess.run(["pnpm", "build"], cwd=web, check=True)
 manifest = []
 for target in args.target or ["linux/amd64", "linux/arm64", "darwin/amd64", "darwin/arm64"]:
