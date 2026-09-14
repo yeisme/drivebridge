@@ -223,6 +223,31 @@ func viewerHandler(c *cli, store *insights.Store, web, origin, bootstrap, sessio
 			respond(w, out)
 			return
 		}
+		if r.URL.Path == "/api/v1/local/list" && r.Method == "POST" {
+			var q struct {
+				SpaceID string `json:"space_id"`
+				Path    string `json:"path"`
+			}
+			if json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&q) != nil || q.SpaceID == "" || len(q.Path) > 1024 {
+				fail(w, "invalid_list", 400)
+				return
+			}
+			out, e := c.requestList(r.Context(), q.SpaceID, q.Path)
+			if e != nil {
+				code := insightError(e)
+				if code == "" {
+					code = "list_failed"
+				}
+				if code == "insights_owner_unavailable" {
+					fail(w, code, 503)
+					return
+				}
+				fail(w, code, 400)
+				return
+			}
+			respond(w, out)
+			return
+		}
 		if r.Method != "GET" {
 			fail(w, "read_only", 403)
 			return

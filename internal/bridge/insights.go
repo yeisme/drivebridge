@@ -264,7 +264,12 @@ func QueryInsights(store *insights.Store, kind string, q url.Values) (any, error
 		if name := q.Get("q"); name != "" && !strings.Contains(strings.ToLower(f.Name), strings.ToLower(name)) {
 			continue
 		}
-		items = append(items, map[string]any{"resource_id": refID(f.Ref), "version_id": f.Version, "ref": f.Ref, "name": f.Name, "size_bytes": f.Size, "space_id": f.SpaceID, "category": category, "caller": f.Caller})
+		// A present-but-empty dir parameter pins the browse to the space root;
+		// without the parameter the projection keeps the historical flat view.
+		if q.Has("dir") && f.Dir != q.Get("dir") {
+			continue
+		}
+		items = append(items, map[string]any{"resource_id": refID(f.Ref), "version_id": f.Version, "ref": f.Ref, "name": f.Name, "size_bytes": f.Size, "space_id": f.SpaceID, "category": category, "caller": f.Caller, "dir": f.Dir, "mime_type": f.MIME, "observed_at": f.ObservedAt, "trash_path": f.TrashPath})
 		if len(items) >= 200 {
 			partial = true
 			break

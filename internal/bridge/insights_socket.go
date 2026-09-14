@@ -38,6 +38,39 @@ func (s *Service) RunScanRequest(ctx context.Context, q ScanRequest) (any, error
 	}
 	return s.Scan(ctx, q.Space, q.Resume)
 }
+
+type ListRequest struct {
+	Space string `json:"space_id"`
+	Path  string `json:"path"`
+}
+
+// RunListRequest live-lists one directory through the enabled owner service.
+// The listing remembers observed files into the index, exactly like a scan;
+// results are capped at 500 entries with an honest partial flag.
+func (s *Service) RunListRequest(ctx context.Context, q ListRequest) (any, error) {
+	if q.Space == "" || len(q.Path) > 1024 {
+		return nil, errors.New("invalid_list")
+	}
+	items, e := s.List(ctx, q.Space, q.Path)
+	if e != nil {
+		return nil, e
+	}
+	partial := len(items) > 500
+	if partial {
+		items = items[:500]
+	}
+	return map[string]any{"items": items, "partial": partial, "coverage": "live_listing"}, nil
+}
+
+func listError(e error) string {
+	switch e.Error() {
+	case "disabled":
+		return "listing_disabled"
+	case "path_not_allowed", "space_not_allowed", "invalid_list":
+		return e.Error()
+	}
+	return "list_failed"
+}
 func (s *Service) ListenInsights(socket string) (*http.Server, error) {
 	if _, e := os.Lstat(socket); e == nil {
 		return nil, errors.New("insights_socket_exists")
@@ -76,6 +109,23 @@ func (s *Service) ListenInsights(socket string) (*http.Server, error) {
 		if e != nil {
 			w.WriteHeader(400)
 			json.NewEncoder(w).Encode(map[string]any{"error": map[string]string{"code": "scan_request_failed"}})
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]any{"data": out})
+	})
+	mux.HandleFunc("POST /list", func(w http.ResponseWriter, r *http.Request) {
+		var q ListRequest
+		if json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&q) != nil {
+			http.Error(w, "invalid_list", 400)
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
+		defer cancel()
+		out, e := s.RunListRequest(ctx, q)
+		w.Header().Set("Content-Type", "application/json")
+		if e != nil {
+			w.WriteHeader(400)
+			json.NewEncoder(w).Encode(map[string]any{"error": map[string]string{"code": listError(e)}})
 			return
 		}
 		json.NewEncoder(w).Encode(map[string]any{"data": out})

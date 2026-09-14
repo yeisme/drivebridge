@@ -120,6 +120,44 @@ func (c *cli) requestScan(ctx context.Context, q bridge.ScanRequest) (any, error
 	defer release()
 	return s.RunScanRequest(ctx, q)
 }
+func (c *cli) requestList(ctx context.Context, space, dir string) (any, error) {
+	socket := filepath.Join(c.effective.Values["state"], "insights.sock")
+	info, e := os.Lstat(socket)
+	if e != nil || info.Mode()&os.ModeSocket == 0 {
+		return nil, errors.New("insights_owner_unavailable")
+	}
+	tr := &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+		return (&net.Dialer{}).DialContext(ctx, "unix", socket)
+	}}
+	defer tr.CloseIdleConnections()
+	b, _ := json.Marshal(bridge.ListRequest{Space: space, Path: dir})
+	req, _ := http.NewRequestWithContext(ctx, "POST", "http://localhost/list", bytes.NewReader(b))
+	resp, e := (&http.Client{Transport: tr, Timeout: 60 * time.Second}).Do(req)
+	if e != nil {
+		return nil, errors.New("list_failed")
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		var failure struct {
+			Error struct {
+				Code string `json:"code"`
+			} `json:"error"`
+		}
+		if json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&failure) == nil && failure.Error.Code != "" {
+			return nil, errors.New(failure.Error.Code)
+		}
+		return nil, errors.New("list_failed")
+	}
+	var envelope struct {
+		Data json.RawMessage `json:"data"`
+	}
+	if json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(&envelope) != nil {
+		return nil, errors.New("list_failed")
+	}
+	var out any
+	e = json.Unmarshal(envelope.Data, &out)
+	return out, e
+}
 func newUsageCommand(c *cli) *cobra.Command {
 	root := &cobra.Command{Use: "usage", Short: "Inspect versioned resource usage; never infer provider billing."}
 	for _, kind := range []string{"summary", "series", "breakdown", "events", "scans", "export"} {

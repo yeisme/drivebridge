@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"net"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -12,6 +14,7 @@ import (
 	"github.com/glebarez/sqlite"
 	"github.com/yeisme/drivebridge-server/sdk/insights"
 	"github.com/yeisme/drivebridge/internal/bridge"
+	"github.com/yeisme/drivebridge/internal/config"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
@@ -128,5 +131,73 @@ func TestViewerSpacesBackendProjection(t *testing.T) {
 		if !strings.Contains(body, expected) {
 			t.Fatalf("projection missing %s in %s", expected, body)
 		}
+	}
+}
+
+func TestViewerLocalListProxy(t *testing.T) {
+	dir := t.TempDir()
+	state := filepath.Join(dir, "state")
+	if e := os.Mkdir(state, 0700); e != nil {
+		t.Fatal(e)
+	}
+	socket := filepath.Join(state, "insights.sock")
+	listener, e := net.Listen("unix", socket)
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer listener.Close()
+	go http.Serve(listener, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"data":{"items":[],"partial":false,"coverage":"live_listing"}}`))
+	}))
+	db, e := gorm.Open(sqlite.Open(filepath.Join(dir, "view.sqlite")), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	if e != nil {
+		t.Fatal(e)
+	}
+	store, e := insights.Open(db)
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer func() { store.Close(); raw, _ := db.DB(); raw.Close() }()
+	os.WriteFile(filepath.Join(dir, "insights.html"), []byte("<!doctype html><title>fixture view</title>"), 0600)
+	origin := "http://127.0.0.1:34569"
+	owner := &cli{effective: config.Effective{Values: map[string]string{"state": state}}}
+	handler := viewerHandler(owner, store, dir, origin, "private-bootstrap", "private-session", "private-csrf")
+	request := func(body, originHeader, cookie, csrf string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest("POST", origin+"/api/v1/local/list", bytes.NewBufferString(body))
+		if originHeader != "" {
+			r.Header.Set("Origin", originHeader)
+		}
+		if cookie != "" {
+			r.Header.Set("Cookie", cookie)
+		}
+		if csrf != "" {
+			r.Header.Set("X-CSRF-Token", csrf)
+		}
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, r)
+		return w
+	}
+	if w := request(`{"space_id":"nas"}`, origin, "", "private-csrf"); w.Code != 401 {
+		t.Fatalf("unauthenticated list accepted: %d", w.Code)
+	}
+	r := httptest.NewRequest("POST", origin+"/api/v1/local-session", bytes.NewBufferString(`{"launch":"private-bootstrap"}`))
+	r.Header.Set("Origin", origin)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, r)
+	if w.Code != 200 {
+		t.Fatalf("session bootstrap failed %d", w.Code)
+	}
+	cookie := w.Result().Cookies()[0].String()
+	if w = request(`{"space_id":"nas"}`, origin, cookie, ""); w.Code != 403 {
+		t.Fatalf("list without CSRF accepted: %d", w.Code)
+	}
+	w = request(`{"space_id":"nas"}`, origin, cookie, "private-csrf")
+	if w.Code != 200 || !strings.Contains(w.Body.String(), "live_listing") {
+		t.Fatalf("live list proxy failed: %d %s", w.Code, w.Body.String())
+	}
+	listener.Close()
+	w = request(`{"space_id":"nas"}`, origin, cookie, "private-csrf")
+	if w.Code != 503 || !strings.Contains(w.Body.String(), "insights_owner_unavailable") {
+		t.Fatalf("missing owner not reported honestly: %d %s", w.Code, w.Body.String())
 	}
 }
