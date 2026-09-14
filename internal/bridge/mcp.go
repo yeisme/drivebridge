@@ -35,6 +35,7 @@ func (s *Service) Tools() []mcp.Tool {
 		tool("link", "Register an explicit reference to an existing object in another space on the same drive; no bytes are copied and the source is never modified.", "file_ref", "space_id"),
 		tool("download", "Download into an allowed local directory without replacing a different file. Poll operation_get.", "file_ref", "local_path", "idempotency_key"),
 		tool("operation_get", "Recover the original transfer result before starting another operation.", "operation_id"),
+		tool("inbox", "List recent completed or failed operations for the configured spaces."),
 		tool("resume", "Resume an interrupted or failed transfer; may retransmit bytes. Never creates a generation task.", "operation_id"),
 		tool("cancel", "Cancel a transfer; completed files are retained.", "operation_id"),
 		tool("save_output", "Save an existing succeeded/imported Scaena task artifact to OneDrive. Never submits generation. Poll operation_get.", "space_id", "submission_ref", "idempotency_key"),
@@ -93,6 +94,12 @@ func (s *Service) Call(ctx context.Context, name string, args map[string]any) (a
 		return s.Usage(strings.TrimPrefix(name, "usage_"), q)
 	}
 	switch name {
+	case "inbox":
+		var ops []Operation
+		if e := s.DB.Where("updated >= ?", time.Now().UTC().Add(-30*24*time.Hour)).Order("updated DESC").Limit(200).Find(&ops).Error; e != nil {
+			return nil, errors.New("state_unavailable")
+		}
+		return ops, nil
 	case "capabilities":
 		return s.Capabilities(), nil
 	case "list":

@@ -8,8 +8,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/glebarez/sqlite"
 	"github.com/rclone/rclone/fs/config"
 	"github.com/rclone/rclone/fs/config/configfile"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 // genericFixture builds a state with an rclone "local" backend remote named
@@ -421,5 +424,57 @@ func TestSearchAndChangesFeed(t *testing.T) {
 	events, _, e = s.Changes("nas", cursor2)
 	if e != nil || len(events) != 1 || events[0].Kind != "file_restored" {
 		t.Fatalf("restore event: %v %+v", e, events)
+	}
+}
+
+func TestGenericInboxListsRecentOperationsNewestFirst(t *testing.T) {
+	s, local, _ := genericFixture(t)
+	if e := s.AddSpace(Space{ID: "nas", Remote: "nas", Backend: "generic", LocalRoot: local, MaxBytes: 1 << 20}); e != nil {
+		t.Fatal(e)
+	}
+	source := filepath.Join(local, "i.bin")
+	if e := os.WriteFile(source, []byte("inbox payload"), 0600); e != nil {
+		t.Fatal(e)
+	}
+	op, e := s.Upload(context.Background(), "nas", "", source, "i.bin", "k1")
+	if e != nil {
+		t.Fatal(e)
+	}
+	op = waitCompleted(t, s, op.ID)
+	dop, e := s.Download(context.Background(), op.FileRef, filepath.Join(local, "i-out.bin"), "k2")
+	if e != nil {
+		t.Fatal(e)
+	}
+	waitCompleted(t, s, dop.ID)
+	rows, e := s.Call(context.Background(), "inbox", map[string]any{})
+	if e != nil {
+		t.Fatal(e)
+	}
+	ops, ok := rows.([]Operation)
+	if !ok || len(ops) < 2 {
+		t.Fatalf("inbox rows: %T %+v", rows, rows)
+	}
+	if ops[0].ID != dop.ID || ops[1].ID != op.ID {
+		t.Fatalf("expected newest-first [download, upload], got %s %s", ops[0].ID, ops[1].ID)
+	}
+}
+
+func TestGenericInboxFailsHonestOnClosedState(t *testing.T) {
+	// Bypass genericFixture: the closed-state probe must not touch the shared
+	// rclone config singleton that later tests depend on.
+	s := &Service{}
+	db, e := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "state.sqlite")), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	if e != nil {
+		t.Fatal(e)
+	}
+	if e = db.AutoMigrate(&Operation{}); e != nil {
+		t.Fatal(e)
+	}
+	s.DB = db
+	if sqlDB, e := db.DB(); e == nil {
+		sqlDB.Close()
+	}
+	if _, e := s.Call(context.Background(), "inbox", map[string]any{}); e == nil || e.Error() != "state_unavailable" {
+		t.Fatalf("expected state_unavailable, got %v", e)
 	}
 }
