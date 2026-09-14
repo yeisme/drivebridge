@@ -204,7 +204,7 @@ func viewerHandler(c *cli, store *insights.Store, web, origin, bootstrap, sessio
 			}
 			out := []map[string]string{}
 			for _, p := range spaces {
-				out = append(out, map[string]string{"id": p.ID, "name": p.ID, "connection_id": p.Remote})
+				out = append(out, map[string]string{"id": p.ID, "name": p.ID, "connection_id": p.Remote, "backend": p.Kind()})
 			}
 			respond(w, out)
 			return
