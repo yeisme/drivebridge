@@ -46,6 +46,28 @@ go build -o drivebridge ./cmd/drivebridge
 
 `--auto/--root-name/--root-path/--root-id` 互斥（root_selection_conflict）。`--project/--actor` 仅成品回存需要；纯传输空间可省略。`--max-bytes` 按你的域/模型已验证上限设置。空间身份绑定后不可改绑。
 
+### generic 后端与 S3 兼容对象存储
+
+`--backend generic` 走 rclone 传输面（box/dropbox/drive/pcloud/s3/smb/sftp/webdav 等），`--remote-path` 是 remote 内的根路径。**S3 族 remote-path 的第一段是桶名**：`--remote-path <bucket>/<prefix>`；只写前缀会把前缀当成桶名（症状：`remote_not_found`，建目录时 COS 报 `InvalidRequest: Appid`）。前缀需已存在——首操作前先在桶内建目录，或直接用桶根。腾讯云 COS 实测配方（2026-09-14，drivebridge-1384001538/ap-guangzhou）：
+
+```ini
+[cos]
+type = s3
+provider = TencentCOS
+access_key_id = <云控制台凭据>
+secret_access_key = <云控制台凭据>
+endpoint = cos.ap-guangzhou.myqcloud.com
+region = ap-guangzhou
+```
+
+```bash
+./drivebridge space add --space cos --remote cos --backend generic \
+  --remote-path drivebridge-1384001538/drivebridge-e2e \
+  --local-root /absolute/local/root --max-bytes 1073741824
+```
+
+rclone 配置只能经 `--rclone-config` / `rclone_config` 键进入（rclone 作为库不读 `RCLONE_CONFIG` 环境变量）；upload/ls/find/trash/restore/download 全链路对 COS 验证可用，证据见 `temp/integration-test-runs/cos-generic-e2e-20260914.md`。
+
 ## 4. 预检（新命令）
 
 ```bash
