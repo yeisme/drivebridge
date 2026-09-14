@@ -129,3 +129,33 @@ generic 桥 SHALL 提供只读收件箱工具：列出本机状态库近 30 天�
 - **WHEN** 本机状态库不可读
 - **THEN** 返回 state_unavailable，不以空列表冒充成功
 
+### Requirement: Seamless first-use onboarding
+auth SHALL 以 device-code 流完成 OneDrive 登录并自动发现默认 drive 与可选 root，不要求用户注册应用或手工查询 Graph；凭据与令牌不得出现在任何输出。
+
+#### Scenario: One-command first login
+- **WHEN** 用户在终端运行默认 auth 且在浏览器完成设备码确认
+- **THEN** 命令写入 rclone 配置、报告发现的 drive-id，并提示 root 选择或接受显式覆盖参数，全程不打印 token
+
+#### Scenario: Non-interactive space creation
+- **WHEN** 在非交互环境（管道/MCP 宿主）创建空间且未提供 root-id 或 root-name
+- **THEN** 拒绝并返回固定错误码，不进入交互等待或猜测目录
+
+#### Scenario: Honest auth status
+- **WHEN** 查询 auth 状态而未显式探测
+- **THEN** 只报告本地可判定的 token 状态与 not probed 的账号可用性，不以配置存在冒充已登录
+
+### Requirement: Agent discovery surface
+discovery SHALL 提供空间内检索、游标增量与内容寻址登记：检索命中后经 stat 校验再消费；游标只前进而首次订阅不回放历史；内容去重登记新引用而不覆盖远端对象。
+
+#### Scenario: Search with stale index honesty
+- **WHEN** 检索命中本地索引但远端已变化
+- **THEN** 消费前 stat 校验失败即报告版本变化；索引未命中不宣称远端不存在
+
+#### Scenario: Cursor subscription
+- **WHEN** agent 以游标轮询空间变化
+- **THEN** 返回新增引用、版本变化与操作完成事件；游标单调且不回放首次订阅前的历史
+
+#### Scenario: Content-addressed upload
+- **WHEN** 上传内容的空间内同 SHA-256 已存在
+- **THEN** 登记新引用复用既有对象（或显式链接引用）而不重传字节，不覆盖远端文件
+
