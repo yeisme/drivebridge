@@ -31,7 +31,7 @@ func newViewCommand(c *cli) *cobra.Command {
 			return fmt.Errorf("view_owns_process_output")
 		}
 		if c.effective.Values["remote_url"] != "" {
-			return fmt.Errorf("local_view_only: use the existing remote website")
+			return fail("local_view_only", "view serves the local read-only projection; use the existing remote website for the shared instance.")
 		}
 		store, release, e := c.readInsights()
 		if e != nil {
@@ -50,7 +50,7 @@ func newViewCommand(c *cli) *cobra.Command {
 			return e
 		}
 		if _, e = os.Stat(filepath.Join(web, "insights.html")); e != nil {
-			return fmt.Errorf("viewer_assets_missing: provide --web-dir with the built DriveBridge Client directory")
+			return fail("viewer_assets_missing", "Provide --web-dir pointing at the built DriveBridge Client directory.")
 		}
 		ln, e := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
 		if e != nil {

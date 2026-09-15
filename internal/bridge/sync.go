@@ -39,6 +39,7 @@ type SyncReport struct {
 	Resync      bool     `json:"resync"`
 	Baseline    bool     `json:"baseline_established"`
 	MaxDelete   int      `json:"max_delete_percent"`
+	Reason      string   `json:"refusal_reason,omitempty"`
 	Additions1  []string `json:"additions_local_only,omitempty"`
 	Additions2  []string `json:"additions_remote_only,omitempty"`
 	Updates1    []string `json:"updates_local_to_remote,omitempty"`
@@ -139,10 +140,12 @@ func (s *Service) Sync(ctx context.Context, space string, opt SyncOptions) (Sync
 	// The tightened deletion cap runs before the engine: refusing early keeps
 	// both sides untouched and reports the exact ratio and limit.
 	if haveSnapshot && !opt.Resync {
-		if e := checkDeletionCap(snapshot.Local, side1, "local", maxDelete); e != nil {
+		if reason, e := checkDeletionCap(snapshot.Local, side1, "local", maxDelete); e != nil {
+			report.Status, report.Reason = "refused", reason
 			return report, e
 		}
-		if e := checkDeletionCap(snapshot.Remote, side2, "remote", maxDelete); e != nil {
+		if reason, e := checkDeletionCap(snapshot.Remote, side2, "remote", maxDelete); e != nil {
+			report.Status, report.Reason = "refused", reason
 			return report, e
 		}
 	}
@@ -174,9 +177,9 @@ func (s *Service) Sync(ctx context.Context, space string, opt SyncOptions) (Sync
 		_ = s.DB.Save(&op).Error
 		s.emit(op.SpaceID, "operation_failed", "", op.ID)
 		report.Status = "failed"
-		// The fixed code travels first; the engine's own wording follows for
-		// diagnosis and never contains credentials.
-		return report, fmt.Errorf("%s: %v", code, engineErr)
+		// Only the fixed code crosses the boundary; the engine's own wording
+		// stays out of error strings (rclone text can carry URLs).
+		return report, errors.New(code)
 	}
 	if !opt.DryRun {
 		fresh1, fresh2 := walkSide(ctx, local), walkSide(ctx, remote)
@@ -284,9 +287,9 @@ func classifySync(snapshot syncSnapshot, haveSnapshot bool, side1, side2 map[str
 
 // checkDeletionCap refuses when the share of baseline entries that vanished
 // from one side exceeds the tightened cap.
-func checkDeletionCap(baseline, current map[string]syncEntry, side string, maxDelete int) error {
+func checkDeletionCap(baseline, current map[string]syncEntry, side string, maxDelete int) (string, error) {
 	if len(baseline) == 0 {
-		return nil
+		return "", nil
 	}
 	deleted := 0
 	for path := range baseline {
@@ -295,13 +298,13 @@ func checkDeletionCap(baseline, current map[string]syncEntry, side string, maxDe
 		}
 	}
 	if deleted == 0 {
-		return nil
+		return "", nil
 	}
 	ratio := 100 * deleted / len(baseline)
 	if ratio > maxDelete {
-		return fmt.Errorf("sync_deletion_cap_exceeded: %s side would delete %d of %d (%d%%) above the %d%% cap; raise --max-delete to override", side, deleted, len(baseline), ratio, maxDelete)
+		return fmt.Sprintf("%s side would delete %d of %d (%d%%) above the %d%% cap; raise --max-delete to override", side, deleted, len(baseline), ratio, maxDelete), errors.New("sync_deletion_cap_exceeded")
 	}
-	return nil
+	return "", nil
 }
 
 // classifySyncError maps engine failures to the fixed code set.

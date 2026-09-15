@@ -20,7 +20,7 @@ stdout '"source.local_root":"flag"'
 exec sh -c 'printf "state: /s\nenabled: true\n" > bad.yaml'
 chmod 0600 bad.yaml
 ! exec drivebridge capabilities --config bad.yaml
-stderr 'unknown keys: enabled'
+stderr 'unknown_config_key'
 
 # The starter file drives a real command: space-add picks state from config.
 mkdir local

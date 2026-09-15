@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"time"
 
 	rcloneconfig "github.com/rclone/rclone/fs/config"
 	"github.com/rclone/rclone/fs/config/configfile"
@@ -90,9 +91,16 @@ func (c *cli) openService(enabled bool) (*bridge.Service, func(), error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	if err = lockFile(lock, lockExclusive|lockNonBlocking); err != nil {
+	lockErr := lockFile(lock, lockExclusive|lockNonBlocking)
+	if lockErr != nil {
+		// One short bounded retry absorbs transient hand-offs between
+		// short-lived CLI processes before reporting the typed conflict.
+		time.Sleep(250 * time.Millisecond)
+		lockErr = lockFile(lock, lockExclusive|lockNonBlocking)
+	}
+	if lockErr != nil {
 		lock.Close()
-		return nil, nil, err
+		return nil, nil, fail("state_locked", "Another process (typically a registered drivebridge mcp client) holds this state's process lock.")
 	}
 	if err = c.installRclone(); err != nil {
 		lock.Close()

@@ -29,8 +29,14 @@ func newSyncCommand(c *cli) *cobra.Command {
 			if err != nil {
 				if report.OperationID != "" || report.Status == "refused" || report.Status == "planned" {
 					// Refusals and aborted plans still emit their plan for
-					// review before the error surfaces.
-					_ = c.mode.write("sync", "refused", err.Error(), report)
+					// review in the same envelope, then stay quiet: the
+					// projection is complete.
+					code, message := codify(err)
+					if report.Reason != "" {
+						message = report.Reason
+					}
+					_ = c.mode.fail("sync", code, message, report)
+					return errQuiet
 				}
 				return err
 			}

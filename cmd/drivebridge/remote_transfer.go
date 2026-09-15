@@ -102,19 +102,10 @@ func routeTransfer(c *cli, cmd *cobra.Command) {
 				// awaitTerminal contract: poll operation_get until the
 				// remote operation settles instead of returning an
 				// in-flight receipt from a dying process.
-				status = receipt.Status
-				message = fmt.Sprintf("%s %s.", receipt.ID, receipt.Status)
 				if receipt.Status == "completed" {
-					status = "success"
-					message = fmt.Sprintf("Uploaded via %s.", receipt.ID)
+					return c.mode.write(name, "success", fmt.Sprintf("Uploaded via %s.", receipt.ID), out)
 				}
-				if err := c.mode.write(name, status, message, out); err != nil {
-					return err
-				}
-				if receipt.Status != "completed" {
-					return fmt.Errorf("operation %s: %s", receipt.ID, receipt.Status)
-				}
-				return nil
+				return c.mode.fail(name, terminalCodeValues(receipt.Error, receipt.Status), fmt.Sprintf("Remote operation %s stopped: %s (%d/%d bytes).", receipt.ID, receipt.Status, receipt.Transferred, receipt.Size), map[string]any{"operation": receipt})
 			}
 		}
 		if name == "resume" {

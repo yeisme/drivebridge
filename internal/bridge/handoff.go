@@ -161,15 +161,33 @@ func (s *Service) Handler() http.Handler {
 	}
 	return mux
 }
+// dialUnixSocket reports whether the socket still answers; nil error means
+// a live consumer is on the other end.
+func dialUnixSocket(socket string) error {
+	conn, err := net.DialTimeout("unix", socket, time.Second)
+	if err == nil {
+		conn.Close()
+	}
+	return err
+}
+
 func (s *Service) Listen(socket string) (*http.Server, error) {
 	if !s.Enabled || !s.Handoff {
 		return nil, errors.New("secure_handoff_unavailable")
 	}
-	// Never unlink a live/unknown socket. Operator cleanup after an abnormal stop
-	// must be explicit; this avoids hijacking an existing consumer channel.
 	listener, err := net.Listen("unix", socket)
 	if err != nil {
-		return nil, errors.New("socket_unavailable")
+		// A socket left behind by an abnormal stop would block every restart.
+		// Only a provably dead one (dial fails) is reclaimed; a live or
+		// unknown socket keeps the explicit operator-cleanup rule.
+		if dialUnixSocket(socket) == nil {
+			return nil, errors.New("socket_unavailable")
+		}
+		_ = os.Remove(socket)
+		listener, err = net.Listen("unix", socket)
+		if err != nil {
+			return nil, errors.New("socket_unavailable")
+		}
 	}
 	if err = os.Chmod(socket, 0600); err != nil {
 		listener.Close()

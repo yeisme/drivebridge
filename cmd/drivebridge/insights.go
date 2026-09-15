@@ -115,7 +115,7 @@ func (c *cli) requestScan(ctx context.Context, q bridge.ScanRequest) (any, error
 	}
 	s, release, e := c.openService(false)
 	if e != nil {
-		return nil, fmt.Errorf("insights_owner_unavailable: stop the owning MCP or enable its --insights socket")
+		return nil, fmt.Errorf("insights_owner_unavailable")
 	}
 	defer release()
 	return s.RunScanRequest(ctx, q)
@@ -217,8 +217,8 @@ func insightQueryCommand(c *cli, name, kind string) *cobra.Command {
 }
 func writeInsights(c *cli, command string, out any, e error) error {
 	if e != nil {
-		_ = c.mode.write(command, "failed", "Insight query failed; inspect readiness, scope and filters.", map[string]any{"error_code": insightError(e)})
-		return errors.New(insightError(e))
+		_ = c.mode.fail(command, insightError(e), "Insight query failed; inspect readiness, scope and filters.", nil)
+		return errQuiet
 	}
 	status := "success"
 	if run, ok := out.(insights.ScanRun); ok && run.Status != "complete" {

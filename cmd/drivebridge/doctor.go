@@ -149,7 +149,7 @@ func doctorLocal(cfg doctorConfig) doctorReport {
 	info, err := os.Lstat(cfg.State)
 	switch {
 	case err != nil:
-		add("state_dir", "fail", "state_dir_missing: run a DriveBridge command once or create it with 0700")
+		add("state_dir", "fail", fmt.Sprintf("state_dir_missing: create it with `mkdir -m 0700 %s` or run any service command once (doctor stays read-only)", cfg.State))
 	case !info.IsDir():
 		add("state_dir", "fail", "state_dir_invalid: not a directory")
 	case info.Mode().Perm()&0077 != 0:

@@ -89,7 +89,7 @@ func Load(path string) (File, error) {
 	}
 	if len(unknown) > 0 {
 		sort.Strings(unknown)
-		return File{}, fmt.Errorf("config %q: unknown keys: %s", path, strings.Join(unknown, ", "))
+		return File{}, fmt.Errorf("unknown_config_key")
 	}
 	values := map[string]string{}
 	for _, key := range Keys {

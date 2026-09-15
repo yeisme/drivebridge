@@ -52,7 +52,7 @@ func newSetupCommand(c *cli) *cobra.Command {
 		}
 		kind := rcloneconfig.GetValue(remote, "type")
 		if kind == "" {
-			return fmt.Errorf("authentication_required: run drivebridge auth")
+			return fmt.Errorf("authentication_required")
 		}
 		if kind != "onedrive" {
 			cmd.Flags().Set("backend", "generic")

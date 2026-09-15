@@ -14,11 +14,20 @@ import (
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	if err := newRootCommand().ExecuteContext(ctx); err != nil {
-		// All surfaced errors here are our typed codes or wrapped config
-		// errors; third-party raw errors are discarded further down.
-		if !errors.Is(err, errDoctorNotReady) {
-			fmt.Fprintf(os.Stderr, "DriveBridge failed: %v. Check local configuration and the documented recovery steps.\n", err)
+	c := &cli{}
+	if err := newRootCommand(c).ExecuteContext(ctx); err != nil {
+		if errors.Is(err, errQuiet) || errors.Is(err, errDoctorNotReady) {
+			// The command already produced its full projection.
+			os.Exit(1)
+		}
+		command := c.command
+		if command == "" {
+			command = "cli"
+		}
+		code, message := codify(err)
+		_ = c.mode.fail(command, code, message, nil)
+		if code == "command_failed" {
+			fmt.Fprintln(os.Stderr, "DriveBridge failed. Check local configuration and the documented recovery steps.")
 		}
 		os.Exit(1)
 	}
@@ -26,8 +35,7 @@ func main() {
 
 // newRootCommand assembles the cobra tree. Commands are registered through
 // this name map so the executable surface stays readable in one place.
-func newRootCommand() *cobra.Command {
-	c := &cli{}
+func newRootCommand(c *cli) *cobra.Command {
 	root := &cobra.Command{
 		Use:           "drivebridge",
 		Short:         "Local-first personal file MCP over OneDrive and any rclone backend.",

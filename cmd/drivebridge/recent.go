@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"github.com/spf13/cobra"
 	"github.com/yeisme/drivebridge/internal/bridge"
@@ -17,24 +18,44 @@ func newRecentCommand(c *cli) *cobra.Command {
 		if endpoint := c.effective.Values["remote_url"]; endpoint != "" {
 			return runRemoteCall(c, endpoint, c.effective.Values["remote_token_file"], c.effective.Values["local_root"], "operations", map[string]any{"space_id": space, "pending": pending, "limit": limit})
 		}
-		s, release, err := c.openService(false)
+		readOnly := false
+		ops, err := func() ([]bridge.Operation, error) {
+			s, release, err := c.openService(false)
+			if err != nil {
+				// Inspection never dies on the exclusive lock: fall back to
+				// the read-only snapshot a registered MCP client leaves
+				// perfectly readable.
+				var f *cliFailure
+				if errors.As(err, &f) && f.code == "state_locked" {
+					snap, e := openSnapshot(c.effective.Values["state"])
+					if e != nil {
+						return nil, err
+					}
+					defer snap.close()
+					readOnly = true
+					return snap.operations(space, pending, limit)
+				}
+				return nil, err
+			}
+			defer release()
+			q := s.DB.Order("updated DESC").Limit(limit)
+			if space != "" {
+				if _, err := s.Space(space); err != nil {
+					return nil, err
+				}
+				q = q.Where("space_id = ?", space)
+			}
+			if pending {
+				q = q.Where("status NOT IN ?", []string{"completed", "cancelled"})
+			}
+			out := []bridge.Operation{}
+			if e := q.Find(&out).Error; e != nil {
+				return nil, fmt.Errorf("state_unavailable")
+			}
+			return out, nil
+		}()
 		if err != nil {
 			return err
-		}
-		defer release()
-		q := s.DB.Order("updated DESC").Limit(limit)
-		if space != "" {
-			if _, err := s.Space(space); err != nil {
-				return err
-			}
-			q = q.Where("space_id = ?", space)
-		}
-		if pending {
-			q = q.Where("status NOT IN ?", []string{"completed", "cancelled"})
-		}
-		ops := []bridge.Operation{}
-		if q.Find(&ops).Error != nil {
-			return fmt.Errorf("state_unavailable")
 		}
 		if !(c.mode.JSON || c.mode.Agent || c.mode.Events || c.mode.Explain) {
 			for _, op := range ops {
@@ -44,7 +65,15 @@ func newRecentCommand(c *cli) *cobra.Command {
 				}
 			}
 		}
-		return c.mode.write("recent", "success", fmt.Sprintf("%d recent operation(s).", len(ops)), map[string]any{"operations": ops, "count": len(ops)})
+		summary := fmt.Sprintf("%d recent operation(s).", len(ops))
+		if readOnly {
+			summary = fmt.Sprintf("%d recent operation(s) (read-only snapshot; an MCP client holds the state).", len(ops))
+		}
+		data := map[string]any{"operations": ops, "count": len(ops)}
+		if readOnly {
+			data["read_only"] = true
+		}
+		return c.mode.write("recent", "success", summary, data)
 	}}
 	cmd.Flags().StringVar(&space, "space", "", "Restrict to one space")
 	cmd.Flags().IntVar(&limit, "limit", 20, "Maximum operations (1-200)")

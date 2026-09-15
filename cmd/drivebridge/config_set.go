@@ -22,7 +22,7 @@ func configSetCommand(c *cli) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			target = filepath.Join(home, "drivebridge", "config.json")
+			target = filepath.Join(home, "drivebridge", "config.yaml")
 		}
 		if err := os.MkdirAll(filepath.Dir(target), 0700); err != nil {
 			return err

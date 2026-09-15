@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -56,7 +57,7 @@ func newMCPCommand(c *cli) *cobra.Command {
 		Short: "Serve the local stdio MCP (register this with an MCP client).",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if c.mode.JSON || c.mode.Agent || c.mode.Events || c.mode.Explain {
-				return fmt.Errorf("stdio MCP owns output")
+				return fail("mcp_owns_output", "The stdio MCP server owns the process output; drop the output-mode flag.")
 			}
 			if url := c.effective.Values["remote_url"]; url != "" {
 				adapter, err := remoteclient.New(url, c.effective.Values["remote_token_file"], c.effective.Values["local_root"])
@@ -69,6 +70,13 @@ func newMCPCommand(c *cli) *cobra.Command {
 			s, release, err := c.openService(enabled)
 			if err != nil {
 				return err
+			}
+			if !enabled {
+				note := "write tools (upload/download/mkdir/trash/restore/purge/sync/save_output) will return disabled"
+				if handoff {
+					note += "; handoff also requires --enabled"
+				}
+				fmt.Fprintln(os.Stderr, "drivebridge: --enabled not set; "+note+".")
 			}
 			defer release()
 			if base := c.effective.Values["scaena_url"]; base != "" {
@@ -124,13 +132,13 @@ func newRemoteCommand(c *cli) *cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			url := c.effective.Values["remote_url"]
 			if url == "" {
-				return fmt.Errorf("remote-url required")
+				return fail("remote_url_required", "Remote mode needs --remote-url or the remote_url configuration key.")
 			}
 			var args map[string]any
 			if action != "capabilities" {
 				args = map[string]any{}
 				if json.NewDecoder(io.LimitReader(os.Stdin, 1<<20)).Decode(&args) != nil {
-					return fmt.Errorf("invalid remote arguments")
+					return fail("invalid_remote_arguments", "Remote tool arguments must be one JSON object on stdin.")
 				}
 			}
 			return runRemoteCall(c, url, c.effective.Values["remote_token_file"], c.effective.Values["local_root"], action, args)
@@ -163,11 +171,11 @@ func scaenaTokenReader(path string) func() (string, error) {
 		}
 		info, e := os.Lstat(path)
 		if e != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 {
-			return "", fmt.Errorf("credential file unavailable")
+			return "", fail("credential_unavailable", "The credential file must exist, be a regular file, and disallow group/other access.")
 		}
 		b, e := os.ReadFile(path)
 		if e != nil || len(b) > 8192 {
-			return "", fmt.Errorf("credential file unavailable")
+			return "", fail("credential_unavailable", "The credential file must exist, be a regular file, and disallow group/other access.")
 		}
 		return strings.TrimSpace(string(b)), nil
 	}
@@ -201,11 +209,11 @@ func spaceAddCommand(c *cli, use string) *cobra.Command {
 				}
 				drive = rcloneconfig.GetValue(remote, "drive_id")
 				if drive == "" {
-					return fmt.Errorf("authentication_required: run 'drivebridge auth --auto' first")
+					return fail("authentication_required", "Run drivebridge auth --auto first so the drive and root IDs are discoverable.")
 				}
 				if auto {
 					if root = rcloneconfig.GetValue(remote, "root_folder_id"); root == "" {
-						return fmt.Errorf("authentication_required: run 'drivebridge auth --auto' first")
+						return fail("authentication_required", "Run drivebridge auth --auto first so the drive and root IDs are discoverable.")
 					}
 				} else if root, err = bridge.NewOneDrive().SelectRootFolderOnRemote(cmd.Context(), remote, rootName); err != nil {
 					return err
@@ -317,7 +325,7 @@ func newConfigCommand(c *cli) *cobra.Command {
 				target = filepath.Join(home, "drivebridge", "config.yaml")
 			}
 			if _, err := os.Stat(target); err == nil {
-				return fmt.Errorf("config exists: %s", target)
+				return fail("config_exists", "A configuration file already exists at the target path; edit it or choose another --config.")
 			}
 			if err := os.MkdirAll(filepath.Dir(target), 0700); err != nil {
 				return err
@@ -369,18 +377,12 @@ func newTransferCommands(c *cli) []*cobra.Command {
 			}
 			// The CLI is synchronous for the user: wait for the terminal state
 			// instead of leaving the transfer behind in a dying process.
-			op = awaitTerminal(s, op.ID)
-			status, message := op.Status, fmt.Sprintf("%s %d/%d bytes.", op.ID, op.Transferred, op.Bytes)
+			stream := c.stream("upload")
+			op = awaitTerminalProgress(s, op.ID, stream.progress)
 			if op.Status == "completed" {
-				status, message = "success", fmt.Sprintf("Uploaded %s -> %s.", op.ID, op.FileRef)
+				return stream.end("success", fmt.Sprintf("Uploaded %s -> %s.", op.ID, op.FileRef), op)
 			}
-			if err := c.mode.write("upload", status, message, op); err != nil {
-				return err
-			}
-			if op.Status != "completed" {
-				return fmt.Errorf("operation %s: %s", op.ID, op.Status)
-			}
-			return nil
+			return stream.fail(terminalCode(op), fmt.Sprintf("Operation %s stopped: %s (%d/%d bytes).", op.ID, op.Status, op.Transferred, op.Bytes), map[string]any{"operation": op})
 		},
 	}
 	upload.Flags().String("caller", "", "Caller label (opaque identifier, not authentication)")
@@ -410,18 +412,12 @@ func newTransferCommands(c *cli) []*cobra.Command {
 			if err != nil {
 				return err
 			}
-			op = awaitTerminal(s, op.ID)
-			status, message := op.Status, fmt.Sprintf("%s %d/%d bytes.", op.ID, op.Transferred, op.Bytes)
+			stream := c.stream("download")
+			op = awaitTerminalProgress(s, op.ID, stream.progress)
 			if op.Status == "completed" {
-				status, message = "success", fmt.Sprintf("Downloaded via %s.", op.ID)
+				return stream.end("success", fmt.Sprintf("Downloaded via %s.", op.ID), op)
 			}
-			if err := c.mode.write("download", status, message, op); err != nil {
-				return err
-			}
-			if op.Status != "completed" {
-				return fmt.Errorf("operation %s: %s", op.ID, op.Status)
-			}
-			return nil
+			return stream.fail(terminalCode(op), fmt.Sprintf("Operation %s stopped: %s (%d/%d bytes).", op.ID, op.Status, op.Transferred, op.Bytes), map[string]any{"operation": op})
 		},
 	}
 	download.Flags().String("ref", "", "Stable file reference")
@@ -478,16 +474,35 @@ func newTransferCommands(c *cli) []*cobra.Command {
 		Short: "Report an operation's status and received bytes.",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			id, _ := cmd.Flags().GetString("id")
-			s, release, err := c.openService(true)
+			o, err := func() (bridge.Operation, error) {
+				s, release, err := c.openService(true)
+				if err != nil {
+					// Inspection falls back to the read-only snapshot when a
+					// registered MCP client holds the state.
+					var f *cliFailure
+					if errors.As(err, &f) && f.code == "state_locked" {
+						snap, e := openSnapshot(c.effective.Values["state"])
+						if e != nil {
+							return bridge.Operation{}, err
+						}
+						defer snap.close()
+						return snap.operation(id)
+					}
+					return bridge.Operation{}, err
+				}
+				defer release()
+				return s.Get(id)
+			}()
 			if err != nil {
 				return err
 			}
-			defer release()
-			o, err := s.Get(id)
-			if err != nil {
-				return err
+			// The inspection itself succeeded; the operation's own state is
+			// data, never the envelope status.
+			status := "partial"
+			if o.Status == "completed" {
+				status = "success"
 			}
-			return c.mode.write("operation", o.Status, fmt.Sprintf("%s %s %d/%d bytes.", o.ID, o.Status, o.Transferred, o.Bytes), o)
+			return c.mode.write("operation", status, fmt.Sprintf("%s %s %d/%d bytes.", o.ID, o.Status, o.Transferred, o.Bytes), o)
 		},
 	}
 	op.Flags().String("id", "", "Operation ID")
@@ -622,7 +637,7 @@ func newTransferCommands(c *cli) []*cobra.Command {
 			ref, _ := cmd.Flags().GetString("ref")
 			owner, _ := cmd.Flags().GetBool("i-am-the-owner")
 			if !owner {
-				return fmt.Errorf("permanent deletion requires --i-am-the-owner")
+				return fail("owner_confirmation_required", "Permanent deletion requires --i-am-the-owner; trash first, purge stays owner-terminal only.")
 			}
 			s, release, err := c.openService(true)
 			if err != nil {
@@ -684,9 +699,9 @@ func newInstallCommand(c *cli) *cobra.Command {
 				if _, err := exec.LookPath("claude"); err != nil {
 					return c.mode.write("install", "manual", "Client CLI unavailable; register the command and args from --json in your MCP client.", map[string]any{"client": client, "command": binary, "args": args})
 				}
-				out, err := exec.Command("claude", append([]string{"mcp", "add", "-s", "user", "drivebridge", "--", binary}, args...)...).CombinedOutput()
+				_, err := exec.Command("claude", append([]string{"mcp", "add", "-s", "user", "drivebridge", "--", binary}, args...)...).CombinedOutput()
 				if err != nil {
-					return fmt.Errorf("claude mcp add failed: %s", firstLine(out))
+					return fail("registration_failed", "The claude CLI rejected the registration; register the printed command manually.")
 				}
 				return c.mode.write("install", "success", "Registered drivebridge with Claude Code (user scope).", map[string]any{"client": client, "command": binary})
 			case "codex":
@@ -734,7 +749,7 @@ func newInstallCommand(c *cli) *cobra.Command {
 			case "generic":
 				return c.mode.write("install", "manual", "Register this stdio command with your MCP client:", map[string]any{"command": binary, "args": args})
 			}
-			return fmt.Errorf("unknown client: %s", client)
+			return fail("unknown_client", "Unknown client; choose claude-code, codex or generic.")
 		},
 	}
 	cmd.Flags().BoolVar(&readOnly, "read-only", false, "Register without enabling local file operations or the owner socket")
@@ -745,6 +760,16 @@ func newInstallCommand(c *cli) *cobra.Command {
 // awaitTerminal polls an operation until it leaves the queued/transferring
 // states; interrupted CLI runs surface the state for an explicit retry.
 func awaitTerminal(s *bridge.Service, id string) bridge.Operation {
+	return awaitTerminalProgress(s, id, nil)
+}
+
+// awaitTerminalProgress polls an operation until a terminal state. Progress
+// is reported through onProgress at a bounded cadence (at most once per
+// second, or when at least 5% more bytes moved) so --events streams and the
+// human terminal show transfer life instead of silence.
+func awaitTerminalProgress(s *bridge.Service, id string, onProgress func(bridge.Operation)) bridge.Operation {
+	var last time.Time
+	var lastBytes int64
 	for {
 		op, err := s.Get(id)
 		if err != nil {
@@ -753,6 +778,14 @@ func awaitTerminal(s *bridge.Service, id string) bridge.Operation {
 		switch op.Status {
 		case "completed", "failed", "cancelled", "interrupted":
 			return op
+		}
+		if onProgress != nil {
+			now := time.Now()
+			moved := op.Bytes > 0 && op.Transferred-lastBytes >= op.Bytes/20
+			if now.Sub(last) >= time.Second && (last.IsZero() || moved) {
+				onProgress(op)
+				last, lastBytes = now, op.Transferred
+			}
 		}
 		time.Sleep(100 * time.Millisecond)
 	}

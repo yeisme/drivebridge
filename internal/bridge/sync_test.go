@@ -223,9 +223,9 @@ func TestSyncDeletionCapAbortsAndOverrideCompletes(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	_, err := syncWait(t, s, "paired", SyncOptions{})
-	if err == nil || !strings.Contains(err.Error(), "sync_deletion_cap_exceeded") || !strings.Contains(err.Error(), "75%") || !strings.Contains(err.Error(), "25%") {
-		t.Fatalf("deletion cap: %v", err)
+	refused, err := syncWait(t, s, "paired", SyncOptions{})
+	if err == nil || !strings.Contains(err.Error(), "sync_deletion_cap_exceeded") || !strings.Contains(refused.Reason, "75%") || !strings.Contains(refused.Reason, "25%") {
+		t.Fatalf("deletion cap: %v reason=%q", err, refused.Reason)
 	}
 	if len(syncCount(t, remoteDir)) != 4 {
 		t.Fatal("capped run deleted remote files")
