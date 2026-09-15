@@ -534,21 +534,39 @@ func newTransferCommands(c *cli) []*cobra.Command {
 			space, _ := cmd.Flags().GetString("space")
 			query, _ := cmd.Flags().GetString("query")
 			path, _ := cmd.Flags().GetString("path")
-			s, release, err := c.openService(true)
-			if err != nil {
-				return err
-			}
-			defer release()
 			mime, _ := cmd.Flags().GetString("mime-type")
 			afterText, _ := cmd.Flags().GetString("after")
 			after := time.Time{}
 			if afterText != "" {
-				after, err = time.Parse(time.RFC3339, afterText)
-				if err != nil {
+				var e error
+				after, e = time.Parse(time.RFC3339, afterText)
+				if e != nil {
 					return fmt.Errorf("invalid_time")
 				}
 			}
-			files, err := s.Search(space, query, path, bridge.SearchOptions{MIME: mime, After: after})
+			// The index is a database projection: while a registered MCP
+			// client holds the state, serve the same search from the
+			// read-only snapshot instead of dying on the lock. Snapshot hits
+			// stay advisory — stat is the verifier.
+			readOnly := false
+			files, err := func() ([]bridge.File, error) {
+				s, release, err := c.openService(true)
+				if err != nil {
+					if isStateLocked(err) {
+						db, e := openReadonlyModel(c.effective.Values["state"])
+						if e != nil {
+							return nil, err
+						}
+						sqlDB, _ := db.DB()
+						defer sqlDB.Close()
+						readOnly = true
+						return snapshotSearch(db, space, query, path, mime, after)
+					}
+					return nil, err
+				}
+				defer release()
+				return s.Search(space, query, path, bridge.SearchOptions{MIME: mime, After: after})
+			}()
 			if err != nil {
 				return err
 			}
@@ -557,7 +575,13 @@ func newTransferCommands(c *cli) []*cobra.Command {
 					fmt.Printf("%-40s %10d  %s\n", f.Name, f.Size, f.Ref)
 				}
 			}
-			return c.mode.write("find", "success", fmt.Sprintf("%d hit(s).", len(files)), map[string]any{"count": len(files), "files": files})
+			summary := fmt.Sprintf("%d hit(s).", len(files))
+			data := map[string]any{"count": len(files), "files": files}
+			if readOnly {
+				summary = fmt.Sprintf("%d hit(s) from the read-only index snapshot (an MCP client holds the state); verify hits with stat.", len(files))
+				data["read_only"] = true
+			}
+			return c.mode.write("find", "success", summary, data)
 		},
 	}
 	find.Flags().String("mime-type", "", "Exact MIME type filter")

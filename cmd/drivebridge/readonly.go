@@ -2,12 +2,16 @@ package main
 
 import (
 	"database/sql"
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
-	_ "github.com/glebarez/sqlite"
+	"github.com/glebarez/sqlite"
 	"github.com/yeisme/drivebridge/internal/bridge"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 // Snapshot reads back the operations table without the process lock,
@@ -85,4 +89,50 @@ func (s *snapshot) operation(id string) (bridge.Operation, error) {
 		return bridge.Operation{}, fail("reference_not_found", "The operation does not exist in this state.")
 	}
 	return ops[0], nil
+}
+
+// openReadonlyModel opens the state database read-only through GORM so
+// index-backed commands can serve the same model semantics (filtering,
+// ordering, JSON projection) without the exclusive process lock and without
+// any migration or write path.
+func openReadonlyModel(state string) (*gorm.DB, error) {
+	path := filepath.Join(state, "state.sqlite")
+	if _, err := os.Lstat(path); err != nil {
+		return nil, fail("state_unavailable", "The state database does not exist yet; run a DriveBridge service command once.")
+	}
+	dsn := "file:" + filepath.ToSlash(path) + "?mode=ro&_pragma=busy_timeout(5000)"
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	if err != nil {
+		return nil, fail("state_unavailable", "The state database could not be opened read-only.")
+	}
+	return db, nil
+}
+
+// snapshotSearch mirrors Service.Search over the read-only snapshot: the
+// index may lag the remote, so snapshot hits stay advisory — stat verifies.
+func snapshotSearch(db *gorm.DB, space, query, dir, mime string, after time.Time) ([]bridge.File, error) {
+	tx := db.Where("space_id = ? AND trashed_at IS NULL", space)
+	if dir != "" {
+		tx = tx.Where("dir = ?", dir)
+	}
+	if mime != "" {
+		tx = tx.Where("mime = ?", mime)
+	}
+	if !after.IsZero() {
+		tx = tx.Where("observed_at >= ?", after)
+	}
+	if needle := strings.ToLower(query); needle != "" {
+		tx = tx.Where("LOWER(name) LIKE ?", "%"+needle+"%")
+	}
+	files := []bridge.File{}
+	if err := tx.Order("name").Find(&files).Error; err != nil {
+		return nil, fail("state_unavailable", "The files index could not be read.")
+	}
+	return files, nil
+}
+
+// isStateLocked reports whether the error is the typed lock conflict.
+func isStateLocked(err error) bool {
+	var f *cliFailure
+	return errors.As(err, &f) && f.code == "state_locked"
 }
