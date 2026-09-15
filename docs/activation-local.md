@@ -78,6 +78,8 @@ rclone 配置只能经 `--rclone-config` / `rclone_config` 键进入（rclone �
 
 ```bash
 ./drivebridge doctor --remote-url https://files.example.com --remote-token-file /absolute/private/agent-token --local-root /absolute/allowed/files
+
+远程令牌既可以是 Agent token，也可以是部署签发的**用户密钥**（`dbu_` 或导入的外部预生成 key，0600 文件）——用户身份的远程 CLI 全链路（spaces/upload/ls/download）同构可用；服务端对象落共享桶的 `<instance>/<user>/<space>/<version>` 命名空间（2026-09-15 真机验证，证据 backend temp/integration-test-runs）。
 ```
 
 ## 5. 注册 MCP 客户端（本机 stdio）
