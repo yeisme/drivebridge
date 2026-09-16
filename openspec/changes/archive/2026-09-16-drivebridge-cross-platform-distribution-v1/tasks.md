@@ -9,7 +9,7 @@
 
 ## 2. 实施与验证
 
-- [ ] 2.1 Windows 实机验收（state 权限语义/AF_UNIX socket 隐私/浏览器启动/rclone+ffprobe）——需要真实 Windows 机器，保持未勾
+- [ ] 2.1 Windows 实机验收（state 权限语义/AF_UNIX socket 隐私/浏览器启动/rclone+ffprobe）——需要真实 Windows 机器；2026-09-16 决策：延期至出现真实 Windows 用户，分发保持 experimental 候选，届时重开 change 验收
 - [x] 2.2 跨平台设计文档（归 client owner change 撰写，本任务仅登记交接）
 
 验证证据：`temp/integration-test-runs/20260914T153248Z-957211c5/summary.json`（相对项目根目录）。由 repository evidence runner 生成，任务状态由本命令写入。
