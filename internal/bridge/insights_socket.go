@@ -51,7 +51,7 @@ func (s *Service) RunListRequest(ctx context.Context, q ListRequest) (any, error
 	if q.Space == "" || len(q.Path) > 1024 {
 		return nil, errors.New("invalid_list")
 	}
-	items, e := s.List(ctx, q.Space, q.Path)
+	items, e := s.listEntries(ctx, q.Space, q.Path, true)
 	if e != nil {
 		return nil, e
 	}
@@ -59,7 +59,15 @@ func (s *Service) RunListRequest(ctx context.Context, q ListRequest) (any, error
 	if partial {
 		items = items[:500]
 	}
-	return map[string]any{"items": items, "partial": partial, "coverage": "live_listing"}, nil
+	files, directories := []File{}, []File{}
+	for _, item := range items {
+		if item.Directory {
+			directories = append(directories, item)
+		} else {
+			files = append(files, item)
+		}
+	}
+	return map[string]any{"items": files, "directories": directories, "partial": partial, "coverage": "live_listing"}, nil
 }
 
 func listError(e error) string {
@@ -84,6 +92,11 @@ func (s *Service) ListenInsights(socket string) (*http.Server, error) {
 		return nil, errors.New("insights_socket_not_private")
 	}
 	mux := http.NewServeMux()
+	s.localFileRoutes(mux)
+	s.remoteShareRoutes(mux)
+	s.localCreativeRoutes(mux)
+	s.localPreviewRoutes(mux)
+	s.startRemoteShares()
 	mux.HandleFunc("POST /export", func(w http.ResponseWriter, r *http.Request) {
 		var q struct {
 			Kind string `json:"kind"`

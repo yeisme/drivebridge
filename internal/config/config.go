@@ -15,7 +15,7 @@ import (
 
 // Keys are the complete set of file-configurable settings. Anything else in a
 // config file is rejected: a typo must fail loudly, not silently do nothing.
-var Keys = []string{"state", "rclone_config", "scaena_url", "scaena_token_file", "remote_url", "remote_token_file", "local_root"}
+var Keys = []string{"state", "rclone_config", "scaena_url", "scaena_token_file", "remote_url", "remote_token_file", "local_root", "aigora_url"}
 
 var known = func() map[string]bool {
 	m := map[string]bool{}
@@ -158,6 +158,8 @@ func Template() string {
 	b.WriteString("scaena_url: \"\"\n")
 	b.WriteString("scaena_token_file: \"\"\n")
 	b.WriteString("remote_url: \"\"\n")
+	b.WriteString("# Optional Aigora exchange; remote_token_file then contains the Aigora key.\n")
+	b.WriteString("aigora_url: \"\"\n")
 	b.WriteString("remote_token_file: \"\"\n")
 	b.WriteString("local_root: \"\"\n")
 	return b.String()

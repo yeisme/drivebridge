@@ -60,7 +60,7 @@ func newMCPCommand(c *cli) *cobra.Command {
 				return fail("mcp_owns_output", "The stdio MCP server owns the process output; drop the output-mode flag.")
 			}
 			if url := c.effective.Values["remote_url"]; url != "" {
-				adapter, err := remoteclient.New(url, c.effective.Values["remote_token_file"], c.effective.Values["local_root"])
+				adapter, err := remoteclient.NewWithAigora(url, c.effective.Values["remote_token_file"], c.effective.Values["local_root"], c.effective.Values["aigora_url"])
 				if err != nil {
 					return err
 				}
@@ -152,7 +152,7 @@ func newRemoteCommand(c *cli) *cobra.Command {
 }
 
 func runRemoteCall(c *cli, url, tokenFile, localRoot, action string, args map[string]any) error {
-	adapter, err := remoteclient.New(url, tokenFile, localRoot)
+	adapter, err := remoteclient.NewWithAigora(url, tokenFile, localRoot, c.effective.Values["aigora_url"])
 	if err != nil {
 		return err
 	}

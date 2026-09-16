@@ -25,7 +25,7 @@ func routeTransfer(c *cli, cmd *cobra.Command) {
 		if name == "mkdir" || name == "changes" || name == "purge" {
 			return fmt.Errorf("remote_unsupported")
 		}
-		a, err := remoteclient.New(endpoint, c.effective.Values["remote_token_file"], c.effective.Values["local_root"])
+		a, err := remoteclient.NewWithAigora(endpoint, c.effective.Values["remote_token_file"], c.effective.Values["local_root"], c.effective.Values["aigora_url"])
 		if err != nil {
 			return err
 		}

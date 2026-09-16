@@ -157,7 +157,7 @@ func (r *OneDrive) graph(ctx context.Context, p Space, path string, out any) err
 }
 func (r *OneDrive) item(ctx context.Context, p Space, id string, access bool) (driveItem, error) {
 	var i driveItem
-	fields := "id,name,size,eTag,parentReference,file,video"
+	fields := "id,name,size,eTag,parentReference,file,video,folder"
 	if access {
 		fields += ",@microsoft.graph.downloadUrl"
 	}
@@ -209,7 +209,7 @@ func (r *OneDrive) List(ctx context.Context, p Space, dir string) ([]File, error
 	if err != nil {
 		return nil, err
 	}
-	path := "items/" + url.PathEscape(folderID) + "/children?$top=200&$select=id,name,size,eTag,parentReference,file,video"
+	path := "items/" + url.PathEscape(folderID) + "/children?$top=200&$select=id,name,size,eTag,parentReference,file,video,folder"
 	out := []File{}
 	for page := 0; page < 100; page++ {
 		var data struct {
@@ -220,6 +220,10 @@ func (r *OneDrive) List(ctx context.Context, p Space, dir string) ([]File, error
 			return nil, err
 		}
 		for _, i := range data.Items {
+			if i.Folder != nil && i.Parent.ID == folderID && i.Parent.Drive == p.DriveID {
+				out = append(out, File{Directory: true, Name: i.Name, Dir: dir})
+				continue
+			}
 			if i.File != nil && i.Parent.ID == folderID && i.Parent.Drive == p.DriveID {
 				out = append(out, i.file(p))
 			}

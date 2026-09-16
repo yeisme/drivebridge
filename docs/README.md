@@ -10,5 +10,8 @@ active change：`drivebridge-seamless-onedrive-auth-v1`（device-code 登录+自
 - [首次真实使用 runbook](activation-local.md)
 - [本地验证记录](verification.md)
 - [远程模式验证](remote-verification.md)
+- [创作素材本机中转（设计阶段）](creative-resource-relay.md)：同机与跨机器引用导入、客户端能力判断和回存恢复；新增闭环尚未实现或验证。
 
 用量、图表、扫描与安全审计见[使用说明](insights-audit.md)。
+
+- [本机文件、预览与远程交接](local-file-experience.md)

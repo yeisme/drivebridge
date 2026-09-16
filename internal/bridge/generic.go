@@ -69,6 +69,10 @@ func (g *Generic) List(ctx context.Context, p Space, dir string) ([]File, error)
 	}
 	out := []File{}
 	for _, entry := range entries {
+		if _, ok := entry.(fs.Directory); ok {
+			out = append(out, File{Directory: true, Name: path.Base(entry.Remote()), Dir: dir})
+			continue
+		}
 		o, ok := entry.(fs.Object)
 		if !ok || o.Size() <= 0 || o.Size() > p.MaxBytes {
 			continue

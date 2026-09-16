@@ -26,7 +26,7 @@ func newViewCommand(c *cli) *cobra.Command {
 	var web, launchFile string
 	var port int
 	var noOpen bool
-	cmd := &cobra.Command{Use: "view", Short: "Open the loopback-only resource and audit view; files remain read-only.", RunE: func(cmd *cobra.Command, _ []string) error {
+	cmd := &cobra.Command{Use: "view", Short: "Open the loopback-only resource and audit view; file actions use the enabled private owner.", RunE: func(cmd *cobra.Command, _ []string) error {
 		if c.mode.JSON || c.mode.Agent || c.mode.Events || c.mode.Explain {
 			return fmt.Errorf("view_owns_process_output")
 		}
@@ -141,7 +141,7 @@ func viewerHandler(c *cli, store *insights.Store, web, origin, bootstrap, sessio
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "no-referrer")
-		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; object-src 'none'")
+		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; frame-ancestors 'none'; base-uri 'none'; object-src 'none'")
 		if r.Host != expected || r.Header.Get("Origin") != "" && r.Header.Get("Origin") != origin {
 			fail(w, "origin_rejected", 403)
 			return
@@ -252,6 +252,9 @@ func viewerHandler(c *cli, store *insights.Store, web, origin, bootstrap, sessio
 				return
 			}
 			respond(w, out)
+			return
+		}
+		if c.proxyLocalFiles(w, r) {
 			return
 		}
 		if r.Method != "GET" {

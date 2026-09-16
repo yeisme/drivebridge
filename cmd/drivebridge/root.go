@@ -65,6 +65,7 @@ func (c *cli) resolve(cmd *cobra.Command) (config.File, config.Effective, error)
 
 // flagNames maps configuration keys to their command-line flag names.
 var flagNames = map[string]string{
+	"aigora_url":        "aigora-url",
 	"state":             "state",
 	"rclone_config":     "rclone-config",
 	"scaena_url":        "scaena-url",

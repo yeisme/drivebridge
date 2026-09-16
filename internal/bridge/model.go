@@ -44,6 +44,7 @@ func (p Space) Kind() string {
 }
 
 type File struct {
+	Directory bool `json:"is_directory,omitempty" gorm:"-"`
 	Provenance
 	ObservedAt time.Time  `json:"observed_at,omitempty"`
 	Ref        string     `json:"ref" gorm:"primaryKey"`
@@ -110,7 +111,13 @@ type Provider interface {
 	Delete(context.Context, Space, File) error
 }
 type Service struct {
+	previewLocks  [32]sync.Mutex
+	previewSlots  chan struct{}
 	state         string
+	shareOnce     sync.Once
+	shareCtx      context.Context
+	shareCancel   context.CancelFunc
+	shareWG       sync.WaitGroup
 	Insights      *insights.Store
 	insightOnce   sync.Once
 	insightCancel context.CancelFunc
@@ -170,9 +177,19 @@ func New(state string, provider Provider, enabled bool) (*Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Service{state: state, DB: db, Insights: store, Provider: provider, Generic: NewGeneric(), Enabled: enabled, jobs: map[string]context.CancelFunc{}}, nil
+	if err := db.AutoMigrate(&ShareCopy{}, &ShareReplica{}); err != nil {
+		sqlDB.Close()
+		return nil, err
+	}
+	shareCtx, shareCancel := context.WithCancel(context.Background())
+	db.Model(&ShareCopy{}).Where("status = ?", "syncing").Update("status", "queued")
+	return &Service{previewSlots: make(chan struct{}, 2), state: state, shareCtx: shareCtx, shareCancel: shareCancel, DB: db, Insights: store, Provider: provider, Generic: NewGeneric(), Enabled: enabled, jobs: map[string]context.CancelFunc{}}, nil
 }
 func (s *Service) Close() {
+	if s.shareCancel != nil {
+		s.shareCancel()
+	}
+	s.shareWG.Wait()
 	if s.insightCancel != nil {
 		s.insightCancel()
 	}
@@ -325,6 +342,9 @@ func (s *Service) remember(p Space, f File) (File, error) {
 	return f, nil
 }
 func (s *Service) List(ctx context.Context, space, dir string) ([]File, error) {
+	return s.listEntries(ctx, space, dir, false)
+}
+func (s *Service) listEntries(ctx context.Context, space, dir string, directories bool) ([]File, error) {
 	if !s.Enabled {
 		return nil, errors.New("disabled")
 	}
@@ -341,6 +361,14 @@ func (s *Service) List(ctx context.Context, space, dir string) ([]File, error) {
 	}
 	out := []File{}
 	for _, f := range items {
+		if f.Directory {
+			if directories {
+				f.Dir = dir
+				f.SpaceID = space
+				out = append(out, f)
+			}
+			continue
+		}
 		if f.Size <= 0 || f.Size > p.MaxBytes {
 			continue
 		}

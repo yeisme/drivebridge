@@ -54,6 +54,7 @@ func newRootCommand(c *cli) *cobra.Command {
 	}
 	c.root = root
 	pf := root.PersistentFlags()
+	pf.String("aigora-url", "", "Aigora origin for unified remote authentication")
 	pf.StringVar(&c.configPath, "config", "", "Explicit configuration file (discovery: this flag, DRIVEBRIDGE_CONFIG, ./drivebridge.*, user config dir)")
 	pf.StringVar(&c.flagState, "state", "", "Private local state directory")
 	pf.StringVar(&c.flagRclone, "rclone-config", "", "Existing rclone configuration; credentials are never printed")

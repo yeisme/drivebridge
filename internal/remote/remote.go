@@ -21,8 +21,9 @@ import (
 )
 
 type Adapter struct {
-	Client *sdk.Client
-	Root   *os.Root
+	Client          *sdk.Client
+	Root            *os.Root
+	unifiedIdentity bool
 }
 
 // UploadResult is the typed upload receipt: callers that need synchronous
@@ -33,6 +34,12 @@ type UploadResult struct {
 }
 
 func New(endpoint, credentialFile, localRoot string) (*Adapter, error) {
+	return NewWithAigora(endpoint, credentialFile, localRoot, "")
+}
+
+// NewWithAigora retains local-only credential storage and exchanges the key
+// centrally when aigoraOrigin is explicitly configured.
+func NewWithAigora(endpoint, credentialFile, localRoot, aigoraOrigin string) (*Adapter, error) {
 	i, e := os.Lstat(credentialFile)
 	if e != nil || !i.Mode().IsRegular() || i.Mode().Perm()&0077 != 0 {
 		return nil, errors.New("private_token_file_required")
@@ -41,7 +48,12 @@ func New(endpoint, credentialFile, localRoot string) (*Adapter, error) {
 	if e != nil || len(b) > 8192 {
 		return nil, errors.New("credential_unavailable")
 	}
-	client, e := sdk.New(endpoint, string(bytesTrim(b)))
+	var client *sdk.Client
+	if aigoraOrigin != "" {
+		client, e = sdk.NewAigora(endpoint, aigoraOrigin, string(bytesTrim(b)))
+	} else {
+		client, e = sdk.New(endpoint, string(bytesTrim(b)))
+	}
 	if e != nil {
 		return nil, e
 	}
@@ -52,7 +64,7 @@ func New(endpoint, credentialFile, localRoot string) (*Adapter, error) {
 	if e != nil {
 		return nil, errors.New("local_root_unavailable")
 	}
-	return &Adapter{client, root}, nil
+	return &Adapter{Client: client, Root: root, unifiedIdentity: aigoraOrigin != ""}, nil
 }
 func bytesTrim(b []byte) []byte {
 	for len(b) > 0 && (b[len(b)-1] == '\n' || b[len(b)-1] == '\r' || b[len(b)-1] == ' ') {
@@ -65,6 +77,11 @@ func (a *Adapter) Call(ctx context.Context, name string, args map[string]any) (a
 	text := func(k string) string { v, _ := args[k].(string); return v }
 	if args == nil {
 		args = map[string]any{}
+	}
+	if text("tenant_context") != "" || text("space_context") != "" {
+		scoped := *a
+		scoped.Client = a.Client.Scoped(text("tenant_context"), text("space_context"))
+		a = &scoped
 	}
 	if text("ref") == "" && text("file_ref") != "" {
 		args["ref"] = text("file_ref")
@@ -232,6 +249,7 @@ func (a *Adapter) MCP() *server.MCPServer {
 		if name == "download" {
 			opts = append(opts, mcp.WithString("version_id"))
 		}
+		opts = append(opts, mcp.WithString("tenant_context", mcp.Description("Optional tenant ID; membership is verified by the service.")), mcp.WithString("space_context", mcp.Description("Optional selected space. Context cannot widen Agent permissions; approval_required requires human authorization in the service Web.")))
 		tool := mcp.NewTool(name, opts...)
 		tools = append(tools, tool)
 		srv.AddTool(tool, func(ctx context.Context, q mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -264,5 +282,40 @@ func (a *Adapter) MCP() *server.MCPServer {
 		b, _ := json.Marshal(map[string]any{"tools": tools, "service": out, "local_file_access": true, "unsupported_actions": []string{"mkdir", "changes", "purge"}, "after_semantics": "file_updated_at", "list_path_semantics": "recursive_prefix", "provenance": "caller_declared_labels"})
 		return []mcp.ResourceContents{mcp.TextResourceContents{URI: q.Params.URI, MIMEType: "application/json", Text: string(b)}}, nil
 	})
+
+	srv.AddResource(mcp.NewResource("drivebridge://service-access", "Authentication and operation recovery", mcp.WithMIMEType("application/json")), func(ctx context.Context, q mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+		body, err := json.Marshal(a.accessContract())
+		if err != nil {
+			return nil, err
+		}
+		return []mcp.ResourceContents{mcp.TextResourceContents{URI: q.Params.URI, MIMEType: "application/json", Text: string(body)}}, nil
+	})
 	return srv
+}
+
+// accessContract is available even when the center is unavailable. It contains
+// recovery instructions, never credentials or a claim that a write is enabled.
+func (a *Adapter) accessContract() map[string]any {
+	mode := "domain_credential"
+	if a.unifiedIdentity {
+		mode = "aigora_key_exchange"
+	}
+	return map[string]any{
+		"schema_version": "1.0", "mode": mode, "client_cli_required": false,
+		"parameters":             "Read tools/list inputSchema; capabilities reports current owner support.",
+		"configuration_location": "MCP adapter host; the connected client does not need a product CLI.",
+		"local_path_owner":       "MCP adapter host allowed root, not the connected client's filesystem.",
+		"credential_policy":      "In aigora_key_exchange mode the configured key goes only to Aigora; the file service receives a short-lived audience-bound credential. Legacy mode uses the explicitly configured domain credential and is rejected after organization cutover.",
+		"transfer_owner":         "DriveBridge HTTP API; MCP is the control surface.",
+		"retry_policy":           "Query operation_get with the original operation_id after an uncertain result; retain idempotency_key. Never create a replacement operation automatically.",
+		"billing":                "SaaS business quotas or an explicitly configured MCP product; never model tokens. Tool discovery does not grant entitlement or data permission.",
+		"recovery": map[string]string{
+			"identity_unavailable":       "No new writes or paid admission. Only permitted reads using a still-valid short-lived credential may continue.",
+			"unified_login_required":     "The organization has cut over; the adapter host must configure the Aigora exchange. Do not retry legacy credentials.",
+			"identity_mapping_required":  "A deployment operator must map the exact stable subject and organization. Never merge by email.",
+			"service_admission_required": "This hosted write path is not enabled. Stop; do not switch credentials or direct-provider modes.",
+			"approval_required":          "Request the owner's domain authorization; an administrator role alone grants no write authority.",
+			"confirmation_required":      "Obtain confirmation for the exact payer, price and operation. Confirmation cannot override quota.",
+		},
+	}
 }
