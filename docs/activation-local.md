@@ -68,6 +68,8 @@ region = ap-guangzhou
 
 rclone 配置只能经 `--rclone-config` / `rclone_config` 键进入（rclone 作为库不读 `RCLONE_CONFIG` 环境变量）；upload/ls/find/trash/restore/download 全链路对 COS 验证可用，证据见 `temp/integration-test-runs/cos-generic-e2e-20260914.md`。
 
+**桶内前缀分工（2026-09-16 起）**：`drivebridge/`、`drivebridge-e2e/`、`tenants/` 是 DriveBridge 自管前缀；`temp-share/` 是专门划出的临时分享区，供 Eikona（object target `cos-temp-share`）、Scaena、Sonora 直写 TTL 受限的分享副本。DriveBridge 的空间扫描与 insights 不应把 `temp-share/` 纳入自管空间；该前缀的对象由写入方各自负责清理（Eikona 用 `artifacts revoke`，其余用 `rclone delete`）。
+
 ## 4. 预检（新命令）
 
 ```bash
