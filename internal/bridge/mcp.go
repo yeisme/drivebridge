@@ -23,6 +23,9 @@ func tool(name, description string, required ...string) mcp.Tool {
 }
 func (s *Service) Tools() []mcp.Tool {
 	tools := []mcp.Tool{
+		tool("relay_targets", "List owner-configured relay target IDs, projects and disabled state; never probes endpoints or grants authority."),
+		tool("relay_start", "Relay a pinned image, video or audio file to a preconfigured owner input (eikona, scaena or sonora) without generation; poll operation_get.", "file_ref", "target_id", "idempotency_key"),
+		tool("relay_cancel", "Cancel the original local relay and target input; retain completed assets.", "operation_id"),
 		tool("capabilities", "Discover allowed spaces, exact tool schemas, transfer limits and recovery."),
 		tool("list", "List files in the space root or a workspace subdirectory.", "space_id"),
 		tool("mkdir", "Create a workspace directory (idempotent); existing files with the name are a conflict.", "space_id", "path"),
@@ -77,7 +80,7 @@ func (s *Service) Capabilities() any {
 	for _, p := range s.Spaces() {
 		kinds[p.Kind()] = true
 	}
-	return map[string]any{"provenance": "caller_declared_labels", "search_scope": "observed_index_not_full_remote", "after_semantics": "first_observed_at", "history": "pinned_identity_not_snapshot", "concurrency": "single_process_per_state", "spec_version": "0.1", "enabled": s.Enabled, "spaces": s.Spaces(), "tools": s.Tools(), "backend_capabilities": map[string]any{"onedrive": map[string]any{"transfer": true, "direct_url": true, "reference_handoff": true}, "generic": map[string]any{"transfer": true, "direct_url": false, "reference_handoff": false}}, "configured_backend_kinds": kinds, "secure_handoff": s.Enabled && s.Handoff, "output_adapter_enabled": s.Enabled && s.Output != nil, "authorization_status": "not_probed", "storage_status": "not_probed", "provider_consumption_status": "not_verified", "handoff_transport": "owner_unix_socket", "download_url_ttl": "unknown", "cli_required_on_mcp_client": false, "recovery": "operation_get_then_resume", "scope": "local_single_user", "generation_owner": "scaena"}
+	return map[string]any{"relay": s.RelayDiscovery(), "provenance": "caller_declared_labels", "search_scope": "observed_index_not_full_remote", "after_semantics": "first_observed_at", "history": "pinned_identity_not_snapshot", "concurrency": "single_process_per_state", "spec_version": "0.1", "enabled": s.Enabled, "spaces": s.Spaces(), "tools": s.Tools(), "backend_capabilities": map[string]any{"onedrive": map[string]any{"transfer": true, "direct_url": true, "reference_handoff": true}, "generic": map[string]any{"transfer": true, "direct_url": false, "reference_handoff": false}}, "configured_backend_kinds": kinds, "secure_handoff": s.Enabled && s.Handoff, "output_adapter_enabled": s.Enabled && s.Output != nil, "authorization_status": "not_probed", "storage_status": "not_probed", "provider_consumption_status": "not_verified", "handoff_transport": "owner_unix_socket", "download_url_ttl": "unknown", "cli_required_on_mcp_client": false, "recovery": "operation_get_then_resume", "scope": "local_single_user", "generation_owner": "scaena"}
 }
 func (s *Service) Call(ctx context.Context, name string, args map[string]any) (any, error) {
 	text := func(k string) string { v, _ := args[k].(string); return v }
@@ -94,6 +97,12 @@ func (s *Service) Call(ctx context.Context, name string, args map[string]any) (a
 		return s.Usage(strings.TrimPrefix(name, "usage_"), q)
 	}
 	switch name {
+	case "relay_targets":
+		return s.RelayDiscovery(), nil
+	case "relay_start":
+		return s.StartRelay(ctx, text("file_ref"), text("target_id"), text("idempotency_key"))
+	case "relay_cancel":
+		return s.CancelRelay(ctx, text("operation_id"))
 	case "inbox":
 		var ops []Operation
 		if e := s.DB.Where("updated >= ?", time.Now().UTC().Add(-30*24*time.Hour)).Order("updated DESC").Limit(200).Find(&ops).Error; e != nil {

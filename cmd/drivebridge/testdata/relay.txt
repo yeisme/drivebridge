@@ -1,0 +1,51 @@
+# Relay CLI plumbing: registration validation, safe listings and typed
+# failures stay local; no owner endpoint is probed by any command here.
+mkdir local
+exec drivebridge space-add --state $WORK/state --space creative --remote one --drive-id drive --root-id root --local-root $WORK/local --max-bytes 1048576
+stdout 'Space configured'
+
+# target-set names every missing binding element before reading credentials.
+! exec drivebridge relay target-set images --state $WORK/state
+stderr 'command_failed'
+
+exec sh -c 'printf fixture-owner-key > key'
+chmod 0600 key
+
+# Unknown owners and non-loopback plain-http origins are rejected locally.
+! exec drivebridge relay target-set images --state $WORK/state --space creative --project p --connection laptop --url http://storage.example.com --key-file $WORK/key --owner eikona
+stderr 'invalid_relay_target'
+! exec drivebridge relay target-set tracks --state $WORK/state --space creative --project p --connection laptop --url https://music.example.com --key-file $WORK/key --owner ordo
+stderr 'invalid_relay_target'
+
+# A key file readable by others is refused.
+exec sh -c 'printf fixture-owner-key > open.key'
+chmod 0644 open.key
+! exec drivebridge relay target-set images --state $WORK/state --space creative --project p --connection laptop --url https://images.example.com --key-file $WORK/open.key
+stderr 'private_token_file_required'
+
+# Loopback http and https origins register without probing; listings show
+# only safe binding facts.
+exec drivebridge relay target-set images --state $WORK/state --space creative --project p --connection laptop --url http://127.0.0.1:8443 --key-file $WORK/key --owner eikona
+stdout 'Relay target registered'
+exec drivebridge relay target-set shots --state $WORK/state --space creative --project p --connection laptop --url https://shots.example.com --key-file $WORK/key --owner scaena
+stdout 'Relay target registered'
+exec drivebridge relay targets --state $WORK/state --json
+stdout '"id":"images"'
+stdout '"owner":"scaena"'
+! stderr .
+
+# The same id with a different binding stays a conflict.
+! exec drivebridge relay target-set images --state $WORK/state --space creative --project other --connection laptop --url https://images.example.com --key-file $WORK/key --owner sonora
+stderr 'relay_target_conflict'
+
+# Start and cancel surface typed codes and exit non-zero for unknown ids.
+! exec drivebridge relay start drivebridge://file/missing --target images --idempotency-key one --state $WORK/state
+stderr 'reference_not_found'
+! exec drivebridge relay start drivebridge://file/missing --target nowhere --idempotency-key one --state $WORK/state
+stderr 'relay_target_unavailable'
+! exec drivebridge relay cancel does-not-exist --state $WORK/state
+stderr 'operation_not_found'
+
+# Disabling removes a target from use; the row stays inspectable.
+exec drivebridge relay target-disable images --state $WORK/state --json
+stdout '"disabled":true'

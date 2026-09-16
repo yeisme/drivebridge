@@ -63,6 +63,7 @@ func newRootCommand(c *cli) *cobra.Command {
 	pf.BoolVar(&c.mode.Explain, "explain", false, "Explain the local result")
 
 	for name, command := range map[string]*cobra.Command{
+		"relay":        newRelayCommand(c),
 		"view":         newViewCommand(c),
 		"usage":        newUsageCommand(c),
 		"audit":        newAuditCommand(c),

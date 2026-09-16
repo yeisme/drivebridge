@@ -73,6 +73,12 @@ type Event struct {
 	At      time.Time `json:"at"`
 }
 type Operation struct {
+	RelayTargetID string `json:"relay_target_id,omitempty"`
+	ImportID      string `json:"import_id,omitempty"`
+	InputID       string `json:"input_request_id,omitempty"`
+	ResultRef     string `json:"input_ref,omitempty"`
+	SourceVersion string `json:"source_version,omitempty"`
+	ContentSHA256 string `json:"content_sha256,omitempty"`
 	Provenance
 	SourceRef   string    `json:"source_ref,omitempty"`
 	ID          string    `json:"id" gorm:"primaryKey"`
@@ -104,6 +110,7 @@ type Provider interface {
 	Delete(context.Context, Space, File) error
 }
 type Service struct {
+	state         string
 	Insights      *insights.Store
 	insightOnce   sync.Once
 	insightCancel context.CancelFunc
@@ -146,7 +153,7 @@ func New(state string, provider Provider, enabled bool) (*Service, error) {
 		return nil, err
 	}
 	sqlDB.SetMaxOpenConns(1)
-	if err = db.AutoMigrate(&Space{}, &File{}, &Operation{}, &Event{}); err != nil {
+	if err = db.AutoMigrate(&Space{}, &File{}, &Operation{}, &Event{}, &RelayTarget{}); err != nil {
 		return nil, errors.New("state_unavailable")
 	}
 	if err = os.Chmod(filepath.Join(state, "state.sqlite"), 0600); err != nil {
@@ -163,7 +170,7 @@ func New(state string, provider Provider, enabled bool) (*Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Service{DB: db, Insights: store, Provider: provider, Generic: NewGeneric(), Enabled: enabled, jobs: map[string]context.CancelFunc{}}, nil
+	return &Service{state: state, DB: db, Insights: store, Provider: provider, Generic: NewGeneric(), Enabled: enabled, jobs: map[string]context.CancelFunc{}}, nil
 }
 func (s *Service) Close() {
 	if s.insightCancel != nil {
