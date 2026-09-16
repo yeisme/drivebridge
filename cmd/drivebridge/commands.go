@@ -596,12 +596,28 @@ func newTransferCommands(c *cli) []*cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			space, _ := cmd.Flags().GetString("space")
 			since, _ := cmd.Flags().GetUint64("since")
-			s, release, err := c.openService(true)
-			if err != nil {
-				return err
-			}
-			defer release()
-			events, cursor, err := s.Changes(space, since)
+			// The events feed is a database projection: serve it from the
+			// read-only snapshot while a registered MCP client holds the
+			// state, with cursor semantics preserved.
+			readOnly := false
+			events, cursor, err := func() ([]bridge.Event, uint64, error) {
+				s, release, err := c.openService(true)
+				if err != nil {
+					if isStateLocked(err) {
+						db, e := openReadonlyModel(c.effective.Values["state"])
+						if e != nil {
+							return nil, 0, err
+						}
+						sqlDB, _ := db.DB()
+						defer sqlDB.Close()
+						readOnly = true
+						return snapshotChanges(db, space, since)
+					}
+					return nil, 0, err
+				}
+				defer release()
+				return s.Changes(space, since)
+			}()
 			if err != nil {
 				return err
 			}
@@ -610,7 +626,13 @@ func newTransferCommands(c *cli) []*cobra.Command {
 					fmt.Printf("%d %s %s %s\n", ev.ID, ev.Kind, ev.Ref, ev.Detail)
 				}
 			}
-			return c.mode.write("changes", "success", fmt.Sprintf("%d event(s); cursor=%d.", len(events), cursor), map[string]any{"events": events, "cursor": cursor})
+			summary := fmt.Sprintf("%d event(s); cursor=%d.", len(events), cursor)
+			data := map[string]any{"events": events, "cursor": cursor}
+			if readOnly {
+				summary = fmt.Sprintf("%d event(s); cursor=%d (read-only snapshot; an MCP client holds the state).", len(events), cursor)
+				data["read_only"] = true
+			}
+			return c.mode.write("changes", "success", summary, data)
 		},
 	}
 	feed.Flags().String("space", "", "Space identifier")

@@ -143,6 +143,46 @@ func TestFindFallsBackToIndexSnapshotUnderLock(t *testing.T) {
 	}
 }
 
+func TestChangesFallsBackToSnapshotUnderLock(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Chmod(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	svc, err := bridge.New(dir, bridge.NewOneDrive(), true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.DB.Create(&bridge.Event{SpaceID: "sp", Kind: "file_remembered", Ref: "drivebridge://file/9/version/9"}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "rclone.conf"), nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	svc.Close()
+	holdLock(t, dir)
+	commands := newTransferCommands(snapshotCLI(t, dir, outputMode{JSON: true}))
+	cmd := commands[0]
+	for _, candidate := range commands {
+		if candidate.Name() == "changes" {
+			cmd = candidate
+		}
+	}
+	if err := cmd.Flags().Set("space", "sp"); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Flags().Set("since", "0"); err != nil {
+		t.Fatal(err)
+	}
+	out, _ := capture(t, func() {
+		if err := cmd.RunE(cmd, nil); err != nil {
+			t.Errorf("changes under lock: %v", err)
+		}
+	})
+	if !strings.Contains(out, "\"cursor\":1") || !strings.Contains(out, "\"read_only\":true") {
+		t.Fatalf("changes snapshot must serve the feed cursor: %s", out)
+	}
+}
+
 func TestMutatingCommandsReportTypedLockCode(t *testing.T) {
 	dir := seedState(t)
 	holdLock(t, dir)

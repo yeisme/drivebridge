@@ -105,7 +105,7 @@ CLI SHALL 支持可选配置文件与命令树：发现序为显式路径、环�
 - **THEN** 新文件落为 config.yaml（与 config init 一致）；历史 config.json 仍按发现序读取
 
 ### Requirement: Workspace directories and transfer CLI
-工作区 SHALL 支持目录组织与直连 CLI：目录参数限定在空间钉定根内，传输与组织复用既有操作/恢复/引用合同；CLI 是用户本人终端的等价入口。同步等待传输的 CLI 命令 SHALL 在 `--events` 下流式输出 progress 事件（seq 单调、节流），人读模式在 stderr 刷新单行进度；`--agent` 投影 SHALL 将嵌套 map 扁平化一层并以计数表达切片。索引检索（find）SHALL 在排他进程锁被持有时回退只读快照并以 `read_only` 标注，快照命中保持 advisory。
+工作区 SHALL 支持目录组织与直连 CLI：目录参数限定在空间钉定根内，传输与组织复用既有操作/恢复/引用合同；CLI 是用户本人终端的等价入口。同步等待传输的 CLI 命令 SHALL 在 `--events` 下流式输出 progress 事件（seq 单调、节流），人读模式在 stderr 刷新单行进度；`--agent` 投影 SHALL 将嵌套 map 扁平化一层并以计数表达切片。索引检索（find）与事件流（changes）SHALL 在排他进程锁被持有时回退只读快照并以 `read_only` 标注，快照命中保持 advisory。
 
 #### Scenario: Organize and transfer by directory
 - **WHEN** agent 或用户在空间内创建目录并指定目录上传、按目录列出
@@ -134,6 +134,10 @@ CLI SHALL 支持可选配置文件与命令树：发现序为显式路径、环�
 #### Scenario: Index search survives the exclusive lock
 - **WHEN** MCP 客户端持有进程锁时执行 find
 - **THEN** 经只读快照按同语义过滤返回并以 read_only 标注；摘要明示命中仍需 stat 验证
+
+#### Scenario: Event feed survives the exclusive lock
+- **WHEN** MCP 客户端持有进程锁时执行 changes
+- **THEN** 经只读快照按同游标语义返回（0=当前位置、ahead 拒绝）并以 read_only 标注
 
 ### Requirement: Soft delete and restore
 软删除 SHALL 限制在空间内且可恢复：trash 移入空间内隔离目录并保留引用可查；restore 移回原位且同名冲突加时间戳后缀不覆盖；永久删除不进入 Agent 面。

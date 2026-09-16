@@ -136,3 +136,24 @@ func isStateLocked(err error) bool {
 	var f *cliFailure
 	return errors.As(err, &f) && f.code == "state_locked"
 }
+
+// snapshotChanges mirrors Service.Changes over the read-only snapshot: the
+// events feed is a database projection, so cursor semantics (zero returns
+// the position, ahead is refused) stay identical while the lock is held.
+func snapshotChanges(db *gorm.DB, space string, since uint64) ([]bridge.Event, uint64, error) {
+	var head struct{ Max uint64 }
+	if err := db.Model(&bridge.Event{}).Select("COALESCE(MAX(id), 0) AS max").Where("space_id = ?", space).Scan(&head).Error; err != nil {
+		return nil, 0, fail("state_unavailable", "The events feed could not be read.")
+	}
+	if since == 0 {
+		return []bridge.Event{}, head.Max, nil
+	}
+	if since > head.Max {
+		return nil, 0, fail("cursor_ahead", "The requested cursor is ahead of the feed; re-sync from the current position.")
+	}
+	var events []bridge.Event
+	if err := db.Where("space_id = ? AND id > ?", space, since).Order("id").Find(&events).Error; err != nil {
+		return nil, 0, fail("state_unavailable", "The events feed could not be read.")
+	}
+	return events, head.Max, nil
+}
