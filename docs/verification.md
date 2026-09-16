@@ -2,6 +2,18 @@
 
 本轮实现为 pre-1.0 本地候选；没有真实账号操作、付费生成、部署或发布。
 
+## 远程个人空间真机闭环（2026-09-16）
+
+配合 backend-server/drivebridge 首个真实内网部署（key-only + Caddy 内部 CA + 真 COS），本机适配器以限定 Agent token（read,write、空间级、30 天）完成三场景真实冒烟：
+
+- 文档报告：upload 报告 → 固定 `drivebridge://<instance>/file/.../version/...` 引用 → 检索命中。
+- 开发产物：确定性 tar.gz 上传 → 内容派生幂等键重放复用原操作 → 下载字节一致。
+- 创作素材：小 PNG 上传得固定引用（参考交接能力未启用，保持诚实关闭）。
+- 指标：首次往返 1.6s（目标 10 分钟内）；脚本化后人工介入 0 次。
+- 注册：`install --client claude-code`（user scope）与 `--client codex`（~/.codex/config.toml），注册的完整 argv 握手复核 14 工具可用；内部 CA 已在系统信任库，Go 适配器无需 SSL_CERT_FILE。
+- 锐角记录：tar.gz 时间戳导致同键异纹 → `idempotency_conflict`（符合设计，内容派生幂等键规避）；既有远端路径 + 新幂等键 → `name_conflict`（不覆盖既有文件，符合设计）；下载目标目录需预先存在（`local_write_failed`）。
+- 密钥与内网地址不落仓库；分发文件与 CA 证书在部署机私有目录。
+
 - `temp/integration-test-runs/20260911T041805Z-5bc71cf5/`：Go/race、CLI、Graph/OAuth、路径与身份隔离、版本、取消、上传回执丢失恢复、MP4 校验、成品回存。
 - `temp/integration-test-runs/20260911T041812Z-4cc6fa40/`：真实 stdio tools/list、能力资源 schema 一致性与默认关闭。
 - `temp/integration-test-runs/20260911T041814Z-5d28ffe4/`：go vet。
