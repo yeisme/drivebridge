@@ -16,7 +16,7 @@
 4. 目标项目执行原生媒体校验，完成后返回自己的输入/资产引用和来源关系。适配器只记录传输关联，不替代领域采纳或执行生成。
 5. 网络中断或结果未知时先查询原输入与原传输；已完成就复用原结果，未完成则按实际通道能力续传或重传同一内容。不能承诺所有 rclone 后端都能断点续传。
 
-本地[实施设计](../openspec/changes/drivebridge-creative-relay-v1/design.md)和[任务](../openspec/changes/drivebridge-creative-relay-v1/tasks.md)已建立，明确中转操作、持久关联和验收入口。中转复用现有 Operation、来源空间和恢复入口，不新增调度系统；owner 差异只体现在小型适配表（完成态、引用前缀、媒体预检），领域校验和采纳仍归各 owner 原输入服务：Scaena requires_finalize、Eikona unreviewed、Sonora requires_permission 保持原义。
+本地[实施设计](../openspec/changes/archive/2026-09-17-drivebridge-creative-relay-v1/design.md)和[任务](../openspec/changes/archive/2026-09-17-drivebridge-creative-relay-v1/tasks.md)已建立，明确中转操作、持久关联和验收入口。中转复用现有 Operation、来源空间和恢复入口，不新增调度系统；owner 差异只体现在小型适配表（完成态、引用前缀、媒体预检），领域校验和采纳仍归各 owner 原输入服务：Scaena requires_finalize、Eikona unreviewed、Sonora requires_permission 保持原义。
 
 ## 无本机 CLI 的能力判断
 
@@ -42,7 +42,7 @@
 
 保留旧本机和远程 URI、原 Scaena socket 合同及原传输命令；新增入口默认关闭，关闭后保留已完成副本与恢复记录。本机 state 单进程占用约束继续适用，不在本轮暗中引入新 daemon 或通用调度系统。
 
-跨项目背景见根工作区 [设计](../../../openspec/changes/drivebridge-creative-resource-reuse-v1/design.md)、[场景矩阵](../../../openspec/changes/drivebridge-creative-resource-reuse-v1/scenarios.md) 和 [owner handoff](../../../openspec/changes/drivebridge-creative-resource-reuse-v1/handoffs.md)；独立 checkout 的实施和验收只以本项目本地 OpenSpec 为任务真源。
+跨项目背景见根工作区 [设计](../../../openspec/changes/archive/2026-09-17-drivebridge-creative-resource-reuse-v1/design.md)、[场景矩阵](../../../openspec/changes/archive/2026-09-17-drivebridge-creative-resource-reuse-v1/scenarios.md) 和 [owner handoff](../../../openspec/changes/archive/2026-09-17-drivebridge-creative-resource-reuse-v1/handoffs.md)；独立 checkout 的实施和验收只以本项目本地 OpenSpec 为任务真源。
 
 ## 当前使用入口（Eikona/Scaena/Sonora）
 
