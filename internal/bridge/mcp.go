@@ -45,6 +45,7 @@ func (s *Service) Tools() []mcp.Tool {
 		tool("cancel", "Cancel a transfer; completed files are retained.", "operation_id"),
 		tool("save_output", "Save an existing succeeded/imported Scaena task artifact to OneDrive. Never submits generation. Poll operation_get.", "space_id", "submission_ref", "idempotency_key"),
 		tool("prepare_reference", "Verify a file and report handoff readiness. No URL is returned. The authorized local owner acquires access just before submission.", "file_ref"),
+		tool("mount_status", "Read the CLI-owned mount projection (listen, mode, space_ids, alive); agents cannot start or stop mounts."),
 	}
 	for i := range tools {
 		fields := []string{}
@@ -83,7 +84,7 @@ func (s *Service) Capabilities() any {
 	for _, p := range s.Spaces() {
 		kinds[p.Kind()] = true
 	}
-	return map[string]any{"relay": s.RelayDiscovery(), "provenance": "caller_declared_labels", "search_scope": "observed_index_not_full_remote", "after_semantics": "first_observed_at", "history": "pinned_identity_not_snapshot", "concurrency": "single_process_per_state", "spec_version": "0.1", "enabled": s.Enabled, "spaces": s.Spaces(), "tools": s.Tools(), "backend_capabilities": map[string]any{"onedrive": map[string]any{"transfer": true, "direct_url": true, "reference_handoff": true}, "generic": map[string]any{"transfer": true, "direct_url": false, "reference_handoff": false}}, "configured_backend_kinds": kinds, "secure_handoff": s.Enabled && s.Handoff, "output_adapter_enabled": s.Enabled && s.Output != nil, "authorization_status": "not_probed", "storage_status": "not_probed", "provider_consumption_status": "not_verified", "handoff_transport": "owner_unix_socket", "download_url_ttl": "unknown", "cli_required_on_mcp_client": false, "recovery": "operation_get_then_resume", "scope": "local_single_user", "generation_owner": "scaena"}
+	return map[string]any{"relay": s.RelayDiscovery(), "storage_kinds": StorageKinds(), "storage_add": map[string]any{"add": "drivebridge storage add --kind <kind> …", "probe": "drivebridge storage probe --remote <remote> [--remote-path <path>]", "guide": "drivebridge storage kinds", "note": "generic kinds are transfer-only; OneDrive onboards via auth + setup"}, "provenance": "caller_declared_labels", "search_scope": "observed_index_not_full_remote", "after_semantics": "first_observed_at", "history": "pinned_identity_not_snapshot", "concurrency": "single_process_per_state", "spec_version": "0.1", "enabled": s.Enabled, "spaces": s.Spaces(), "tools": s.Tools(), "backend_capabilities": map[string]any{"onedrive": map[string]any{"transfer": true, "direct_url": true, "reference_handoff": true}, "generic": map[string]any{"transfer": true, "direct_url": false, "reference_handoff": false}}, "configured_backend_kinds": kinds, "secure_handoff": s.Enabled && s.Handoff, "output_adapter_enabled": s.Enabled && s.Output != nil, "authorization_status": "not_probed", "storage_status": "not_probed", "provider_consumption_status": "not_verified", "handoff_transport": "owner_unix_socket", "download_url_ttl": "unknown", "cli_required_on_mcp_client": false, "recovery": "operation_get_then_resume", "scope": "local_single_user", "generation_owner": "scaena", "cas_reuse": true, "mount": map[string]any{"start": "cli_only", "adapters": []string{"webdav"}, "fuse": "unsupported_default_build", "writable": "explicit_flag_only"}}
 }
 func (s *Service) Call(ctx context.Context, name string, args map[string]any) (any, error) {
 	text := func(k string) string { v, _ := args[k].(string); return v }
@@ -185,6 +186,8 @@ func (s *Service) Call(ctx context.Context, name string, args map[string]any) (a
 			return nil, errors.New("secure_handoff_unavailable")
 		}
 		return map[string]any{"file": f, "status": "ready_for_owner_acquisition", "checked_at": time.Now().UTC(), "expires_at": nil}, nil
+	case "mount_status":
+		return s.MountStatus(), nil
 	}
 	return nil, errors.New("unknown_tool")
 }
@@ -235,6 +238,7 @@ func applyToolHints(tools []mcp.Tool) {
 	readOnly := map[string]bool{
 		"relay_targets": true, "capabilities": true, "list": true, "search": true, "changes": true,
 		"stat": true, "operation_get": true, "inbox": true, "prepare_reference": true,
+		"mount_status":  true,
 		"usage_summary": true, "usage_series": true, "usage_breakdown": true, "usage_scans": true,
 		"audit_events": true,
 	}

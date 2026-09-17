@@ -1,0 +1,9 @@
+# 实施与验收任务
+
+由 scripts/openspec-tasks.py 维护状态。
+
+- [x] 1.1 依赖无；串行 A。bridge：kind 目录 + ProbeStorage + EnsureAlias/WebDAV remote + 单测（obscure 入库、remote_exists 拒绝）。验收：`go test ./internal/bridge -run Storage -count=1`。 | evidence: TestStorageCatalogStaysHonest/TestEnsureAndProbe 绿；storagekinds.go。
+- [x] 1.2 依赖 1.1；串行 A。CLI：storage kinds/probe/add + 主命令注册 + capabilities 注入（storage_kinds/storage_add）；recovery 三码 + docs 同步；testdata/storage.txt 覆盖目录/未知 kind/缺旗标/probe 失败通过/local 端到端/重绑拒绝/capabilities 字段。验收：`go test ./cmd/drivebridge -run TestCLI -count=1` 全绿。 | evidence: testdata/storage.txt；commands.go action=storage-add；error-codes.md 三行。
+- [x] 1.3 依赖 1.2；串行 V。`python3 scripts/check.py`、`go vet ./...`、`CGO_ENABLED=0 go build ./cmd/drivebridge`。 | evidence: temp/integration-test-runs/20260917T163720Z-6b787966；vet/CGO 构建通过。
+- [x] 1.4 依赖 1.3；串行 D。`docs/storage-recipes.md` + docs/README + 主 README 命令树；`openspec validate drivebridge-storage-onboarding-v1 --strict --no-interactive`。 | evidence: strict PASS；三处文档已链。
+- [x] 1.5 依赖 1.4；串行 V（review 修复波：4 路并行 subagent review 统一落地）。修复：remote kinds `--remote-path` 可空（s3/local 例外）；失败/成功信封 command 一致；local-root+max-bytes 预检先于 remote 创建、probe/委托失败回滚新建 remote；WebDAV 复用含密码比对（Reveal）、轮换显式 `remote_exists`；alias Clean 比较；pass-file 对齐 Lstat+普通文件+8192B+TrimSpace；`Data().Save()` 错误映射 `config_write_failed`；sanitizeName 无字母数字 id 加稳定短哈希；generic 目录删 `server_side_copy` 键、onedrive 探测保持特权真值；`credential_file_not_private` 入 registry+docs。 | evidence: check.py 全绿 temp/integration-test-runs/20260917T170308Z-e3591cec；storage.txt 扩至根级接入/回滚/凭据/冲突/信封断言。

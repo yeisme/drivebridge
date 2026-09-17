@@ -80,6 +80,8 @@ func newRootCommand(c *cli) *cobra.Command {
 		"sync":         newSyncCommand(c),
 		"capabilities": newCapabilitiesCommand(c),
 		"mcp":          newMCPCommand(c),
+		"mount":        newMountCommand(c),
+		"storage":      newStorageCommand(c),
 		"remote":       newRemoteCommand(c),
 		"space":        newSpaceCommand(c),
 		"space-add":    newSpaceAddCommand(c),

@@ -226,8 +226,11 @@ func spaceAddCommand(c *cli, use string) *cobra.Command {
 				return err
 			}
 			action := "space-add"
-			if use == "setup" {
+			switch use {
+			case "setup":
 				action = "setup"
+			case "storage-add":
+				action = "storage-add"
 			}
 			return c.mode.write(action, "success", "Space configured; file roundtrip has not been verified.", map[string]any{"configured": true, "roundtrip_status": "not_verified", "space_id": space, "local_root": local, "max_bytes": limit})
 		},

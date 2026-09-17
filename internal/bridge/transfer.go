@@ -226,6 +226,10 @@ func (s *Service) run(ctx context.Context, op Operation) {
 		op.Status = "completed"
 		op.Error = ""
 		op.Transferred = op.Bytes
+		if op.CacheHit {
+			// A CAS/target dedupe completion honestly reports zero copied bytes.
+			op.Transferred = 0
+		}
 	}
 	if s.Insights != nil {
 		if op.Status == "completed" {
@@ -288,6 +292,40 @@ func (s *Service) transfer(ctx context.Context, op *Operation) error {
 		if e != nil {
 			return e
 		}
+		// A cache hit still went through Stat above: the pinned remote version
+		// is re-verified before any cached byte is published, so a changed
+		// version can never be served stale content.
+		if f.SHA256 != "" {
+			publish := func(source *os.File, sourceRel string) error {
+				defer source.Close()
+				if e = root.Link(sourceRel, op.LocalPath); e == nil {
+					op.CacheHit = true
+					return nil
+				}
+				existing, openErr := root.Open(op.LocalPath)
+				if openErr != nil {
+					return errors.New("target_conflict")
+				}
+				old, _, hashErr := digestReader(io.LimitReader(existing, p.MaxBytes+1))
+				existing.Close()
+				if hashErr != nil || old != f.SHA256 {
+					return errors.New("target_conflict")
+				}
+				op.CacheHit = true
+				return nil
+			}
+			if existing, openErr := root.Open(op.LocalPath); openErr == nil {
+				old, _, hashErr := digestReader(io.LimitReader(existing, p.MaxBytes+1))
+				existing.Close()
+				if hashErr == nil && old == f.SHA256 {
+					op.CacheHit = true
+					return nil
+				}
+			}
+			if cached, cacheErr := casOpen(root, f.SHA256, p.MaxBytes); cacheErr == nil {
+				return publish(cached, casPath(f.SHA256))
+			}
+		}
 		// An operation-owned partial file is retained across failures. Final publication
 		// uses Link, which atomically refuses to replace an existing destination.
 		temp := filepath.Join(filepath.Dir(op.LocalPath), ".drivebridge-"+op.ID+"-"+newID())
@@ -316,6 +354,7 @@ func (s *Service) transfer(ctx context.Context, op *Operation) error {
 		if _, e = s.Stat(ctx, op.FileRef); e != nil {
 			return e
 		}
+		casStore(root, h, temp)
 		if e = root.Link(temp, op.LocalPath); e != nil {
 			existing, openErr := root.Open(op.LocalPath)
 			if openErr != nil {

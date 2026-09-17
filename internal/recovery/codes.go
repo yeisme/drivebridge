@@ -9,9 +9,41 @@ type Doc struct {
 }
 
 var Registry = map[string]Doc{
+	"aigora_access_denied": {
+		HintEN: "The Aigora exchange rejected the configured key; fix the Aigora key configuration on the adapter host and retry the original command.",
+		DocZH:  "Aigora 交换拒绝配置的 Key：在适配器宿主修正 Aigora Key 配置后重试原命令，不切换直连或旧凭据。",
+	},
+	"credential_file_not_private": {
+		HintEN: "The credential file must be a regular file with no group/other access; chmod 0600 and retry; its content was not read.",
+		DocZH:  "凭据文件必须是 0600 的普通文件：chmod 0600 后重试；文件内容未被读取。",
+	},
+	"aigora_unavailable": {
+		HintEN: "The configured Aigora origin is unreachable; restore connectivity to it and retry the original command.",
+		DocZH:  "Aigora 端点不可达：恢复与所配置 Aigora origin 的连通后重试原命令；不会回退长期 Key 直连。",
+	},
+	"invalid_service_context": {
+		HintEN: "The Aigora exchange returned an invalid short-lived context; report to the deployment operator instead of retrying legacy credentials.",
+		DocZH:  "Aigora 交换返回非法短期凭证：报给部署运维核对，不要回退旧凭据重试。",
+	},
+	"service_admission_required": {
+		HintEN: "This hosted write path is not enabled for the current identity; stop and request admission through the owning service.",
+		DocZH:  "统一身份写路径未开通准入：停止并在所属服务申请准入，不能替换凭据或另走直连。",
+	},
 	"state_locked": {
 		HintEN: "A registered MCP client (drivebridge mcp) holds this state's process lock; use recent/operation which read a snapshot, or stop the client and retry.",
 		DocZH:  "有已注册的 MCP 客户端（drivebridge mcp）持有该 state 的进程锁。用 recent/operation（快照读）查看状态，或停掉客户端后重试。",
+	},
+	"probe_failed": {
+		HintEN: "The remote could not be listed; check the remote name, credentials and remote-path, then re-run 'drivebridge storage probe'.",
+		DocZH:  "远端无法列举：核对 remote 名称、凭据与 remote-path 后重跑 drivebridge storage probe。",
+	},
+	"storage_kind_unknown": {
+		HintEN: "Unknown --kind for 'drivebridge storage add'; run 'drivebridge storage kinds' for the supported list.",
+		DocZH:  "storage add 的 --kind 不在支持列表：先运行 drivebridge storage kinds 查看。",
+	},
+	"storage_missing_flag": {
+		HintEN: "Storage add is missing required flags for this kind; the failure names them, or run 'drivebridge storage kinds'.",
+		DocZH:  "storage add 缺少该类型必填旗标：按提示补齐，或用 drivebridge storage kinds 查看必填项。",
 	},
 	"authentication_required": {
 		HintEN: "Reconnect using drivebridge auth --auto; then resume the original operation.",
@@ -152,6 +184,26 @@ var Registry = map[string]Doc{
 	"insights_unavailable": {
 		HintEN: "The insights store is unavailable; run doctor to check the state directory.",
 		DocZH:  "insights 存储不可用：跑 doctor 检查 state 目录。",
+	},
+	"listen_not_allowed": {
+		HintEN: "Non-loopback listen requires the explicit --lan flag; the default mount is loopback-only.",
+		DocZH:  "挂载默认仅回环：非回环 listen 必须显式加 --lan。",
+	},
+	"mount_already_running": {
+		HintEN: "This state already has a mount; run mount status, or stop it before starting another.",
+		DocZH:  "同一 state 只允许一个挂载：先 mount status 查看，或 stop 后再挂。",
+	},
+	"mount_listener_unavailable": {
+		HintEN: "The requested listen address is unavailable; choose a free loopback port and retry.",
+		DocZH:  "监听地址不可用：换一个空闲回环端口重试。",
+	},
+	"mount_stop_unavailable": {
+		HintEN: "The mount process cannot be signaled from this platform; close its terminal instead.",
+		DocZH:  "本平台无法向挂载进程发停止信号：直接关闭其终端。",
+	},
+	"unsupported": {
+		HintEN: "This capability is not in the default build; use the documented WebDAV fallback.",
+		DocZH:  "默认构建不含该能力（如内核 FUSE）：改用 mount webdav，或把 rclone mount 指到 WebDAV URL。",
 	},
 }
 

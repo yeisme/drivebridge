@@ -1,0 +1,17 @@
+# The default CGO_ENABLED=0 binary refuses kernel FUSE and points at WebDAV.
+! exec drivebridge mount fuse --state $WORK/state
+stderr 'unsupported'
+
+# A non-loopback listen without --lan is refused before any service opens.
+! exec drivebridge mount webdav --state $WORK/state --listen 0.0.0.0:19099
+stderr 'listen_not_allowed'
+
+# No mount is running; status is a read-only projection.
+exec drivebridge mount status --state $WORK/state --json
+stdout '"alive":false'
+
+# tools/list never exposes agent-writable mount controls.
+exec drivebridge capabilities --state $WORK/state --json
+stdout 'cli_only'
+! stdout 'mount_start'
+! stdout 'mount_stop'

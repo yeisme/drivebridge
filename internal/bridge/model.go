@@ -93,6 +93,7 @@ type Operation struct {
 	Fingerprint string    `json:"-"`
 	Bytes       int64     `json:"bytes_total"`
 	Transferred int64     `json:"bytes_transferred"`
+	CacheHit    bool      `json:"cache_hit,omitempty"`
 	Error       string    `json:"error,omitempty"`
 	Updated     time.Time `json:"updated_at"`
 }

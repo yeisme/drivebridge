@@ -1,0 +1,48 @@
+# creative-relay Specification
+
+## Purpose
+TBD - created by archiving change drivebridge-creative-relay-v1. Update Purpose after archive.
+## Requirements
+### Requirement: 绑定目标与固定来源
+本机适配器 SHALL 限制来源在允许根/空间内，并将固定内容绑定到可信目标项目、origin、用途和输入会话。
+
+#### Scenario: 路径或目标越界
+- **WHEN** 来源逃逸允许根、目标是任意 URL 或接收项目与绑定不符
+- **THEN** 在读取/发送前拒绝，不转发凭据
+
+### Requirement: 三 owner 原生输入完成
+中转 SHALL 只负责字节传输，并调用各 owner 的原完成校验；SHALL NOT 绕过媒体限制或执行生成。
+
+#### Scenario: 同机与远程执行
+- **WHEN** 三个 fake owner 分别位于同机端口或不同 origin，来源仅本机可读
+- **THEN** 无共享路径和公网电脑入口也能导入，并返回各 owner 原引用与领域待处理状态
+
+#### Scenario: 本机来源的两阶段握手
+- **WHEN** 目标只有 import ID 且尚无 input ID
+- **THEN** 受信中转器先提交固定元数据，目标创建原输入会话后才上传；元数据重放复用会话，冲突拒绝
+
+### Requirement: 幂等恢复与独占写入
+中转 SHALL 持久保存原请求关联，恢复时先查询目标状态，同一操作只有一个写入者。
+
+#### Scenario: 进程终止或响应丢失
+- **WHEN** 传输进程被终止，或 complete 成功响应丢失
+- **THEN** 重启恢复原操作；已完成输入只返回原引用，不产生第二个输入或生成请求
+
+#### Scenario: 来源变化或输入过期
+- **WHEN** 同键对应内容变化，或原输入已经终止/过期
+- **THEN** 明确拒绝恢复，不换幂等键自动重建
+
+### Requirement: 客户端能力诚实与秘密隔离
+能力发现 SHALL 区分本机读取、HTTP 上传和远程引用支持，不要求安装创作 CLI；临时能力 SHALL 不进入持久回执或模型上下文。
+
+#### Scenario: 只有远程 MCP
+- **WHEN** 客户端无本机文件能力或无法安全取得传输方案
+- **THEN** 报告具体缺口及已有替代路径，不发送客户端路径假装上传
+
+### Requirement: 回存和兼容
+中转 SHALL 保留来源项目对选定交付和回存完整性的判断，旧 Scaena handoff 和普通文件命令 SHALL 保持行为。
+
+#### Scenario: 取消部分回存
+- **WHEN** 用户取消一项尚未完成的回存搬运
+- **THEN** 停止原传输，不删除创作成品或已保存项，不把分组标为完整
+

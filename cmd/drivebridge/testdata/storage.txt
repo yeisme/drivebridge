@@ -1,0 +1,82 @@
+# Storage onboarding: kinds catalog, honest refusals, read-only probe, the
+# guided local-kind add (auto alias remote + rollback), root-level remote
+# kinds without --remote-path, credential-file discipline and remote_exists.
+mkdir remote-files
+mkdir local
+exec sh -c 'printf hello > remote-files/a.txt'
+exec sh -c 'printf "[nas]\ntype = alias\nremote = %s\n" "$1" > rclone.conf' sh $WORK/remote-files
+chmod 0600 rclone.conf
+
+# The catalog lists every kind with honest generic capabilities.
+exec drivebridge storage kinds --json
+stdout '"command":"drivebridge.storage.kinds"'
+stdout '"kind":"openlist"'
+stdout '"direct_url":false'
+
+# Unknown kinds and missing flags fail with pointers, not guesses; the
+# failure envelope carries the storage-add command identity.
+! exec drivebridge storage add --kind dropmark --space x --local-root $WORK/local --json
+stdout 'storage_kind_unknown'
+! exec drivebridge --state $WORK/state --rclone-config $WORK/rclone.conf storage add --kind openlist --space x --local-root $WORK/local --json
+stdout 'storage_missing_flag'
+stdout '"command":"drivebridge.storage-add"'
+
+# Probe is read-only: unknown remote fails (machine envelope on stdout),
+# alias remote lists; the failure envelope names storage.probe.
+! exec drivebridge --rclone-config $WORK/rclone.conf storage probe --remote nope --json
+stdout 'probe_failed'
+stdout '"command":"drivebridge.storage.probe"'
+exec drivebridge --rclone-config $WORK/rclone.conf storage probe --remote nas --json
+stdout '"reachable":true'
+stdout '"writability":"unverified'
+
+# Remote kinds onboard at the remote root with no --remote-path at all.
+exec drivebridge --state $WORK/state --rclone-config $WORK/rclone.conf storage add --kind gdrive --space gdroot --remote nas --local-root $WORK/local --max-bytes 1048576 --json
+stdout '"status":"success"'
+exec drivebridge --state $WORK/state --rclone-config $WORK/rclone.conf ls --space gdroot --json
+stdout 'a.txt'
+
+# local kind creates its own alias remote, probes, then registers the space.
+exec drivebridge --state $WORK/state --rclone-config $WORK/rclone.conf storage add --kind local --space docs --remote-path $WORK/remote-files --local-root $WORK/local --max-bytes 1048576 --json
+stdout '"status":"success"'
+stdout '"command":"drivebridge.storage-add"'
+exec drivebridge --state $WORK/state --rclone-config $WORK/rclone.conf ls --space docs --json
+stdout 'a.txt'
+
+# The auto-created alias remote is probeable like any other.
+exec drivebridge --rclone-config $WORK/rclone.conf storage probe --remote db-local-docs --json
+stdout '"reachable":true'
+
+# A typo'd local target fails the probe AND rolls the auto remote back, so
+# the corrected retry never hits a poisoned remote_exists.
+mkdir wrong
+! exec drivebridge --state $WORK/state --rclone-config $WORK/rclone.conf storage add --kind local --space flaky --remote-path $WORK/wrong/missing --local-root $WORK/local --max-bytes 1048576 --json
+stdout 'probe_failed'
+! exec drivebridge --rclone-config $WORK/rclone.conf storage probe --remote db-local-flaky --json
+stdout 'probe_failed'
+exec drivebridge --state $WORK/state --rclone-config $WORK/rclone.conf storage add --kind local --space flaky --remote-path $WORK/remote-files --local-root $WORK/local --max-bytes 1048576 --json
+stdout '"status":"success"'
+
+# Re-adding the same kind/dir reuses the alias; the space identity cannot be
+# silently rebound.
+exec drivebridge --state $WORK/state --rclone-config $WORK/rclone.conf storage add --kind local --space docs2 --remote-path $WORK/remote-files --local-root $WORK/local --max-bytes 1048576 --json
+stdout '"status":"success"'
+! exec drivebridge --state $WORK/state --rclone-config $WORK/rclone.conf storage add --kind local --space docs --remote-path $WORK/remote-files --local-root $WORK/local --max-bytes 1048576 --json
+
+# A group-readable pass file is refused before its content is read.
+exec sh -c 'printf s3cret > open-pass'
+chmod 0644 open-pass
+! exec drivebridge --state $WORK/state --rclone-config $WORK/rclone.conf storage add --kind openlist --space m --url http://127.0.0.1:5244/dav --webdav-user media --webdav-pass-file $WORK/open-pass --remote-path media --local-root $WORK/local --json
+stdout 'credential_file_not_private'
+
+# An existing webdav remote pointing elsewhere is never rewritten.
+exec sh -c 'printf s3cret > pass0600'
+chmod 0600 pass0600
+exec sh -c 'printf "[db-openlist-m]\ntype = webdav\nurl = http://elsewhere/dav\nvendor = other\nuser = media\n" >> rclone.conf'
+! exec drivebridge --state $WORK/state --rclone-config $WORK/rclone.conf storage add --kind openlist --space m --url http://127.0.0.1:5244/dav --webdav-user media --webdav-pass-file $WORK/pass0600 --remote-path media --local-root $WORK/local --json
+stdout 'remote_exists'
+
+# The capabilities resource carries the guidance fields for agents.
+exec drivebridge --state $WORK/state --rclone-config $WORK/rclone.conf capabilities --json
+stdout '"storage_kinds"'
+stdout '"storage_add"'

@@ -24,6 +24,7 @@ type fakeProvider struct {
 	files        map[string]File
 	data         map[string][]byte
 	uploads      int
+	opens        int
 	copies       int
 	copyErr      error
 	failAfterPut bool
@@ -40,9 +41,9 @@ func (f *fakeProvider) List(ctx context.Context, p Space, dir string) ([]File, e
 	}
 	return out, nil
 }
-func (f *fakeProvider) Mkdir(context.Context, Space, string) error { return nil }
+func (f *fakeProvider) Mkdir(context.Context, Space, string) error              { return nil }
 func (f *fakeProvider) Move(context.Context, Space, File, string, string) error { return nil }
-func (f *fakeProvider) Delete(context.Context, Space, File) error { return nil }
+func (f *fakeProvider) Delete(context.Context, Space, File) error               { return nil }
 func (f *fakeProvider) Stat(ctx context.Context, p Space, id string) (File, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -79,6 +80,7 @@ func (f *fakeProvider) Open(ctx context.Context, p Space, i File) (io.ReadCloser
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.opens++
 	return io.NopCloser(bytes.NewReader(f.data[i.ItemID])), nil
 }
 func (f *fakeProvider) Access(ctx context.Context, p Space, i File) (string, error) {

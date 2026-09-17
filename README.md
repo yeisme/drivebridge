@@ -61,7 +61,7 @@ $EDITOR ~/.config/drivebridge/config.yaml
 
 安全边界：`--enabled/--handoff` 等"默认关闭的写入口开关"只能显式命令行，不进文件；任何 secret 永不入文件（token 文件路径可以）。
 
-命令树：`auth`、`space add|list`、`doctor`、`capabilities`、`mcp`、`remote`、`config show|init`、`install`、`upload/download/ls/stat/operation/mkdir`（本地直连传输）、`completion`（bash/zsh/fish）。所有旗标名与旧版一致；配置就绪后 MCP 注册只需：
+命令树：`auth`、`space add|list`、`storage kinds|probe|add`（接入引导）、`doctor`、`capabilities`、`mcp`、`remote`、`config show|init`、`install`、`upload/download/ls/stat/operation/mkdir`（本地直连传输）、`completion`（bash/zsh/fish）。所有旗标名与旧版一致；配置就绪后 MCP 注册只需：
 
 ```bash
 ./drivebridge install --client claude-code   # 或 codex / generic
