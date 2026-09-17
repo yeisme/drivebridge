@@ -12,6 +12,8 @@ import (
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
+
+	"github.com/yeisme/drivebridge/internal/recovery"
 )
 
 func tool(name, description string, required ...string) mcp.Tool {
@@ -73,6 +75,7 @@ func (s *Service) Tools() []mcp.Tool {
 	t := tool("usage_scan", "Run an already-enabled local inventory with its existing budget; cannot enable scanning.", "space_id")
 	t.InputSchema.Properties["resume_id"] = map[string]any{"type": "string"}
 	tools = append(tools, t)
+	applyToolHints(tools)
 	return tools
 }
 func (s *Service) Capabilities() any {
@@ -192,7 +195,7 @@ func (s *Service) MCP() *server.MCPServer {
 		srv.AddTool(t, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			out, err := s.Call(ctx, name, request.GetArguments())
 			if err != nil {
-				return mcp.NewToolResultError(safeError(err)), nil
+				return toolErrorResult(err), nil
 			}
 			b, err := json.Marshal(out)
 			if err != nil {
@@ -206,4 +209,47 @@ func (s *Service) MCP() *server.MCPServer {
 		return []mcp.ResourceContents{mcp.TextResourceContents{URI: "drivebridge://capabilities", MIMEType: "application/json", Text: string(b)}}, e
 	})
 	return srv
+}
+
+// toolErrorResult keeps the historical first text block — the bare machine
+// code — and appends a structured JSON block with the recovery hint so MCP
+// hosts get an executable next_action without the product CLI.
+func toolErrorResult(err error) *mcp.CallToolResult {
+	code := safeError(err)
+	hintPayload, marshalErr := json.Marshal(map[string]string{"code": code, "next_action": recovery.Hint(code)})
+	if marshalErr != nil {
+		return mcp.NewToolResultError(code)
+	}
+	return &mcp.CallToolResult{
+		IsError: true,
+		Content: []mcp.Content{
+			mcp.TextContent{Type: mcp.ContentTypeText, Text: code},
+			mcp.TextContent{Type: mcp.ContentTypeText, Text: string(hintPayload)},
+		},
+	}
+}
+
+// applyToolHints adds the read/destructive annotations hosts use for safety
+// heuristics. Reads carry ReadOnlyHint; trash/cancel carry DestructiveHint.
+func applyToolHints(tools []mcp.Tool) {
+	readOnly := map[string]bool{
+		"relay_targets": true, "capabilities": true, "list": true, "search": true, "changes": true,
+		"stat": true, "operation_get": true, "inbox": true, "prepare_reference": true,
+		"usage_summary": true, "usage_series": true, "usage_breakdown": true, "usage_scans": true,
+		"audit_events": true,
+	}
+	destructive := map[string]bool{"trash": true, "cancel": true, "relay_cancel": true}
+	idempotent := map[string]bool{"mkdir": true, "relay_cancel": true, "cancel": true}
+	for i := range tools {
+		name := tools[i].Name
+		if readOnly[name] {
+			tools[i].Annotations.ReadOnlyHint = &[]bool{true}[0]
+		}
+		if destructive[name] {
+			tools[i].Annotations.DestructiveHint = &[]bool{true}[0]
+		}
+		if idempotent[name] {
+			tools[i].Annotations.IdempotentHint = &[]bool{true}[0]
+		}
+	}
 }
