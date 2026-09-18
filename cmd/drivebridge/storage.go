@@ -29,7 +29,6 @@ func storageKindsCommand(c *cli) *cobra.Command {
 		Use:   "kinds",
 		Short: "List supported storage kinds with required flags and honest capabilities.",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			c.command = "storage.kinds"
 			kinds := bridge.StorageKinds()
 			if !(c.mode.JSON || c.mode.Agent || c.mode.Events || c.mode.Explain) {
 				for _, k := range kinds {
@@ -47,7 +46,6 @@ func storageProbeCommand(c *cli) *cobra.Command {
 		Use:   "probe",
 		Short: "Read-only check of a generic rclone remote root (reachability and a listing sample; never a write test; the full root is listed, so avoid huge roots).",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			c.command = "storage.probe"
 			if err := c.installRclone(); err != nil {
 				return err
 			}
@@ -92,7 +90,6 @@ func storageAddCommand(c *cli) *cobra.Command {
 		Use:   "add",
 		Short: "Guided add of a generic storage backend (creates alias/webdav remotes for local/openlist kinds, probes, then registers the space).",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			c.command = "storage-add"
 			if err := c.installRclone(); err != nil {
 				return err
 			}

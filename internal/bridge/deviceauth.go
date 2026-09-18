@@ -182,7 +182,9 @@ func (d *DeviceAuth) saveRemote(remote string, t storedToken) error {
 	config.Data().SetValue(remote, "type", "onedrive")
 	config.Data().SetValue(remote, "client_id", d.clientID())
 	config.Data().SetValue(remote, "token", string(blob))
-	config.SaveConfig()
+	if err := config.Data().Save(); err != nil {
+		return errors.New("config_write_failed")
+	}
 	return nil
 }
 
@@ -294,7 +296,9 @@ func (d *DeviceAuth) SetDrive(remote, driveID, rootID string) error {
 	if rootID != "" {
 		config.Data().SetValue(remote, "root_folder_id", rootID)
 	}
-	config.SaveConfig()
+	if err := config.Data().Save(); err != nil {
+		return errors.New("config_write_failed")
+	}
 	return nil
 }
 

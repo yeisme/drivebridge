@@ -2,9 +2,13 @@ package bridge
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"io"
+	"net/http"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/rclone/rclone/fs"
 	rconfig "github.com/rclone/rclone/fs/config"
@@ -92,6 +96,11 @@ type ProbeResult struct {
 	Pin          string          `json:"pin"`
 	Writability  string          `json:"writability"`
 	Capabilities map[string]bool `json:"capabilities"`
+	// Aggregator/AggregatorVersion are filled when the openlist kind detects a
+	// live OpenList instance behind the WebDAV endpoint; absence is not an
+	// error (any WebDAV server remains a valid remote).
+	Aggregator        string `json:"aggregator,omitempty"`
+	AggregatorVersion string `json:"aggregator_version,omitempty"`
 }
 
 // ProbeStorage lists the remote root exactly like Generic would resolve it.
@@ -109,7 +118,7 @@ func ProbeStorage(ctx context.Context, kind, remote, remotePath string) (*ProbeR
 	}
 	entries, err := f.List(ctx, "")
 	if err != nil {
-		return nil, errors.New("probe_failed")
+		return nil, errors.New("probe_failed[list]:" + err.Error())
 	}
 	res := &ProbeResult{
 		Kind: kind, Remote: remote, Root: remotePath, Reachable: true,
@@ -127,7 +136,48 @@ func ProbeStorage(ctx context.Context, kind, remote, remotePath string) (*ProbeR
 			res.Sample = append(res.Sample, e.Remote())
 		}
 	}
+	if kind == "openlist" {
+		detectOpenList(ctx, res, rconfig.GetValue(remote, "url"))
+	}
 	return res, nil
+}
+
+// detectOpenList probes the unauthenticated /api/public/settings endpoint on
+// the origin behind a /dav WebDAV URL. A miss is silent: any WebDAV server
+// remains a valid openlist-kind remote.
+func detectOpenList(ctx context.Context, res *ProbeResult, davURL string) {
+	origin := strings.TrimSuffix(strings.TrimSuffix(strings.TrimSuffix(davURL, "/"), "/dav"), "/")
+	if origin == "" || !strings.HasPrefix(origin, "http") {
+		return
+	}
+	cctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(cctx, http.MethodGet, origin+"/api/public/settings", nil)
+	if err != nil {
+		return
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return
+	}
+	var payload struct {
+		Code int `json:"code"`
+		Data struct {
+			Version string `json:"version"`
+		} `json:"data"`
+	}
+	if json.NewDecoder(io.LimitReader(resp.Body, 1<<16)).Decode(&payload) != nil {
+		return
+	}
+	if payload.Code != 200 {
+		return
+	}
+	res.Aggregator = "openlist"
+	res.AggregatorVersion = payload.Data.Version
 }
 
 // saveConfig persists the in-memory config and surfaces write failures with

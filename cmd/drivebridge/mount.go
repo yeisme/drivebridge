@@ -116,7 +116,7 @@ func newMountCommand(c *cli) *cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			body, err := os.ReadFile(filepath.Join(c.effective.Values["state"], "mount.json"))
 			if err != nil {
-				return c.mode.write("status", "success", "No mount is running.", map[string]any{"alive": false})
+				return c.mode.write("mount.status", "success", "No mount is running.", map[string]any{"alive": false})
 			}
 			var st bridge.MountState
 			if json.Unmarshal(body, &st) != nil {
@@ -127,7 +127,7 @@ func newMountCommand(c *cli) *cobra.Command {
 				conn.Close()
 				alive = true
 			}
-			return c.mode.write("status", "success", fmt.Sprintf("Mount %s at %s (alive=%v).", st.Adapter, st.Listen, alive), map[string]any{"alive": alive, "adapter": st.Adapter, "listen": st.Listen, "mode": st.Mode, "space_ids": st.SpaceIDs, "started_at": st.StartedAt})
+			return c.mode.write("mount.status", "success", fmt.Sprintf("Mount %s at %s (alive=%v).", st.Adapter, st.Listen, alive), map[string]any{"alive": alive, "adapter": st.Adapter, "listen": st.Listen, "mode": st.Mode, "space_ids": st.SpaceIDs, "started_at": st.StartedAt})
 		},
 	}
 
@@ -137,7 +137,7 @@ func newMountCommand(c *cli) *cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			body, err := os.ReadFile(filepath.Join(c.effective.Values["state"], "mount.json"))
 			if err != nil {
-				return c.mode.write("stop", "success", "No mount is running.", map[string]any{"stopped": false})
+				return c.mode.write("mount.stop", "success", "No mount is running.", map[string]any{"stopped": false})
 			}
 			var st bridge.MountState
 			if json.Unmarshal(body, &st) != nil {
@@ -150,7 +150,7 @@ func newMountCommand(c *cli) *cobra.Command {
 			if err := process.Signal(os.Interrupt); err != nil {
 				return fail("mount_stop_unavailable", "Stopping the mount process is not supported here; close its terminal instead.")
 			}
-			return c.mode.write("stop", "success", "Stop signal sent to the mount process.", map[string]any{"stopped": true, "pid": st.PID})
+			return c.mode.write("mount.stop", "success", "Stop signal sent to the mount process.", map[string]any{"stopped": true, "pid": st.PID})
 		},
 	}
 

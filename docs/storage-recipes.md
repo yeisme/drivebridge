@@ -36,6 +36,12 @@ drivebridge storage add --kind openlist --space cloud \
   --local-root /absolute/path
 ```
 
+`storage probe` 会顺带探测源站 `/api/public/settings`：识别为 OpenList 时结果带 `aggregator/openlist` 与版本号（识别失败不影响 WebDAV 可用性判定）：
+
+```bash
+drivebridge storage probe --remote db-openlist-cloud --kind openlist --json   # "aggregator":"openlist","aggregator_version":"…"
+```
+
 自动创建 webdav remote（vendor=other，密码 obscure 入库，绝不回显）。同名 remote 已存在且 url/用户一致则复用，否则 `remote_exists`。pass-file 必须 0600。国内网盘元数据抖动 → `file_version_changed` 属诚实行为。
 
 ## S3 兼容（MinIO/COS/OSS/R2/B2）

@@ -24,12 +24,12 @@ go build -o drivebridge ./cmd/drivebridge
 空间由操作者显式配置。以下尖括号参数需要替换为实际账号与目录标识；`root-id` 是允许目录的真实 item ID，不能使用显示名称或 `root` 占位符。
 
 ```bash
-./drivebridge space-add --space creative --remote '<rclone-remote>' --drive-id '<drive-id>' --root-id '<folder-item-id>' --local-root '/absolute/path/creative-files' --max-bytes 1073741824 --project '<scaena-project>' --actor '<scaena-actor>'
+./drivebridge space add --space creative --remote '<rclone-remote>' --drive-id '<drive-id>' --root-id '<folder-item-id>' --local-root '/absolute/path/creative-files' --max-bytes 1073741824 --project '<scaena-project>' --actor '<scaena-actor>'
 ./drivebridge capabilities --json
 ./drivebridge mcp --enabled --handoff
 ```
 
-将最后一条命令注册到本机 MCP 客户端即可。`space-add` 不修改已有空间身份，重复 ID 返回冲突。文件上限须按你的域/模型已验证限制设置；示例 1 GiB 是显式操作策略，不代表模型支持这么大的参考文件。文件工具允许普通创作文件；参考交接首版只接受解码验证通过的 PNG、JPEG 与 MP4 视频。视频参数继续由 Scaena 模型合同校验。
+将最后一条命令注册到本机 MCP 客户端即可。`space add` 不修改已有空间身份，重复 ID 返回冲突。非 OneDrive 后端可用 `drivebridge storage add --kind <kind>` 引导接入（见[存储接入 recipe 卡](docs/storage-recipes.md)）。文件上限须按你的域/模型已验证限制设置；示例 1 GiB 是显式操作策略，不代表模型支持这么大的参考文件。文件工具允许普通创作文件；参考交接首版只接受解码验证通过的 PNG、JPEG 与 MP4 视频。视频参数继续由 Scaena 模型合同校验。
 
 不加 `--enabled` 时只可发现能力和读取既有操作回执，上传、下载、恢复和取消默认关闭。`--handoff` 还需显式启用；socket 位于 state 目录的 `handoff.sock`，权限 0600。异常终止后若遗留 socket，确认旧进程已停止再由操作者清理，不会自动删除未知 socket。
 
@@ -61,7 +61,7 @@ $EDITOR ~/.config/drivebridge/config.yaml
 
 安全边界：`--enabled/--handoff` 等"默认关闭的写入口开关"只能显式命令行，不进文件；任何 secret 永不入文件（token 文件路径可以）。
 
-命令树：`auth`、`space add|list`、`storage kinds|probe|add`（接入引导）、`doctor`、`capabilities`、`mcp`、`remote`、`config show|init`、`install`、`upload/download/ls/stat/operation/mkdir`（本地直连传输）、`completion`（bash/zsh/fish）。所有旗标名与旧版一致；配置就绪后 MCP 注册只需：
+命令树（常用子集；`--help` 列全量）：`auth`、`setup`、`space add|list|ttl`、`storage kinds|probe|add`（接入引导）、`mount webdav|status|stop`、`sync`、`relay`、`doctor`、`capabilities`、`mcp`、`remote`、`config show|init|set`、`install`、`upload/download/ls/stat/operation/mkdir/find/changes/trash/restore/purge`、`recent`、`resume/cancel`、`pin/gc/link`、`usage/audit`、`view`、`completion`。所有旗标名与旧版一致；配置就绪后 MCP 注册只需：
 
 ```bash
 ./drivebridge install --client claude-code   # 或 codex / generic

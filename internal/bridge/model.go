@@ -161,7 +161,7 @@ func New(state string, provider Provider, enabled bool) (*Service, error) {
 		return nil, err
 	}
 	sqlDB.SetMaxOpenConns(1)
-	if err = db.AutoMigrate(&Space{}, &File{}, &Operation{}, &Event{}, &RelayTarget{}); err != nil {
+	if err = db.AutoMigrate(&Space{}, &File{}, &Operation{}, &Event{}, &RelayTarget{}, &Connection{}); err != nil {
 		return nil, errors.New("state_unavailable")
 	}
 	if err = os.Chmod(filepath.Join(state, "state.sqlite"), 0600); err != nil {

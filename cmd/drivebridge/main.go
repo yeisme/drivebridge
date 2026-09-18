@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/spf13/cobra"
@@ -42,7 +43,7 @@ func newRootCommand(c *cli) *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
-			c.command = cmd.Name()
+			c.command = commandAction(cmd)
 			file, effective, err := c.resolve(cmd)
 			if err != nil {
 				return err
@@ -84,6 +85,7 @@ func newRootCommand(c *cli) *cobra.Command {
 		"storage":      newStorageCommand(c),
 		"remote":       newRemoteCommand(c),
 		"space":        newSpaceCommand(c),
+		"connection":   newConnectionCommand(c),
 		"space-add":    newSpaceAddCommand(c),
 		"config":       newConfigCommand(c),
 		"install":      newInstallCommand(c),
@@ -96,4 +98,19 @@ func newRootCommand(c *cli) *cobra.Command {
 	}
 	root.InitDefaultCompletionCmd()
 	return root
+}
+
+// commandAction derives the envelope command identity from the full command
+// path so failures carry the same identity as successes (space.add is
+// normalized to the legacy hyphenated action space-add, likewise storage).
+func commandAction(cmd *cobra.Command) string {
+	action := strings.TrimPrefix(cmd.CommandPath(), "drivebridge ")
+	action = strings.ReplaceAll(action, " ", ".")
+	switch action {
+	case "space.add":
+		return "space-add"
+	case "storage.add":
+		return "storage-add"
+	}
+	return action
 }

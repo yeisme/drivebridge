@@ -21,6 +21,10 @@ stdout 'storage_kind_unknown'
 stdout 'storage_missing_flag'
 stdout '"command":"drivebridge.storage-add"'
 
+# Legacy space add failures carry the same identity as its success envelope.
+! exec drivebridge --state $WORK/state --rclone-config $WORK/rclone.conf space add --space dup --remote nas --backend generic --local-root $WORK/relative --max-bytes 1048576 --json
+stdout '"command":"drivebridge.space-add"'
+
 # Probe is read-only: unknown remote fails (machine envelope on stdout),
 # alias remote lists; the failure envelope names storage.probe.
 ! exec drivebridge --rclone-config $WORK/rclone.conf storage probe --remote nope --json

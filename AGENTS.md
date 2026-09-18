@@ -8,3 +8,13 @@
 - 新入口默认关闭。独立本地 Git 仓库；远程创建、发布及部署单独授权。
 - 使用 `go test ./...`、`go vet ./...`、`CGO_ENABLED=0 go build ./cmd/drivebridge`；集成验证使用 `python3 scripts/check.py`，证据位于 `temp/integration-test-runs/`。
 - 使用 owner OpenSpec 记录实现和验收；普通文档中文，命令与错误英文。根工作区中其他项目的改动必须保留。
+
+## 本域 Skills
+
+Active skills 由仓库根 `.skills/profiles/targets/mcp/drivebridge.txt` 分配，用 `scripts/skills.sh sync-target mcp/drivebridge` 生成运行副本。对照见 [子项目 Skill Profile](../../docs/skills/subproject-skill-profiles.md)。
+
+- 实现、调试、测试：`yeisme-coding-execution-driver`。
+- MCP tool/schema/transport：`yeisme-mcp-builder`。
+- 本机 OneDrive/引用/传输：`drivebridge-operator`。生成任务仍归创作 owner。
+- Go CLI/后端：`golang-cobra-viper-cli-architecture`、`backend-system-workflow`。
+- 完成前：`review`、`health`、`cso`。
