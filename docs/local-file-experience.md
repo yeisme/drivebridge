@@ -9,7 +9,7 @@ drivebridge view
 
 实时列举保留旧 `items` 文件数组，新增 `directories` 表示真实目录。旧 CLI List 行为保持文件列表；本机新页面根据实际目录显示树，不把已观察索引冒充全盘。缺少 owner 时显示索引并禁用写操作。
 
-私有 `/files/action` 通道支持 mkdir、文件 move、trash、restore、限定本机路径的上传和传输恢复／取消。浏览器文件以原始字节 PUT 进入私有暂存；交给 owner 后后台继续传输。未完成浏览器发送时关页仍需重新选择文件。
+私有 `/files/action` 通道支持 mkdir、文件 move/copy、目录 copy/move/trash、restore、限定本机路径的上传和传输恢复／取消。复制优先走存储后端的服务端 Copy，不行则读取再上传；同名自动改名，不覆盖。目录作业最多 1000 个文件，不能把文件夹移进自己。浏览器文件以原始字节 PUT 进入私有暂存；交给 owner 后后台继续传输。未完成浏览器发送时关页仍需重新选择文件。
 
 图片、视频、音频、PDF 通过固定引用读取，源版本改变时明确失败。缩略图与兼容预览复用 DriveBridge Server 的 `sdk/mediapreview`，不会自行维护另一套格式转换规则。转换组件缺失时保留原文件入口。Office、RAW 和 PDF 栅格化需要相应转换器与 Bubblewrap。
 

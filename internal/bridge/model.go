@@ -161,7 +161,7 @@ func New(state string, provider Provider, enabled bool) (*Service, error) {
 		return nil, err
 	}
 	sqlDB.SetMaxOpenConns(1)
-	if err = db.AutoMigrate(&Space{}, &File{}, &Operation{}, &Event{}, &RelayTarget{}, &Connection{}); err != nil {
+	if err = db.AutoMigrate(&Space{}, &File{}, &Operation{}, &Event{}, &RelayTarget{}, &Connection{}, &AdoptRecord{}, &BindRecord{}); err != nil {
 		return nil, errors.New("state_unavailable")
 	}
 	if err = os.Chmod(filepath.Join(state, "state.sqlite"), 0600); err != nil {
@@ -356,6 +356,9 @@ func (s *Service) listEntries(ctx context.Context, space, dir string, directorie
 	if dir, e = remoteDir(dir); e != nil {
 		return nil, e
 	}
+	if e = s.rejectBindFence(ctx, space, dir); e != nil {
+		return nil, e
+	}
 	items, e := s.providerFor(p).List(ctx, p, dir)
 	if e != nil {
 		return nil, e
@@ -396,6 +399,12 @@ func (s *Service) Mkdir(ctx context.Context, space, dir string) error {
 	if dir == "" {
 		return errors.New("path_not_allowed")
 	}
+	if e = s.rejectBindFence(ctx, space, dir); e != nil {
+		return e
+	}
+	if e = s.rejectOwnerProtected(space, dir); e != nil {
+		return e
+	}
 	return s.providerFor(p).Mkdir(ctx, p, dir)
 }
 func (s *Service) Stat(ctx context.Context, ref string) (File, error) {
@@ -413,6 +422,9 @@ func (s *Service) Stat(ctx context.Context, ref string) (File, error) {
 	}
 	p, e := s.Space(old.SpaceID)
 	if e != nil {
+		return File{}, e
+	}
+	if e = s.rejectBindFence(ctx, old.SpaceID, joinRel(old.Dir, old.Name)); e != nil {
 		return File{}, e
 	}
 	f, e := s.providerFor(p).Stat(ctx, p, old.ItemID)

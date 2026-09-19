@@ -33,6 +33,12 @@ func (s *Service) Upload(ctx context.Context, space, dir, path, name, key string
 	if dir, err = remoteDir(dir); err != nil {
 		return Operation{}, err
 	}
+	if err = s.rejectBindFence(ctx, space, dir, joinRel(dir, name)); err != nil {
+		return Operation{}, err
+	}
+	if err = s.rejectOwnerProtected(space, dir, joinRel(dir, name)); err != nil {
+		return Operation{}, err
+	}
 	rel, err := localPath(p, path)
 	if err != nil {
 		return Operation{}, err
@@ -254,7 +260,7 @@ func safeError(err error) string {
 	switch err.Error() {
 	case "relay_target_unavailable", "relay_target_rejected", "invalid_relay_response", "untrusted_transfer", "relay_transfer_failed", "relay_transfer_rejected", "relay_completion_pending", "remote_cancel_pending", "unsupported_media", "relay_target_not_found", "relay_target_conflict", "invalid_relay_target", "source_not_allowed", "relay_input_terminal":
 		return err.Error()
-	case "audit_unavailable", "insights_unavailable", "file_trashed", "file_not_trashed", "cursor_ahead", "invalid_search", "transfer_capacity_unavailable", "disabled", "idempotency_conflict", "idempotency_key_required", "invalid_upload", "file_size_invalid", "local_file_unavailable", "local_root_unavailable", "state_unavailable", "operation_not_found", "operation_cancelled", "unknown_tool", "output_adapter_unavailable", "output_not_ready", "output_not_allowed", "output_grant_invalid", "scaena_unavailable", "graph_unavailable", "graph_unreachable", "download_unavailable", "download_access_unavailable", "media_probe_failed", "media_type_unsupported", "media_duration_invalid", "region_not_supported", "source_changed", "file_version_changed", "target_conflict", "space_not_allowed", "reference_not_found", "quota_exceeded", "throttled", "authentication_required", "path_not_allowed", "invalid_file_metadata", "remote_not_found", "remote_outside_space", "secure_handoff_unavailable", "handoff_not_available", "access_unsupported", "backend_unavailable", "symlink_rejected", "invalid_space", "space_conflict", "content_mismatch":
+	case "audit_unavailable", "insights_unavailable", "file_trashed", "file_not_trashed", "cursor_ahead", "invalid_search", "transfer_capacity_unavailable", "disabled", "idempotency_conflict", "idempotency_key_required", "invalid_upload", "file_size_invalid", "local_file_unavailable", "local_root_unavailable", "state_unavailable", "operation_not_found", "operation_cancelled", "unknown_tool", "output_adapter_unavailable", "output_not_ready", "output_not_allowed", "output_grant_invalid", "scaena_unavailable", "graph_unavailable", "graph_unreachable", "download_unavailable", "download_access_unavailable", "media_probe_failed", "media_type_unsupported", "media_duration_invalid", "region_not_supported", "source_changed", "file_version_changed", "target_conflict", "space_not_allowed", "reference_not_found", "quota_exceeded", "throttled", "authentication_required", "path_not_allowed", "invalid_file_metadata", "remote_not_found", "remote_outside_space", "secure_handoff_unavailable", "handoff_not_available", "access_unsupported", "backend_unavailable", "symlink_rejected", "invalid_space", "space_conflict", "content_mismatch", "owner_protected", "directory_contains_unsupported_files", "adopt_mismatch", "bind_mismatch", "bind_prefix_denied", "bind_revoked", "bind_escape_denied", "bind_purpose_unknown", "bind_not_found", "bind_missing_flag":
 		return err.Error()
 	}
 	return "transfer_failed"

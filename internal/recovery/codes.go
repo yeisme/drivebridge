@@ -38,12 +38,52 @@ var Registry = map[string]Doc{
 		DocZH:  "远端无法列举：核对 remote 名称、凭据与 remote-path 后重跑 drivebridge storage probe。",
 	},
 	"storage_kind_unknown": {
-		HintEN: "Unknown --kind for 'drivebridge storage add'; run 'drivebridge storage kinds' for the supported list.",
-		DocZH:  "storage add 的 --kind 不在支持列表：先运行 drivebridge storage kinds 查看。",
+		HintEN: "Unknown --kind for storage add or adopt; run 'drivebridge storage kinds' for the supported list.",
+		DocZH:  "storage add/adopt 的 --kind 不在支持列表：先运行 drivebridge storage kinds 查看。",
 	},
 	"storage_missing_flag": {
-		HintEN: "Storage add is missing required flags for this kind; the failure names them, or run 'drivebridge storage kinds'.",
-		DocZH:  "storage add 缺少该类型必填旗标：按提示补齐，或用 drivebridge storage kinds 查看必填项。",
+		HintEN: "Storage add or adopt is missing required flags for this kind; the failure names them, or run 'drivebridge storage kinds'.",
+		DocZH:  "storage add/adopt 缺少该类型必填旗标：按提示补齐，或用 drivebridge storage kinds 查看必填项。",
+	},
+	"owner_protected": {
+		HintEN: "That path is owner-protected metadata; use the domain owner command to change it. DriveBridge may list or stat it.",
+		DocZH:  "该路径属于 owner 保护元数据：改用领域 owner 命令写入，DriveBridge 只允许 list/stat。",
+	},
+	"directory_contains_unsupported_files": {
+		HintEN: "The directory contains empty or over-limit files that DriveBridge cannot reference; move or delete those files, then retry the directory job.",
+		DocZH:  "目录里有 DriveBridge 无法引用的空文件或超限文件：先移走或删除这些文件，再重试目录作业。",
+	},
+	"adopt_mismatch": {
+		HintEN: "The same idempotency key already adopted a different directory or S3 prefix; reuse the original location or pick a new key.",
+		DocZH:  "同一幂等键指向了不同的目录或桶前缀：改回原来的位置，或换新的幂等键。",
+	},
+	"bind_escape_denied": {
+		HintEN: "That space is an escape hatch; bind an adopted local/S3 space or OneDrive/Google Drive, or pass --allow-generic.",
+		DocZH:  "该空间是逃生舱：改绑已 adopt 的 local/S3 或 OneDrive/Google Drive，或显式传 --allow-generic。",
+	},
+	"bind_mismatch": {
+		HintEN: "The same idempotency key already bound different consumer, project, space, prefix or purpose fields; reuse the original fields or pick a new key.",
+		DocZH:  "同一幂等键指向了不同的 consumer/project/space/prefix/purpose：改回原来的字段，或换新的幂等键。",
+	},
+	"bind_missing_flag": {
+		HintEN: "bind add requires --consumer, --project, --space, --prefix and --purpose; scoped file commands need --consumer and --project, or --bind.",
+		DocZH:  "bind add 需要 --consumer/--project/--space/--prefix/--purpose；带范围的文件命令需要 --consumer 与 --project，或 --bind。",
+	},
+	"bind_not_found": {
+		HintEN: "No bind record matches that id or consumer+project+space; run 'drivebridge bind list' or add a bind first.",
+		DocZH:  "找不到该 bind-id 或 consumer+project+space 的绑定：先 bind list 或 bind add。",
+	},
+	"bind_prefix_denied": {
+		HintEN: "That path is outside the bound prefix; list the prefix directory and act on entries inside it.",
+		DocZH:  "路径落在绑定前缀之外：先列举前缀目录，只操作前缀内条目。",
+	},
+	"bind_purpose_unknown": {
+		HintEN: "Unknown --purpose; allowed values are vault, notes-attachments, materials, saveback, owner-store.",
+		DocZH:  "未知 --purpose：允许 vault、notes-attachments、materials、saveback、owner-store。",
+	},
+	"bind_revoked": {
+		HintEN: "That bind was revoked; new list/stat/import for it are refused. Owner files, the space and adopt records were not deleted.",
+		DocZH:  "该绑定已撤销：新的 list/stat/import 被拒绝；owner 文件、空间与 adopt 记录未被删除。",
 	},
 	"authentication_required": {
 		HintEN: "Reconnect using drivebridge auth --auto; then resume the original operation.",

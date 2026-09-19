@@ -101,6 +101,12 @@ func (s *Service) Trash(ctx context.Context, ref string) (result File, resultErr
 	if err != nil {
 		return File{}, err
 	}
+	if err = s.rejectBindFence(ctx, f.SpaceID, joinRel(f.Dir, f.Name)); err != nil {
+		return File{}, err
+	}
+	if err = s.rejectOwnerProtected(f.SpaceID, f.Dir, joinRel(f.Dir, f.Name)); err != nil {
+		return File{}, err
+	}
 	trashDir := trashRoot + "/" + time.Now().UTC().Format("20060102")
 	name := f.Name
 	for n := 0; n < 8; n++ {
@@ -149,6 +155,9 @@ func (s *Service) Restore(ctx context.Context, ref string) (result File, resultE
 	if err != nil {
 		return File{}, err
 	}
+	if err = s.rejectOwnerProtected(f.SpaceID, f.Dir, joinRel(f.Dir, f.Name)); err != nil {
+		return File{}, err
+	}
 	name := f.Name
 	for n := 0; n < 8; n++ {
 		if err = s.providerFor(p).Move(ctx, p, f, f.Dir, name); err == nil {
@@ -194,6 +203,9 @@ func (s *Service) Purge(ctx context.Context, ref string) (resultErr error) {
 	if f.Trashed == nil {
 		// Purge only touches already-trashed files: a two-step contract.
 		return errors.New("file_not_trashed")
+	}
+	if err = s.rejectOwnerProtected(f.SpaceID, f.Dir, joinRel(f.Dir, f.Name)); err != nil {
+		return err
 	}
 	if err = s.providerFor(p).Delete(ctx, p, f); err != nil {
 		return err

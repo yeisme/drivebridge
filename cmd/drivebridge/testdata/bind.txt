@@ -1,0 +1,87 @@
+# Local consumer bind: default discovery, prefix fence, revoke.
+mkdir local
+mkdir remote-files
+mkdir remote-files/projects
+mkdir remote-files/projects/drama-1
+mkdir remote-files/projects/drama-2
+exec sh -c 'printf in > remote-files/projects/drama-1/ref.png'
+exec sh -c 'printf out > remote-files/projects/drama-2/other.png'
+exec sh -c 'printf "[nas]\ntype = alias\nremote = %s\n" "$1" > rclone.conf' sh $WORK/remote-files
+exec sh -c 'printf "\n[web]\ntype = webdav\nurl = http://127.0.0.1:9\nvendor = other\nuser = u\n" >> rclone.conf'
+chmod 0600 rclone.conf
+
+exec drivebridge --state $WORK/state --rclone-config $WORK/rclone.conf space add --space nas --backend generic --remote nas --local-root $WORK/local --max-bytes 1048576
+exec drivebridge --state $WORK/state --rclone-config $WORK/rclone.conf space add --space web --backend generic --remote web --local-root $WORK/local --max-bytes 1048576
+
+exec drivebridge --state $WORK/state --rclone-config $WORK/rclone.conf bind discover --json
+stdout '"command":"drivebridge.bind.discover"'
+stdout '"space":"nas"'
+stdout '"kind":"local"'
+! stdout '"space":"web"'
+
+exec drivebridge --state $WORK/state --rclone-config $WORK/rclone.conf bind discover --allow-generic --json
+stdout '"space":"web"'
+
+mkdir vault
+exec sh -c 'printf note > vault/note.md'
+exec drivebridge --state $WORK/state --rclone-config $WORK/rclone.conf storage adopt --kind local --consumer pinax --space pinax-vault --root $WORK/vault --idempotency-key k-local --json
+exec drivebridge --state $WORK/state --rclone-config $WORK/rclone.conf bind discover --json
+stdout '"space":"pinax-vault"'
+stdout '"adopted":true'
+
+! exec drivebridge --state $WORK/state --rclone-config $WORK/rclone.conf bind add --consumer pinax --project drama-1 --space web --prefix x --purpose materials --json
+stdout 'bind_escape_denied'
+stdout '"command":"drivebridge.bind-add"'
+
+! exec drivebridge --state $WORK/state --rclone-config $WORK/rclone.conf bind add --consumer pinax --project drama-1 --space nas --prefix projects/drama-1 --purpose photos --json
+stdout 'bind_purpose_unknown'
+
+exec drivebridge --state $WORK/state --rclone-config $WORK/rclone.conf bind add --consumer pinax --project drama-1 --space nas --prefix projects/drama-1 --purpose materials --idempotency-key k-bind --json
+stdout '"command":"drivebridge.bind-add"'
+stdout '"consumer":"pinax"'
+stdout '"project_ref":"drama-1"'
+stdout '"purpose":"materials"'
+stdout '"prefix":"projects/drama-1"'
+! stdout 'token'
+
+exec drivebridge --state $WORK/state --rclone-config $WORK/rclone.conf bind add --consumer pinax --project drama-1 --space nas --prefix projects/drama-1 --purpose materials --idempotency-key k-bind --json
+stdout '"reused":true'
+
+! exec drivebridge --state $WORK/state --rclone-config $WORK/rclone.conf bind add --consumer pinax --project drama-1 --space nas --prefix projects/drama-2 --purpose materials --idempotency-key k-bind --json
+stdout 'bind_mismatch'
+
+exec drivebridge --state $WORK/state --rclone-config $WORK/rclone.conf ls --space nas --path projects/drama-2 --json
+stdout 'other.png'
+
+! exec drivebridge --state $WORK/state --rclone-config $WORK/rclone.conf ls --space nas --path projects/drama-2 --consumer pinax --project drama-1 --json
+stdout 'bind_prefix_denied'
+
+exec drivebridge --state $WORK/state --rclone-config $WORK/rclone.conf ls --space nas --path projects/drama-1 --consumer pinax --project drama-1 --json
+stdout 'ref.png'
+
+! exec drivebridge --state $WORK/state --rclone-config $WORK/rclone.conf mkdir --space nas --path projects/drama-2/nope --consumer pinax --project drama-1 --json
+stdout 'bind_prefix_denied'
+
+exec drivebridge --state $WORK/state --rclone-config $WORK/rclone.conf bind list --json
+stdout '"command":"drivebridge.bind.list"'
+stdout '"consumer":"pinax"'
+
+exec sh -c 'drivebridge --state "$1" --rclone-config "$2" bind list --json | grep -o "\"bind_id\":\"[^\"]*\"" | head -1 | cut -d\" -f4 > bindid.txt' sh $WORK/state $WORK/rclone.conf
+exec sh -c 'test -s bindid.txt'
+exec sh -c 'drivebridge --state "$1" --rclone-config "$2" bind show "$(cat bindid.txt)" --json' sh $WORK/state $WORK/rclone.conf
+stdout '"purpose":"materials"'
+exec sh -c 'drivebridge --state "$1" --rclone-config "$2" bind revoke "$(cat bindid.txt)" --json' sh $WORK/state $WORK/rclone.conf
+stdout '"command":"drivebridge.bind.revoke"'
+stdout '"revoked":true'
+stdout '"space_deleted":false'
+
+! exec drivebridge --state $WORK/state --rclone-config $WORK/rclone.conf ls --space nas --path projects/drama-1 --consumer pinax --project drama-1 --json
+stdout 'bind_revoked'
+
+exec drivebridge --state $WORK/state --rclone-config $WORK/rclone.conf ls --space nas --path projects/drama-1 --json
+stdout 'ref.png'
+
+exec drivebridge --state $WORK/state --rclone-config $WORK/rclone.conf capabilities --json
+stdout '"bind_discover"'
+stdout '"bind_list"'
+stdout '"bind_default_kinds"'

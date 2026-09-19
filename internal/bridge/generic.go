@@ -74,9 +74,12 @@ func (g *Generic) List(ctx context.Context, p Space, dir string) ([]File, error)
 			continue
 		}
 		o, ok := entry.(fs.Object)
-		if !ok || o.Size() <= 0 || o.Size() > p.MaxBytes {
+		if !ok {
 			continue
 		}
+		// Size policy stays at the service layer (listEntries/remember); the
+		// provider reports the tree as-is so structural jobs can see every
+		// entry instead of silently stranding what they cannot transfer.
 		out = append(out, fileFromObject(ctx, p, o))
 	}
 	return out, nil
@@ -98,6 +101,14 @@ func (g *Generic) Upload(ctx context.Context, p Space, name string, in io.Reader
 	f, err := g.remote(p)
 	if err != nil {
 		return File{}, err
+	}
+	// Never overwrite by default: rclone Put opens the target with O_TRUNC,
+	// so an existing object must surface as target_conflict (OneDrive.Upload
+	// already enforces the same contract).
+	if _, err = f.NewObject(ctx, name); err == nil {
+		return File{}, errors.New("target_conflict")
+	} else if !errors.Is(err, fs.ErrorObjectNotFound) {
+		return File{}, errors.New("backend_unavailable")
 	}
 	info := object.NewStaticObjectInfo(name, time.Now().UTC(), n, true, nil, nil)
 	o, err := f.Put(ctx, in, info)

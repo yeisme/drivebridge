@@ -11,14 +11,23 @@
 
 | 错误码 | 触发与恢复 |
 | --- | --- |
+| `adopt_mismatch` | 同一幂等键指向了不同的目录或桶前缀：改回原来的位置，或换新的幂等键。 |
 | `aigora_access_denied` | Aigora 交换拒绝配置的 Key：在适配器宿主修正 Aigora Key 配置后重试原命令，不切换直连或旧凭据。 |
 | `aigora_unavailable` | Aigora 端点不可达：恢复与所配置 Aigora origin 的连通后重试原命令；不会回退长期 Key 直连。 |
 | `authentication_required` | 需要重新认证：运行 drivebridge auth --auto（--auto 空间必须带 --auto 发现根），再恢复原操作。 |
+| `bind_escape_denied` | 该空间是逃生舱：改绑已 adopt 的 local/S3 或 OneDrive/Google Drive，或显式传 --allow-generic。 |
+| `bind_mismatch` | 同一幂等键指向了不同的 consumer/project/space/prefix/purpose：改回原来的字段，或换新的幂等键。 |
+| `bind_missing_flag` | bind add 需要 --consumer/--project/--space/--prefix/--purpose；带范围的文件命令需要 --consumer 与 --project，或 --bind。 |
+| `bind_not_found` | 找不到该 bind-id 或 consumer+project+space 的绑定：先 bind list 或 bind add。 |
+| `bind_prefix_denied` | 路径落在绑定前缀之外：先列举前缀目录，只操作前缀内条目。 |
+| `bind_purpose_unknown` | 未知 --purpose：允许 vault、notes-attachments、materials、saveback、owner-store。 |
+| `bind_revoked` | 该绑定已撤销：新的 list/stat/import 被拒绝；owner 文件、空间与 adopt 记录未被删除。 |
 | `config_write_failed` | 配置文件写入失败：检查目录权限后重试。 |
 | `connection_lost` | 传输中断网：查原操作后 resume 续传。 |
 | `content_mismatch` | 字节与记录摘要不符：从原始来源重试并换新的幂等键。 |
 | `credential_file_not_private` | 凭据文件必须是 0600 的普通文件：chmod 0600 后重试；文件内容未被读取。 |
 | `cursor_ahead` | 请求的游标领先于变更流：从当前位置重新同步（since=0 只返回当前位置，不回放历史）。 |
+| `directory_contains_unsupported_files` | 目录里有 DriveBridge 无法引用的空文件或超限文件：先移走或删除这些文件，再重试目录作业。 |
 | `disabled` | 服务未带 --enabled 启动，全部写工具被门禁。重启 mcp 时加 --enabled。 |
 | `file_not_trashed` | 永久删除必须先移入回收站：先 trash，再 purge --i-am-the-owner（仅 owner 终端）。 |
 | `file_trashed` | 文件已在回收站：先 restore 再访问。 |
@@ -36,6 +45,7 @@
 | `mount_stop_unavailable` | 本平台无法向挂载进程发停止信号：直接关闭其终端。 |
 | `operation_closed` | 操作已达终态：新工作请发起新操作。 |
 | `output_adapter_unavailable` | save_output 需要 MCP 启动时带 --scaena-url：配置后重启服务。 |
+| `owner_protected` | 该路径属于 owner 保护元数据：改用领域 owner 命令写入，DriveBridge 只允许 list/stat。 |
 | `path_not_allowed` | 路径被限制在空间根内且不可用绝对路径/..：先 list 再对列出的条目操作。 |
 | `probe_failed` | 远端无法列举：核对 remote 名称、凭据与 remote-path 后重跑 drivebridge storage probe。 |
 | `quota_exceeded` | 空间配额已满：清理空间或调整 max-bytes 后 resume 原操作。 |
@@ -51,8 +61,8 @@
 | `service_admission_required` | 统一身份写路径未开通准入：停止并在所属服务申请准入，不能替换凭据或另走直连。 |
 | `source_changed` | 恢复必须用原源文件；源内容已变化时需换新的幂等键重新传输。 |
 | `state_locked` | 有已注册的 MCP 客户端（drivebridge mcp）持有该 state 的进程锁。用 recent/operation（快照读）查看状态，或停掉客户端后重试。 |
-| `storage_kind_unknown` | storage add 的 --kind 不在支持列表：先运行 drivebridge storage kinds 查看。 |
-| `storage_missing_flag` | storage add 缺少该类型必填旗标：按提示补齐，或用 drivebridge storage kinds 查看必填项。 |
+| `storage_kind_unknown` | storage add/adopt 的 --kind 不在支持列表：先运行 drivebridge storage kinds 查看。 |
+| `storage_missing_flag` | storage add/adopt 缺少该类型必填旗标：按提示补齐，或用 drivebridge storage kinds 查看必填项。 |
 | `symlink_rejected` | 默认拒绝符号链接防越界：改传真实文件，或在空间上显式开启 follow-symlinks。 |
 | `target_conflict` | 目标路径已有文件（原文件未动）：换一个输出路径。 |
 | `throttled` | 供应商限流：等待后 resume 原操作。 |

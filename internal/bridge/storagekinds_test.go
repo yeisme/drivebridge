@@ -2,6 +2,7 @@ package bridge
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -20,9 +21,26 @@ func installRcloneConfig(t *testing.T) {
 }
 
 func TestStorageCatalogStaysHonest(t *testing.T) {
+	wantTier := map[string]string{
+		"local": KindTierFirstClassStore, "s3": KindTierFirstClassStore,
+		"onedrive": KindTierFirstClassCloud, "gdrive": KindTierFirstClassCloud,
+		"openlist": KindTierEscape, "webdav": KindTierEscape, "smb": KindTierEscape,
+		"sftp": KindTierEscape, "alias": KindTierEscape,
+	}
+	seen := map[string]bool{}
 	for _, k := range StorageKinds() {
 		if k.Kind == "" || k.Display == "" || len(k.Requires) == 0 {
 			t.Fatalf("incomplete kind entry: %+v", k)
+		}
+		if _, ok := wantTier[k.Kind]; !ok {
+			t.Fatalf("unexpected kind %s", k.Kind)
+		}
+		seen[k.Kind] = true
+		if k.Tier != wantTier[k.Kind] {
+			t.Fatalf("kind %s tier=%q, want %q", k.Kind, k.Tier, wantTier[k.Kind])
+		}
+		if k.BindDefault != (k.Tier != KindTierEscape) {
+			t.Fatalf("kind %s bind_default=%v, want %v", k.Kind, k.BindDefault, k.Tier != KindTierEscape)
 		}
 		if k.Kind != "onedrive" {
 			if k.Backend != "generic" {
@@ -39,6 +57,23 @@ func TestStorageCatalogStaysHonest(t *testing.T) {
 			if len(k.Capabilities) != 3 {
 				t.Fatalf("generic kind %s caps must mirror the truth table exactly: %v", k.Kind, k.Capabilities)
 			}
+			if !k.Capabilities["transfer"] {
+				t.Fatalf("generic kind %s must keep transfer", k.Kind)
+			}
+		} else if !k.Capabilities["direct_url"] || !k.Capabilities["reference_handoff"] || !k.Capabilities["server_side_copy"] {
+			t.Fatalf("onedrive must keep privileged caps: %v", k.Capabilities)
+		}
+	}
+	if len(seen) != len(wantTier) {
+		t.Fatalf("catalog kinds %d, want %d (generic backends must stay listed)", len(seen), len(wantTier))
+	}
+	raw, err := json.Marshal(StorageKinds())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, field := range []string{`"kind"`, `"display"`, `"backend"`, `"requires"`, `"capabilities"`, `"tier"`, `"bind_default"`} {
+		if !strings.Contains(string(raw), field) {
+			t.Fatalf("catalog JSON missing %s", field)
 		}
 	}
 	// Remote-based kinds keep --remote-path optional (empty = remote root);
@@ -54,6 +89,43 @@ func TestStorageCatalogStaysHonest(t *testing.T) {
 		}
 		if usedPath != want {
 			t.Fatalf("kind %s --remote-path required=%v, want %v", k.Kind, usedPath, want)
+		}
+	}
+}
+
+func TestFirstClassBindDefaultDiscovery(t *testing.T) {
+	want := map[string]string{
+		"local": KindTierFirstClassStore, "s3": KindTierFirstClassStore,
+		"onedrive": KindTierFirstClassCloud, "gdrive": KindTierFirstClassCloud,
+	}
+	got := BindDefaultKinds()
+	if len(got) != len(want) {
+		t.Fatalf("bind_default kinds %d, want %d: %+v", len(got), len(want), got)
+	}
+	for _, k := range got {
+		if !k.BindDefault {
+			t.Fatalf("%s listed in bind_default discovery with bind_default=false", k.Kind)
+		}
+		if k.Tier != want[k.Kind] {
+			t.Fatalf("%s tier=%q, want %q", k.Kind, k.Tier, want[k.Kind])
+		}
+		if k.Kind != "onedrive" {
+			if k.Backend != "generic" || k.Capabilities["direct_url"] || k.Capabilities["reference_handoff"] {
+				t.Fatalf("first-class kind %s must stay generic/transfer-only", k.Kind)
+			}
+		}
+		delete(want, k.Kind)
+	}
+	if len(want) != 0 {
+		t.Fatalf("missing bind_default kinds: %v", want)
+	}
+	raw, err := json.Marshal(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, escape := range []string{"openlist", "webdav", "smb", "sftp", "alias"} {
+		if strings.Contains(string(raw), `"kind":"`+escape+`"`) {
+			t.Fatalf("escape kind %s leaked into bind_default discovery", escape)
 		}
 	}
 }

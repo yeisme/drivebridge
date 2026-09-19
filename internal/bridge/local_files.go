@@ -47,6 +47,14 @@ func (s *Service) RunLocalFileAction(ctx context.Context, q LocalFileAction) (an
 		out := []Operation{}
 		err := s.DB.Where("space_id = ?", q.Space).Order("updated DESC").Limit(200).Find(&out).Error
 		return out, err
+	case "copy":
+		return s.DuplicateFile(ctx, q.Ref, q.Path, q.Name)
+	case "copy_directory":
+		return s.DuplicateDirectory(ctx, q.Space, q.Path, q.Name)
+	case "move_directory":
+		return s.RelocateDirectory(ctx, q.Space, q.Path, q.Name)
+	case "trash_directory":
+		return s.TrashDirectory(ctx, q.Space, q.Path)
 	case "move":
 		dir, err := remoteDir(q.Path)
 		if err != nil {
@@ -66,6 +74,9 @@ func (s *Service) RunLocalFileAction(ctx context.Context, q LocalFileAction) (an
 		}
 		p, err := s.Space(f.SpaceID)
 		if err != nil {
+			return nil, err
+		}
+		if err = s.rejectOwnerProtected(f.SpaceID, f.Dir, joinRel(f.Dir, f.Name), dir, joinRel(dir, q.Name)); err != nil {
 			return nil, err
 		}
 		finish, err := s.beginFileAudit(f.SpaceID, "files.move", f.Ref)

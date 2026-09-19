@@ -29,6 +29,8 @@ func (s *Service) Tools() []mcp.Tool {
 		tool("relay_start", "Relay a pinned image, video or audio file to a preconfigured owner input (eikona, scaena or sonora) without generation; poll operation_get.", "file_ref", "target_id", "idempotency_key"),
 		tool("relay_cancel", "Cancel the original local relay and target input; retain completed assets.", "operation_id"),
 		tool("capabilities", "Discover allowed spaces, exact tool schemas, transfer limits and recovery."),
+		tool("bind_discover", "List spaces eligible for consumer bind; default omits escape kinds. Caller labels are not authentication."),
+		tool("bind_list", "List local consumer bind records (caller-declared labels are not authentication)."),
 		tool("list", "List files in the space root or a workspace subdirectory.", "space_id"),
 		tool("mkdir", "Create a workspace directory (idempotent); existing files with the name are a conflict.", "space_id", "path"),
 		tool("search", "Search the space index by name (case-insensitive substring); verify hits with stat before consuming.", "space_id", "query"),
@@ -51,13 +53,20 @@ func (s *Service) Tools() []mcp.Tool {
 		fields := []string{}
 		switch tools[i].Name {
 		case "upload":
-			fields = []string{"dir", "caller", "task_ref"}
+			fields = []string{"dir", "caller", "task_ref", "consumer", "project", "bind_id"}
 		case "link":
 			fields = []string{"dir", "name"}
 		case "search":
 			fields = []string{"path", "mime_type", "after"}
 		case "list":
-			fields = []string{"path"}
+			fields = []string{"path", "consumer", "project", "bind_id"}
+		case "mkdir", "stat", "trash":
+			fields = []string{"consumer", "project", "bind_id"}
+		case "bind_discover":
+			fields = []string{"allow_generic"}
+		}
+		if len(fields) > 0 && tools[i].InputSchema.Properties == nil {
+			tools[i].InputSchema.Properties = map[string]any{}
 		}
 		for _, field := range fields {
 			tools[i].InputSchema.Properties[field] = map[string]any{"type": "string"}
@@ -84,10 +93,11 @@ func (s *Service) Capabilities() any {
 	for _, p := range s.Spaces() {
 		kinds[p.Kind()] = true
 	}
-	return map[string]any{"relay": s.RelayDiscovery(), "storage_kinds": StorageKinds(), "storage_add": map[string]any{"add": "drivebridge storage add --kind <kind> …", "probe": "drivebridge storage probe --remote <remote> [--remote-path <path>]", "guide": "drivebridge storage kinds", "note": "generic kinds are transfer-only; OneDrive onboards via auth + setup"}, "provenance": "caller_declared_labels", "search_scope": "observed_index_not_full_remote", "after_semantics": "first_observed_at", "history": "pinned_identity_not_snapshot", "concurrency": "single_process_per_state", "spec_version": "0.1", "enabled": s.Enabled, "spaces": s.Spaces(), "tools": s.Tools(), "backend_capabilities": map[string]any{"onedrive": map[string]any{"transfer": true, "direct_url": true, "reference_handoff": true}, "generic": map[string]any{"transfer": true, "direct_url": false, "reference_handoff": false}}, "configured_backend_kinds": kinds, "secure_handoff": s.Enabled && s.Handoff, "output_adapter_enabled": s.Enabled && s.Output != nil, "authorization_status": "not_probed", "storage_status": "not_probed", "provider_consumption_status": "not_verified", "handoff_transport": "owner_unix_socket", "download_url_ttl": "unknown", "cli_required_on_mcp_client": false, "recovery": "operation_get_then_resume", "scope": "local_single_user", "generation_owner": "scaena", "cas_reuse": true, "mount": map[string]any{"start": "cli_only", "adapters": []string{"webdav"}, "fuse": "unsupported_default_build", "writable": "explicit_flag_only"}}
+	return map[string]any{"relay": s.RelayDiscovery(), "storage_kinds": StorageKinds(), "bind_default_kinds": BindDefaultKinds(), "storage_add": map[string]any{"add": "drivebridge storage add --kind <kind> …", "probe": "drivebridge storage probe --remote <remote> [--remote-path <path>]", "guide": "drivebridge storage kinds", "note": "generic kinds are transfer-only; OneDrive onboards via auth + setup"}, "storage_adopt": map[string]any{"adopt": "drivebridge storage adopt --kind local|s3 --consumer <id> --space <slug> …", "status": "drivebridge storage adopt status", "note": "zero-copy attach of owner local roots or S3 prefixes; mutating owner-protected paths return owner_protected"}, "bind": map[string]any{"discover": "drivebridge bind discover [--allow-generic]", "add": "drivebridge bind add --consumer <id> --project <ref> --space <space> --prefix <prefix> --purpose <purpose>", "list": "drivebridge bind list", "bind_discover": true, "bind_list": true, "note": "Caller-declared consumer and project labels are stored facts, not authentication. Default discovery lists bind_default kinds and adopted spaces."}, "provenance": "caller_declared_labels", "search_scope": "observed_index_not_full_remote", "after_semantics": "first_observed_at", "history": "pinned_identity_not_snapshot", "concurrency": "single_process_per_state", "spec_version": "0.1", "enabled": s.Enabled, "spaces": s.Spaces(), "tools": s.Tools(), "backend_capabilities": map[string]any{"onedrive": map[string]any{"transfer": true, "direct_url": true, "reference_handoff": true}, "generic": map[string]any{"transfer": true, "direct_url": false, "reference_handoff": false}}, "configured_backend_kinds": kinds, "secure_handoff": s.Enabled && s.Handoff, "output_adapter_enabled": s.Enabled && s.Output != nil, "authorization_status": "not_probed", "storage_status": "not_probed", "provider_consumption_status": "not_verified", "handoff_transport": "owner_unix_socket", "download_url_ttl": "unknown", "cli_required_on_mcp_client": false, "recovery": "operation_get_then_resume", "scope": "local_single_user", "generation_owner": "scaena", "cas_reuse": true, "mount": map[string]any{"start": "cli_only", "adapters": []string{"webdav"}, "fuse": "unsupported_default_build", "writable": "explicit_flag_only"}}
 }
 func (s *Service) Call(ctx context.Context, name string, args map[string]any) (any, error) {
 	text := func(k string) string { v, _ := args[k].(string); return v }
+	ctx = applyBindScope(ctx, args)
 	if name == "usage_scan" {
 		return s.Scan(ctx, text("space_id"), text("resume_id"))
 	}
@@ -115,6 +125,19 @@ func (s *Service) Call(ctx context.Context, name string, args map[string]any) (a
 		return ops, nil
 	case "capabilities":
 		return s.Capabilities(), nil
+	case "bind_discover":
+		allow := false
+		switch v := args["allow_generic"].(type) {
+		case bool:
+			allow = v
+		case string:
+			allow = v == "true" || v == "1"
+		}
+		spaces := s.DiscoverBindSpaces(allow)
+		return map[string]any{"count": len(spaces), "spaces": spaces}, nil
+	case "bind_list":
+		rows := s.Binds()
+		return map[string]any{"count": len(rows), "binds": rows}, nil
 	case "list":
 		return s.List(ctx, text("space_id"), text("path"))
 	case "mkdir":
@@ -236,7 +259,8 @@ func toolErrorResult(err error) *mcp.CallToolResult {
 // heuristics. Reads carry ReadOnlyHint; trash/cancel carry DestructiveHint.
 func applyToolHints(tools []mcp.Tool) {
 	readOnly := map[string]bool{
-		"relay_targets": true, "capabilities": true, "list": true, "search": true, "changes": true,
+		"relay_targets": true, "capabilities": true, "bind_discover": true, "bind_list": true,
+		"list": true, "search": true, "changes": true,
 		"stat": true, "operation_get": true, "inbox": true, "prepare_reference": true,
 		"mount_status":  true,
 		"usage_summary": true, "usage_series": true, "usage_breakdown": true, "usage_scans": true,
@@ -256,4 +280,13 @@ func applyToolHints(tools []mcp.Tool) {
 			tools[i].Annotations.IdempotentHint = &[]bool{true}[0]
 		}
 	}
+}
+
+func applyBindScope(ctx context.Context, args map[string]any) context.Context {
+	text := func(k string) string { v, _ := args[k].(string); return v }
+	project := text("project")
+	if project == "" {
+		project = text("project_ref")
+	}
+	return WithBindScope(ctx, BindScope{ID: text("bind_id"), Consumer: text("consumer"), ProjectRef: project})
 }

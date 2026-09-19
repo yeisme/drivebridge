@@ -86,6 +86,7 @@ func newRootCommand(c *cli) *cobra.Command {
 		"remote":       newRemoteCommand(c),
 		"space":        newSpaceCommand(c),
 		"connection":   newConnectionCommand(c),
+		"bind":         newBindCommand(c),
 		"space-add":    newSpaceAddCommand(c),
 		"config":       newConfigCommand(c),
 		"install":      newInstallCommand(c),
@@ -111,6 +112,8 @@ func commandAction(cmd *cobra.Command) string {
 		return "space-add"
 	case "storage.add":
 		return "storage-add"
+	case "bind.add":
+		return "bind-add"
 	}
 	return action
 }

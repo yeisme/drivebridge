@@ -7,11 +7,16 @@ exec sh -c 'printf hello > remote-files/a.txt'
 exec sh -c 'printf "[nas]\ntype = alias\nremote = %s\n" "$1" > rclone.conf' sh $WORK/remote-files
 chmod 0600 rclone.conf
 
-# The catalog lists every kind with honest generic capabilities.
+# The catalog lists every kind with honest generic capabilities,
+# plus additive tier/bind_default discovery fields.
 exec drivebridge storage kinds --json
 stdout '"command":"drivebridge.storage.kinds"'
 stdout '"kind":"openlist"'
 stdout '"direct_url":false'
+stdout '"tier":"first_class_store"'
+stdout '"bind_default":true'
+stdout '"bind_default_kinds"'
+stdout '"kind":"alias"'
 
 # Unknown kinds and missing flags fail with pointers, not guesses; the
 # failure envelope carries the storage-add command identity.
@@ -84,3 +89,73 @@ stdout 'remote_exists'
 exec drivebridge --state $WORK/state --rclone-config $WORK/rclone.conf capabilities --json
 stdout '"storage_kinds"'
 stdout '"storage_add"'
+stdout '"storage_adopt"'
+stdout '"bind_default_kinds"'
+stdout '"bind_discover"'
+stdout '"bind_list"'
+
+# Zero-copy local adopt of an owner vault; list sees the same files.
+mkdir vault
+mkdir vault/.pinax
+exec sh -c 'printf note > vault/note.md'
+exec sh -c 'printf cfg > vault/.pinax/config.yaml'
+exec drivebridge --state $WORK/state --rclone-config $WORK/rclone.conf storage adopt --kind local --consumer pinax --space pinax-vault --root $WORK/vault --idempotency-key k-local --json
+stdout '"command":"drivebridge.storage.adopt"'
+stdout '"copied":false'
+stdout '"consumer":"pinax"'
+stdout '"kind":"local"'
+stdout '"space":"pinax-vault"'
+exec drivebridge --state $WORK/state --rclone-config $WORK/rclone.conf ls --space pinax-vault --json
+stdout 'note.md'
+exec drivebridge --state $WORK/state --rclone-config $WORK/rclone.conf ls --space pinax-vault --path .pinax --json
+stdout 'config.yaml'
+
+# Writes into owner metadata are fenced; user content mkdir is not.
+! exec drivebridge --state $WORK/state --rclone-config $WORK/rclone.conf mkdir --space pinax-vault --path .pinax --json
+stdout 'owner_protected'
+! exec drivebridge --state $WORK/state --rclone-config $WORK/rclone.conf mkdir --space pinax-vault --path .pinax/nested --json
+stdout 'owner_protected'
+exec drivebridge --state $WORK/state --rclone-config $WORK/rclone.conf mkdir --space pinax-vault --path notes --json
+stdout '"status":"success"'
+
+# Same key + same location reuses; same key + different location mismatches.
+exec drivebridge --state $WORK/state --rclone-config $WORK/rclone.conf storage adopt --kind local --consumer pinax --space pinax-vault --root $WORK/vault --idempotency-key k-local --json
+stdout '"copied":false'
+stdout '"reused":true'
+mkdir other-vault
+! exec drivebridge --state $WORK/state --rclone-config $WORK/rclone.conf storage adopt --kind local --consumer pinax --space other-vault --root $WORK/other-vault --idempotency-key k-local --json
+stdout 'adopt_mismatch'
+
+# This node only adopts local/s3 owner stores.
+! exec drivebridge storage adopt --kind gdrive --consumer pinax --space x --root $WORK/vault --json
+stdout 'unsupported'
+! exec drivebridge storage adopt --kind onedrive --consumer pinax --space x --root $WORK/vault --json
+stdout 'unsupported'
+! exec drivebridge storage adopt --kind openlist --consumer pinax --space x --root $WORK/vault --json
+stdout 'unsupported'
+! exec drivebridge storage adopt --kind dropmark --consumer pinax --space x --root $WORK/vault --json
+stdout 'storage_kind_unknown'
+
+# S3 adopt reuses an existing rclone remote (alias stands in; no bucket copy).
+mkdir s3root
+mkdir s3root/bucket
+mkdir s3root/bucket/prefix
+exec sh -c 'printf blob > s3root/bucket/prefix/obj.txt'
+exec sh -c 'printf "\n[minio]\ntype = alias\nremote = %s\n" "$1" >> rclone.conf' sh $WORK/s3root
+chmod 0600 rclone.conf
+exec drivebridge --state $WORK/state --rclone-config $WORK/rclone.conf storage adopt --kind s3 --consumer eikona --space eikona-exports --remote minio --remote-path bucket/prefix --local-root $WORK/local --idempotency-key k-s3 --json
+stdout '"copied":false'
+stdout '"kind":"s3"'
+stdout '"space":"eikona-exports"'
+exec drivebridge --state $WORK/state --rclone-config $WORK/rclone.conf ls --space eikona-exports --json
+stdout 'obj.txt'
+exec drivebridge --state $WORK/state --rclone-config $WORK/rclone.conf storage adopt status --json
+stdout '"command":"drivebridge.storage.adopt.status"'
+stdout '"consumer":"pinax"'
+stdout '"consumer":"eikona"'
+stdout '"copied":false'
+exec drivebridge --state $WORK/state --rclone-config $WORK/rclone.conf space list --json
+stdout '"adopt"'
+exec drivebridge --state $WORK/state --rclone-config $WORK/rclone.conf doctor --json
+stdout 'copied=false'
+stdout 'opaque_encrypted'

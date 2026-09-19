@@ -20,7 +20,7 @@ func newStorageCommand(c *cli) *cobra.Command {
 		Use:   "storage",
 		Short: "Discover, probe and add storage backends (guides generic backends; OneDrive uses auth + setup).",
 	}
-	root.AddCommand(storageKindsCommand(c), storageProbeCommand(c), storageAddCommand(c))
+	root.AddCommand(storageKindsCommand(c), storageProbeCommand(c), storageAddCommand(c), storageAdoptCommand(c))
 	return root
 }
 
@@ -30,12 +30,13 @@ func storageKindsCommand(c *cli) *cobra.Command {
 		Short: "List supported storage kinds with required flags and honest capabilities.",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			kinds := bridge.StorageKinds()
+			bindDefault := bridge.BindDefaultKinds()
 			if !(c.mode.JSON || c.mode.Agent || c.mode.Events || c.mode.Explain) {
 				for _, k := range kinds {
-					fmt.Printf("%-10s %-38s requires: %s\n", k.Kind, k.Display, strings.Join(k.Requires, " "))
+					fmt.Printf("%-10s %-38s tier=%s bind_default=%t requires: %s\n", k.Kind, k.Display, k.Tier, k.BindDefault, strings.Join(k.Requires, " "))
 				}
 			}
-			return c.mode.write("storage.kinds", "success", fmt.Sprintf("%d storage kinds; OneDrive onboards via auth + setup.", len(kinds)), map[string]any{"count": len(kinds), "kinds": kinds})
+			return c.mode.write("storage.kinds", "success", fmt.Sprintf("%d storage kinds (%d bind_default); OneDrive onboards via auth + setup.", len(kinds), len(bindDefault)), map[string]any{"count": len(kinds), "kinds": kinds, "bind_default_kinds": bindDefault})
 		},
 	}
 }
@@ -262,4 +263,181 @@ func sanitizeName(space string) string {
 	}
 	sum := sha256.Sum256([]byte(space))
 	return "space-" + hex.EncodeToString(sum[:])[:8]
+}
+
+func storageAdoptCommand(c *cli) *cobra.Command {
+	var kind, consumer, space, root, remote, remoteName, remotePath, local, connection, key string
+	var maxBytes int64
+	cmd := &cobra.Command{
+		Use:   "adopt",
+		Short: "Zero-copy attach of an owner local directory or S3 prefix as a space (does not copy bytes).",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if kind == "" {
+				return fail("storage_missing_flag", "storage adopt requires --kind local or --kind s3. Run 'drivebridge storage kinds' for the catalog.")
+			}
+			known := false
+			for _, k := range bridge.StorageKinds() {
+				if k.Kind == kind {
+					known = true
+					break
+				}
+			}
+			if !known {
+				return fail("storage_kind_unknown", "Unknown --kind "+kind+"; run 'drivebridge storage kinds'. Adopt on this node supports local and s3.")
+			}
+			if kind != "local" && kind != "s3" {
+				return fail("unsupported", "storage adopt on this node only supports --kind local or --kind s3. Onboard OneDrive with 'drivebridge auth --auto' then 'drivebridge setup'; other kinds use 'drivebridge storage add --kind "+kind+"'.")
+			}
+			if kind == "local" && root == "" {
+				root = remotePath
+			}
+			missing := []string{}
+			if consumer == "" {
+				missing = append(missing, "--consumer")
+			}
+			if space == "" {
+				missing = append(missing, "--space")
+			}
+			if kind == "local" && root == "" {
+				missing = append(missing, "--root")
+			}
+			if kind == "s3" {
+				if remote == "" {
+					missing = append(missing, "--remote")
+				}
+				if remotePath == "" {
+					missing = append(missing, "--remote-path")
+				}
+				if local == "" {
+					missing = append(missing, "--local-root")
+				}
+			}
+			if len(missing) > 0 {
+				return fail("storage_missing_flag", "storage adopt --kind "+kind+" is missing: "+strings.Join(missing, ", ")+".")
+			}
+			if err := c.installRclone(); err != nil {
+				return err
+			}
+			if maxBytes == 0 {
+				maxBytes = 1 << 30
+			}
+			if kind == "local" {
+				if !filepath.IsAbs(root) {
+					return fail("storage_missing_flag", "--root for kind local must be an existing absolute directory.")
+				}
+				if local == "" {
+					local = root
+				}
+			}
+			name := remote
+			created := false
+			rollback := func() {
+				if created {
+					bridge.DeleteRemote(name)
+				}
+			}
+			if kind == "local" {
+				name = remoteName
+				if name == "" {
+					name = "db-local-" + sanitizeName(space)
+				}
+				if bridge.AliasRemoteMatches(name, root) {
+					// Same directory already configured: reuse it.
+				} else if err := bridge.EnsureAliasRemote(name, root); err != nil {
+					return fail(err.Error(), hintEN(err.Error()))
+				} else {
+					created = true
+				}
+			}
+			probeRoot := remotePath
+			if kind == "local" {
+				probeRoot = ""
+			}
+			res, err := bridge.ProbeStorage(cmd.Context(), kind, name, probeRoot)
+			if err != nil {
+				rollback()
+				return fail(err.Error(), hintEN(err.Error()))
+			}
+			if !(c.mode.JSON || c.mode.Agent || c.mode.Events || c.mode.Explain) {
+				fmt.Printf("probe %s:%s reachable; %d root entries; writability: %s\n", res.Remote, res.Root, res.Entries, res.Writability)
+			}
+			svc, release, err := c.openService(false)
+			if err != nil {
+				rollback()
+				return err
+			}
+			defer release()
+			rec, reused, err := svc.AdoptStorage(bridge.AdoptRequest{
+				Consumer: consumer, Kind: kind, Space: space, Root: root,
+				Remote: name, RemotePath: remotePath, LocalRoot: local,
+				ConnectionID: connection, IdempotencyKey: key, MaxBytes: maxBytes,
+			})
+			if err != nil {
+				rollback()
+				return err
+			}
+			data := adoptEnvelope(*rec, reused)
+			summary := fmt.Sprintf("Adopted %s %s as space %s for consumer %s; copied=false.", kind, rec.Location, rec.SpaceID, rec.Consumer)
+			if reused {
+				summary = fmt.Sprintf("Reused adopt of %s %s as space %s for consumer %s; copied=false.", kind, rec.Location, rec.SpaceID, rec.Consumer)
+			}
+			return c.mode.write("storage.adopt", "success", summary, data)
+		},
+	}
+	f := cmd.Flags()
+	f.StringVar(&kind, "kind", "", "Owner store kind: local or s3")
+	f.StringVar(&consumer, "consumer", "", "Consumer identifier (e.g. pinax, eikona)")
+	f.StringVar(&space, "space", "", "Space identifier")
+	f.StringVar(&root, "root", "", "Absolute local directory to adopt (kind=local)")
+	f.StringVar(&remote, "remote", "", "Existing rclone S3 remote (kind=s3)")
+	f.StringVar(&remoteName, "remote-name", "", "Override the auto-created alias remote name (kind=local)")
+	f.StringVar(&remotePath, "remote-path", "", "S3 '<bucket>/<prefix>'; also accepted as --root alias for kind=local")
+	f.StringVar(&local, "local-root", "", "Allowed absolute local directory (kind=local: same as --root or a parent)")
+	f.StringVar(&connection, "connection", "", "Optional connection_id to record (never prints credentials)")
+	f.StringVar(&key, "idempotency-key", "", "Stable idempotency key (default: adopt:<consumer>:<kind>:<space>)")
+	f.Int64Var(&maxBytes, "max-bytes", 0, "Space byte limit (default 1073741824)")
+	cmd.AddCommand(storageAdoptStatusCommand(c))
+	return cmd
+}
+
+func storageAdoptStatusCommand(c *cli) *cobra.Command {
+	return &cobra.Command{
+		Use:   "status",
+		Short: "List zero-copy adopt records (consumer, kind, space, location; copied=false).",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			s, release, err := c.openService(false)
+			if err != nil {
+				return err
+			}
+			defer release()
+			rows := s.Adopts()
+			data := make([]map[string]any, 0, len(rows))
+			for _, rec := range rows {
+				data = append(data, adoptEnvelope(rec, false))
+			}
+			if !(c.mode.JSON || c.mode.Agent || c.mode.Events || c.mode.Explain) {
+				for _, rec := range rows {
+					fmt.Printf("%-12s %-6s %-16s copied=false %s\n", rec.Consumer, rec.Kind, rec.SpaceID, rec.Location)
+				}
+			}
+			return c.mode.write("storage.adopt.status", "success", fmt.Sprintf("%d adopt record(s).", len(rows)), map[string]any{"count": len(rows), "adopts": data})
+		},
+	}
+}
+
+func adoptEnvelope(rec bridge.AdoptRecord, reused bool) map[string]any {
+	out := map[string]any{
+		"consumer": rec.Consumer, "kind": rec.Kind, "space": rec.SpaceID,
+		"location": rec.Location, "copied": false,
+	}
+	if rec.IdempotencyKey != "" {
+		out["idempotency_key"] = rec.IdempotencyKey
+	}
+	if rec.ConnectionID != "" {
+		out["connection_id"] = rec.ConnectionID
+	}
+	if reused {
+		out["reused"] = true
+	}
+	return out
 }

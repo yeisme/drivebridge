@@ -550,6 +550,24 @@ func (r *OneDrive) Delete(ctx context.Context, p Space, f File) error {
 	return r.graphDelete(ctx, p, "items/"+url.PathEscape(f.ItemID))
 }
 
+// Rmdir removes an empty OneDrive folder; a folder that still has entries is
+// kept (and reported) so a Graph delete can never recursively swallow
+// leftovers the caller could not see.
+func (r *OneDrive) Rmdir(ctx context.Context, p Space, dir string) error {
+	folderID, err := r.folder(ctx, p, dir)
+	if err != nil {
+		return err
+	}
+	items, err := r.List(ctx, p, dir)
+	if err != nil {
+		return err
+	}
+	if len(items) > 0 {
+		return errors.New("target_conflict")
+	}
+	return r.graphDelete(ctx, p, "items/"+url.PathEscape(folderID))
+}
+
 // DiscoverRoot resolves a user-selected folder using the existing rclone
 // identity. It does not create another OAuth credential or change the remote.
 func (r *OneDrive) DiscoverRoot(ctx context.Context, remote, folder string) (string, string, error) {

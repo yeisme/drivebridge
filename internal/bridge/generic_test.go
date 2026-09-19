@@ -478,3 +478,25 @@ func TestGenericInboxFailsHonestOnClosedState(t *testing.T) {
 		t.Fatalf("expected state_unavailable, got %v", e)
 	}
 }
+
+func TestGenericUploadRejectsExisting(t *testing.T) {
+	s, local, remoteRoot := genericFixture(t)
+	if e := s.AddSpace(Space{ID: "nas", Remote: "nas", Backend: "generic", LocalRoot: local, MaxBytes: 1 << 20}); e != nil {
+		t.Fatal(e)
+	}
+	if e := os.WriteFile(filepath.Join(remoteRoot, "taken.txt"), []byte("old"), 0600); e != nil {
+		t.Fatal(e)
+	}
+	p, err := s.Space("nas")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = s.providerFor(p).Upload(context.Background(), p, "taken.txt", strings.NewReader("new"), 3)
+	if err == nil || err.Error() != "target_conflict" {
+		t.Fatalf("overwrite: %v", err)
+	}
+	got, err := os.ReadFile(filepath.Join(remoteRoot, "taken.txt"))
+	if err != nil || string(got) != "old" {
+		t.Fatalf("existing file changed: %q %v", got, err)
+	}
+}

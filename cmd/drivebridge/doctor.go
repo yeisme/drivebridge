@@ -205,6 +205,12 @@ func doctorLocal(cfg doctorConfig) doctorReport {
 			add("space."+p.ID+".save_output", "info", "project/actor not set; save_output unavailable for this space")
 		}
 	}
+	for _, a := range readAdopts(filepath.Join(cfg.State, "state.sqlite")) {
+		add("space."+a.SpaceID+".adopt", "pass", fmt.Sprintf("adopted consumer=%s kind=%s location=%s copied=false", a.Consumer, a.Kind, a.Location))
+		if a.Kind == "s3" {
+			add("space."+a.SpaceID+".opaque", "info", "opaque_encrypted not auto-detected; Capsa ciphertext prefixes stay opaque and are not decrypted")
+		}
+	}
 
 	// Video reference validation dependency: only OneDrive spaces can take
 	// part in reference handoff, so a generic-only setup degrades to info.
@@ -514,4 +520,35 @@ func readSpaces(dbPath string) ([]doctorSpace, string) {
 		return nil, "state_database_unreadable"
 	}
 	return out, ""
+}
+
+type doctorAdopt struct {
+	SpaceID, Consumer, Kind, Location string
+}
+
+// readAdopts is strictly read-only. A missing table (pre-adopt databases) is
+// not a doctor failure.
+func readAdopts(dbPath string) []doctorAdopt {
+	if _, err := os.Lstat(dbPath); err != nil {
+		return nil
+	}
+	db, err := sql.Open("sqlite", "file:"+filepath.ToSlash(dbPath)+"?mode=ro")
+	if err != nil {
+		return nil
+	}
+	defer db.Close()
+	rows, err := db.Query("SELECT space_id, consumer, kind, location FROM adopt_records")
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var out []doctorAdopt
+	for rows.Next() {
+		var a doctorAdopt
+		if err := rows.Scan(&a.SpaceID, &a.Consumer, &a.Kind, &a.Location); err != nil {
+			return out
+		}
+		out = append(out, a)
+	}
+	return out
 }

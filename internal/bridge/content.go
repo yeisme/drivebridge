@@ -42,6 +42,12 @@ func (s *Service) ReuseUpload(ctx context.Context, space, dir, pathName, name, k
 	if dir, err = remoteDir(dir); err != nil {
 		return Operation{}, err
 	}
+	if err = s.rejectBindFence(ctx, space, dir, joinRel(dir, name)); err != nil {
+		return Operation{}, err
+	}
+	if err = s.rejectOwnerProtected(space, dir, joinRel(dir, name)); err != nil {
+		return Operation{}, err
+	}
 	rel, err := localPath(p, pathName)
 	if err != nil {
 		return Operation{}, err
@@ -171,6 +177,9 @@ func (s *Service) LinkRef(ctx context.Context, sourceRef, targetSpace, dir, name
 		return File{}, err
 	}
 	if dir, err = remoteDir(dir); err != nil {
+		return File{}, err
+	}
+	if err = s.rejectOwnerProtected(targetSpace, dir, joinRel(dir, name)); err != nil {
 		return File{}, err
 	}
 	if src.DriveID != p.DriveID {

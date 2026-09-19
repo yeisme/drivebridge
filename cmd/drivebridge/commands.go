@@ -277,9 +277,17 @@ func newSpaceCommand(c *cli) *cobra.Command {
 			}
 			defer release()
 			spaces := s.Spaces()
+			adopts := map[string]bridge.AdoptRecord{}
+			for _, rec := range s.Adopts() {
+				adopts[rec.SpaceID] = rec
+			}
 			data := make([]map[string]any, 0, len(spaces))
 			for _, p := range spaces {
-				data = append(data, map[string]any{"id": p.ID, "backend": p.Kind(), "local_root": p.LocalRoot, "max_bytes": p.MaxBytes, "follow_symlinks": p.FollowSymlinks, "save_output": p.Project != "" && p.Actor != ""})
+				row := map[string]any{"id": p.ID, "backend": p.Kind(), "local_root": p.LocalRoot, "max_bytes": p.MaxBytes, "follow_symlinks": p.FollowSymlinks, "save_output": p.Project != "" && p.Actor != ""}
+				if rec, ok := adopts[p.ID]; ok {
+					row["adopt"] = map[string]any{"consumer": rec.Consumer, "kind": rec.Kind, "location": rec.Location, "copied": false}
+				}
+				data = append(data, row)
 			}
 			summary := fmt.Sprintf("%d configured space(s).", len(spaces))
 			if !(c.mode.JSON || c.mode.Agent || c.mode.Events || c.mode.Explain) {
@@ -371,9 +379,9 @@ func newTransferCommands(c *cli) []*cobra.Command {
 			if caller == "" && taskRef == "" {
 				// Without declared provenance the upload may reuse content
 				// that is already stored in the space (content-addressed).
-				op, err = s.ReuseUpload(context.Background(), space, dir, file, name, key)
+				op, err = s.ReuseUpload(bindContext(cmd), space, dir, file, name, key)
 			} else {
-				op, err = s.Upload(context.Background(), space, dir, file, name, key, bridge.Provenance{Caller: caller, TaskRef: taskRef})
+				op, err = s.Upload(bindContext(cmd), space, dir, file, name, key, bridge.Provenance{Caller: caller, TaskRef: taskRef})
 			}
 			if err != nil {
 				return err
@@ -438,7 +446,7 @@ func newTransferCommands(c *cli) []*cobra.Command {
 				return err
 			}
 			defer release()
-			files, err := s.List(context.Background(), space, path)
+			files, err := s.List(bindContext(cmd), space, path)
 			if err != nil {
 				return err
 			}
@@ -463,7 +471,7 @@ func newTransferCommands(c *cli) []*cobra.Command {
 				return err
 			}
 			defer release()
-			f, err := s.Stat(context.Background(), ref)
+			f, err := s.Stat(bindContext(cmd), ref)
 			if err != nil {
 				return err
 			}
@@ -521,7 +529,7 @@ func newTransferCommands(c *cli) []*cobra.Command {
 				return err
 			}
 			defer release()
-			if err = s.Mkdir(context.Background(), space, path); err != nil {
+			if err = s.Mkdir(bindContext(cmd), space, path); err != nil {
 				return err
 			}
 			return c.mode.write("mkdir", "success", "Directory ready.", map[string]any{"space": space, "path": path})
@@ -651,7 +659,7 @@ func newTransferCommands(c *cli) []*cobra.Command {
 				return err
 			}
 			defer release()
-			f, err := s.Trash(context.Background(), ref)
+			f, err := s.Trash(bindContext(cmd), ref)
 			if err != nil {
 				return err
 			}
@@ -702,6 +710,9 @@ func newTransferCommands(c *cli) []*cobra.Command {
 	purge.Flags().String("ref", "", "Already-trashed stable reference")
 	purge.Flags().Bool("i-am-the-owner", false, "Explicit human-owner confirmation; permanent deletion never runs through the MCP surface")
 
+	for _, cmd := range []*cobra.Command{upload, list, stat, mkdir, trashCmd} {
+		addBindScopeFlags(cmd)
+	}
 	commands := []*cobra.Command{upload, download, list, stat, op, mkdir, find, feed, trashCmd, restore, purge}
 	for _, cmd := range commands {
 		routeTransfer(c, cmd)

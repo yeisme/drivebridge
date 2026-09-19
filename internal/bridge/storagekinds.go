@@ -15,10 +15,20 @@ import (
 	"github.com/rclone/rclone/fs/config/obscure"
 )
 
+// Product-discovery tiers. first_class_* kinds are bind/adopt defaults;
+// escape kinds stay addable but are omitted from that default surface.
+const (
+	KindTierFirstClassStore = "first_class_store"
+	KindTierFirstClassCloud = "first_class_cloud"
+	KindTierEscape          = "escape"
+)
+
 // KindDef is one entry of the storage onboarding catalog: what a kind is,
 // which flags it needs and which capabilities it honestly has. Generic
 // (transfer-only) kinds never claim direct URLs or reference handoff; keys
 // absent from Capabilities mean "backend-dependent", never "supported".
+// Tier and BindDefault are additive discovery fields and do not change
+// backend capabilities.
 type KindDef struct {
 	Kind         string          `json:"kind"`
 	Display      string          `json:"display"`
@@ -26,6 +36,8 @@ type KindDef struct {
 	Requires     []string        `json:"requires"`
 	Notes        []string        `json:"notes,omitempty"`
 	Capabilities map[string]bool `json:"capabilities"`
+	Tier         string          `json:"tier,omitempty"`
+	BindDefault  bool            `json:"bind_default"`
 }
 
 // genericCaps mirrors the mcp.go backend_capabilities truth table for the
@@ -42,45 +54,69 @@ func onedriveCaps() map[string]bool {
 
 // StorageKinds is the discoverable catalog behind `drivebridge storage kinds`
 // and the capabilities resource. OneDrive stays the only privileged path.
+// First-class store/cloud labels are product discovery only; local/s3/gdrive
+// remain generic transfer-only backends.
 func StorageKinds() []KindDef {
 	return []KindDef{
 		{Kind: "onedrive", Display: "OneDrive", Backend: "onedrive",
 			Requires:     []string{"drivebridge auth --auto", "drivebridge setup"},
 			Capabilities: onedriveCaps(),
-			Notes:        []string{"Onboard with auth + setup, not storage add; the only backend with direct URL and reference handoff."}},
+			Tier:         KindTierFirstClassCloud, BindDefault: true,
+			Notes: []string{"Onboard with auth + setup, not storage add; the only backend with direct URL and reference handoff.", "First-class personal cloud; included in default bind/adopt discovery."}},
 		{Kind: "local", Display: "Local directory (alias remote)", Backend: "generic",
 			Requires:     []string{"--space", "--remote-path (absolute directory)", "--local-root"},
 			Capabilities: genericCaps(),
-			Notes:        []string{"Creates an alias remote; a zero-copy view of the directory."}},
+			Tier:         KindTierFirstClassStore, BindDefault: true,
+			Notes: []string{"Creates an alias remote; a zero-copy view of the directory.", "Manageable default store for owner local roots; not a new cloud vendor.", "Included in default bind/adopt discovery."}},
 		{Kind: "openlist", Display: "OpenList (AList-fork aggregator)", Backend: "generic",
 			Requires:     []string{"--space", "--url (OpenList /dav endpoint)", "--webdav-user", "--webdav-pass-file (0600)", "--local-root"},
 			Capabilities: genericCaps(),
-			Notes:        []string{"--remote-path is optional and defaults to the OpenList root.", "Self-host and pin a reviewed version; use a dedicated least-privilege account.", "CN drives arrive transfer-only; direct URLs stay refused."}},
+			Tier:         KindTierEscape, BindDefault: false,
+			Notes: []string{"--remote-path is optional and defaults to the OpenList root.", "Self-host and pin a reviewed version; use a dedicated least-privilege account.", "CN drives arrive transfer-only; direct URLs stay refused.", "Escape hatch; omitted from default bind/adopt discovery."}},
 		{Kind: "gdrive", Display: "Google Drive (rclone drive)", Backend: "generic",
 			Requires:     []string{"--space", "--remote (rclone remote, type=drive)", "--local-root"},
 			Capabilities: genericCaps(),
-			Notes:        []string{"--remote-path is optional (empty = the whole drive).", "Server-side copy is used whenever the remote advertises it.", "Version pin today is size+mtime; native MD5 reuse is a retained-next promotion."}},
+			Tier:         KindTierFirstClassCloud, BindDefault: true,
+			Notes: []string{"--remote-path is optional (empty = the whole drive).", "Server-side copy is used whenever the remote advertises it.", "Version pin today is size+mtime; native MD5 reuse is a retained-next promotion.", "First-class personal cloud for bind/adopt discovery; transfer-only (no direct URL or reference handoff)."}},
 		{Kind: "s3", Display: "S3 compatible (MinIO/COS/OSS/R2/B2)", Backend: "generic",
 			Requires:     []string{"--space", "--remote (rclone remote, type=s3)", "--remote-path '<bucket>/<prefix>'", "--local-root"},
 			Capabilities: genericCaps(),
-			Notes:        []string{"The first remote-path segment must be the bucket."}},
+			Tier:         KindTierFirstClassStore, BindDefault: true,
+			Notes: []string{"The first remote-path segment must be the bucket.", "Manageable default store for owner S3 prefixes; included in default bind/adopt discovery."}},
 		{Kind: "webdav", Display: "WebDAV", Backend: "generic",
 			Requires:     []string{"--space", "--remote (rclone remote)", "--local-root"},
 			Capabilities: genericCaps(),
-			Notes:        []string{"--remote-path is optional (empty = remote root)."}},
+			Tier:         KindTierEscape, BindDefault: false,
+			Notes: []string{"--remote-path is optional (empty = remote root).", "Escape hatch; omitted from default bind/adopt discovery."}},
 		{Kind: "smb", Display: "SMB share", Backend: "generic",
 			Requires:     []string{"--space", "--remote (rclone remote)", "--local-root"},
 			Capabilities: genericCaps(),
-			Notes:        []string{"--remote-path is optional (empty = remote root)."}},
+			Tier:         KindTierEscape, BindDefault: false,
+			Notes: []string{"--remote-path is optional (empty = remote root).", "Escape hatch; omitted from default bind/adopt discovery."}},
 		{Kind: "sftp", Display: "SFTP", Backend: "generic",
 			Requires:     []string{"--space", "--remote (rclone remote)", "--local-root"},
 			Capabilities: genericCaps(),
-			Notes:        []string{"--remote-path is optional (empty = remote root)."}},
+			Tier:         KindTierEscape, BindDefault: false,
+			Notes: []string{"--remote-path is optional (empty = remote root).", "Escape hatch; omitted from default bind/adopt discovery."}},
 		{Kind: "alias", Display: "Alias to another rclone remote", Backend: "generic",
 			Requires:     []string{"--space", "--remote (alias remote)", "--local-root"},
 			Capabilities: genericCaps(),
-			Notes:        []string{"--remote-path is optional (empty = remote root)."}},
+			Tier:         KindTierEscape, BindDefault: false,
+			Notes: []string{"--remote-path is optional (empty = remote root).", "Escape hatch; omitted from default bind/adopt discovery."}},
 	}
+}
+
+// BindDefaultKinds is the default bind/adopt discovery surface: kinds with
+// BindDefault set. Escape hatches remain in StorageKinds.
+func BindDefaultKinds() []KindDef {
+	all := StorageKinds()
+	out := make([]KindDef, 0, 4)
+	for _, k := range all {
+		if k.BindDefault {
+			out = append(out, k)
+		}
+	}
+	return out
 }
 
 // ProbeResult is the read-only outcome of `storage probe`: reachability plus
