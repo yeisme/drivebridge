@@ -245,6 +245,30 @@ var Registry = map[string]Doc{
 		HintEN: "This capability is not in the default build; use the documented WebDAV fallback.",
 		DocZH:  "默认构建不含该能力（如内核 FUSE）：改用 mount webdav，或把 rclone mount 指到 WebDAV URL。",
 	},
+	"mount_path_adapter_missing": {
+		HintEN: "This space has no local path. kind=local uses an alias directory; S3 uses the rclone CLI (`rclone mount`) plus FUSE/macFUSE/WinFsp. Install rclone and retry. Do not treat a WebDAV port as vault_root.",
+		DocZH:  "该空间没有本机路径：kind=local 走 alias 目录；S3 走本机 rclone mount（需 FUSE/macFUSE/WinFsp）。安装 rclone 后重试；不要把 WebDAV 端口当成 vault_root。",
+	},
+	"vault_root_not_local": {
+		HintEN: "--vault-root must be an absolute local directory (not a CAS cache path).",
+		DocZH:  "--vault-root 必须是本机绝对目录，不能是 .drivebridge-cas 缓存路径。",
+	},
+	"mount_overlay_conflict": {
+		HintEN: "A vault-root path already exists and is not the expected content link; pick a new --vault-root or remove the conflicting name.",
+		DocZH:  "vault 根下已有同名路径且不是预期的内容链接：换一个 --vault-root，或先移走冲突名字。",
+	},
+	"preset_prefix_is_capsa": {
+		HintEN: "That prefix looks like a Capsa ciphertext store; use a different object prefix for plaintext Pinax notes.",
+		DocZH:  "该前缀像 Capsa 密文布局：明文 Pinax 笔记请换一个对象前缀，不要把密文桶挂成 vault。",
+	},
+	"content_unmounted": {
+		HintEN: "The Pinax vault content tree is not mounted; run drivebridge mount vault --preset pinax or preset pinax-vault in a user terminal.",
+		DocZH:  "Pinax vault 内容树未挂载：在用户终端运行 drivebridge mount vault --preset pinax 或 preset pinax-vault。",
+	},
+	"content_not_writable": {
+		HintEN: "The pinax vault overlay needs a writable content tree; pass --writable.",
+		DocZH:  "pinax vault 叠加需要可写内容树：加上 --writable。",
+	},
 }
 
 // Hint returns the English recovery hint for a code, falling back to the

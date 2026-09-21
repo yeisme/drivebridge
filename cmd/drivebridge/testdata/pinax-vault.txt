@@ -1,0 +1,49 @@
+# Pinax vault overlay: local alias space becomes a path at --vault-root.
+# .pinax stays on the vault root; notes is a symlink into the space content.
+
+mkdir remote-files
+mkdir local
+exec sh -c 'printf hello > remote-files/a.txt'
+exec drivebridge --state $WORK/state --rclone-config $WORK/rclone.conf storage add --kind local --space docs --remote-path $WORK/remote-files --local-root $WORK/local --max-bytes 1048576 --json
+stdout '"status":"success"'
+
+exec drivebridge --state $WORK/state --rclone-config $WORK/rclone.conf preset pinax-vault --space docs --vault-root $WORK/vault --json
+stdout '"preset":"pinax-vault"'
+stdout '"writable":true'
+stdout '"vault_root"'
+stdout 'pinax init'
+
+exists $WORK/vault/.drivebridge-pinax-vault.json
+exec test -L $WORK/vault/notes
+exec sh -c 'printf hi > "$1/vault/notes/from-pinax.md"' sh $WORK
+exists $WORK/remote-files/notes/from-pinax.md
+
+mkdir $WORK/vault/.pinax
+exec sh -c 'printf x > "$1/vault/.pinax/config.yaml"' sh $WORK
+! exists $WORK/remote-files/.pinax/config.yaml
+
+exec drivebridge --state $WORK/state mount status --json
+stdout '"preset":"pinax-vault"'
+stdout '"alive":true'
+
+! exec drivebridge --state $WORK/state --rclone-config $WORK/rclone.conf preset pinax-vault --space docs --vault-root $WORK/other --json
+stdout 'mount_already_running'
+
+exec drivebridge --state $WORK/state mount stop --json
+stdout '"stopped":true'
+! exists $WORK/vault/notes
+exists $WORK/vault/.pinax/config.yaml
+exists $WORK/remote-files/notes/from-pinax.md
+
+# Capsa-looking prefix is refused.
+mkdir capsa-root
+mkdir capsa-root/workspaces
+exec sh -c 'printf "{}\n" > capsa-root/protocol.json'
+exec drivebridge --state $WORK/state --rclone-config $WORK/rclone.conf storage add --kind local --space capsa --remote-path $WORK/capsa-root --local-root $WORK/local --max-bytes 1048576 --json
+! exec drivebridge --state $WORK/state --rclone-config $WORK/rclone.conf preset pinax-vault --space capsa --vault-root $WORK/capsa-vault --json
+stdout 'preset_prefix_is_capsa'
+
+exec drivebridge capabilities --state $WORK/state --json
+stdout 'cli_only'
+stdout 'pinax-vault'
+! stdout 'mount_start'

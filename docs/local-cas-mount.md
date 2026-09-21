@@ -8,6 +8,8 @@
 drivebridge upload --space creative --file ref.png
 drivebridge download --ref 'drivebridge://file/FILE_REF' --out refs/ref.png
 drivebridge mount webdav --space creative --listen 127.0.0.1:19080
+drivebridge preset pinax-vault --space pinax-vault --vault-root /abs/Pinax/cloud
+drivebridge mount vault --preset pinax --space pinax-vault --vault-root /abs/Pinax/cloud --writable
 drivebridge mount status
 drivebridge mount stop
 drivebridge mount fuse   # 默认二进制返回 unsupported，请用 webdav
@@ -23,7 +25,9 @@ drivebridge mount fuse   # 默认二进制返回 unsupported，请用 webdav
 
 方法映射：PROPFIND→Lookup/Readdir、GET/HEAD→Open（冻结 version，支持 Range）、MKCOL→Mkdir、PUT→Create（仅 `--writable`，整对象发布后原 upload 合同生效）、MOVE→Rename（同空间）、DELETE→trash、LOCK→`unsupported`。setattr/chmod 等 POSIX 幻觉一律拒绝。非回环 listen 必须 `--lan`，否则 `listen_not_allowed`；同一 state 只允许一个挂载，冲突 `mount_already_running`。这不是 `drivebridge sync`。
 
-能力资源新增 `cas_reuse` 与 `mount`（`start=cli_only`、`fuse=unsupported_default_build`）。
+能力资源新增 `cas_reuse` 与 `mount`（`start=cli_only`、`fuse=unsupported_default_build`、`path_preset=pinax-vault`）。
+
+Pinax 对象存储 vault 走 `preset pinax-vault`：把已有空间叠进 `--vault-root`。`notes` 等用户树是指向内容根的符号链接；`.pinax` 留在 vault 根本机目录。`kind=local` 的内容根是 alias 目录；S3（rclone `type=s3`）的内容根是本机 `rclone mount remote:<bucket>/<prefix>`（`--vfs-cache-mode writes`，默认二进制不链 libfuse）。这不是 WebDAV 端口，也不是 `drivebridge sync`。rclone 不在 PATH 或 FUSE 不可用时返回 `mount_path_adapter_missing`。Agent 不能启动预设。停挂载先拆链接再 umount，保留本机 `.pinax` 与桶内对象。
 
 ## 回退与回滚
 

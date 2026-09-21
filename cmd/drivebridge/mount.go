@@ -114,20 +114,15 @@ func newMountCommand(c *cli) *cobra.Command {
 		Use:   "status",
 		Short: "Print the read-only mount projection (no token)",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			body, err := os.ReadFile(filepath.Join(c.effective.Values["state"], "mount.json"))
-			if err != nil {
-				return c.mode.write("mount.status", "success", "No mount is running.", map[string]any{"alive": false})
+			proj := bridge.ReadMountStatus(c.effective.Values["state"])
+			summary := "No mount is running."
+			if alive, _ := proj["alive"].(bool); alive {
+				adapter, _ := proj["adapter"].(string)
+				summary = fmt.Sprintf("Mount %s is alive.", adapter)
+			} else if adapter, _ := proj["adapter"].(string); adapter != "" {
+				summary = fmt.Sprintf("Mount receipt present for %s (alive=false).", adapter)
 			}
-			var st bridge.MountState
-			if json.Unmarshal(body, &st) != nil {
-				return fail("state_unavailable", "The mount receipt is unreadable.")
-			}
-			alive := false
-			if conn, err := net.DialTimeout("tcp", st.Listen, 200*time.Millisecond); err == nil {
-				conn.Close()
-				alive = true
-			}
-			return c.mode.write("mount.status", "success", fmt.Sprintf("Mount %s at %s (alive=%v).", st.Adapter, st.Listen, alive), map[string]any{"alive": alive, "adapter": st.Adapter, "listen": st.Listen, "mode": st.Mode, "space_ids": st.SpaceIDs, "started_at": st.StartedAt})
+			return c.mode.write("mount.status", "success", summary, proj)
 		},
 	}
 
@@ -142,6 +137,17 @@ func newMountCommand(c *cli) *cobra.Command {
 			var st bridge.MountState
 			if json.Unmarshal(body, &st) != nil {
 				return fail("state_unavailable", "The mount receipt is unreadable.")
+			}
+			if st.Preset == "pinax-vault" || st.VaultRoot != "" {
+				bridge.RemovePinaxOverlay(bridge.PinaxVaultReceipt{
+					VaultRoot: st.VaultRoot,
+					Links:     st.Links,
+				})
+				if st.Adapter == "pinax-vault-rclone" {
+					bridge.UnmountRclonePath(st.ContentRoot, c.effective.Values["rclone_config"])
+				}
+				_ = os.Remove(filepath.Join(c.effective.Values["state"], "mount.json"))
+				return c.mode.write("mount.stop", "success", "Pinax vault overlay stopped; local .pinax and remote content were kept.", map[string]any{"stopped": true, "preset": st.Preset, "vault_root": st.VaultRoot, "adapter": st.Adapter})
 			}
 			process, err := os.FindProcess(st.PID)
 			if err != nil {
@@ -162,7 +168,38 @@ func newMountCommand(c *cli) *cobra.Command {
 		},
 	}
 
-	for _, sub := range []*cobra.Command{webdav, status, stop, fuse} {
+	var vaultPreset, vaultSpace, vaultRoot string
+	var vaultWritable bool
+	vault := &cobra.Command{
+		Use:   "vault",
+		Short: "Present a space as a local Pinax vault-root overlay (path, not WebDAV URL)",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if vaultPreset != "pinax" && vaultPreset != "pinax-vault" {
+				return fail("unsupported", "mount vault currently supports --preset pinax only.")
+			}
+			if !vaultWritable {
+				return fail("content_not_writable", "The pinax vault overlay is a writable notes tree; pass --writable.")
+			}
+			receipt, err := applyPinaxVaultOverlay(c, vaultSpace, vaultRoot)
+			if err != nil {
+				return err
+			}
+			next := fmt.Sprintf("pinax init %s && pinax storage set local --root %s --vault %s", receipt.VaultRoot, receipt.VaultRoot, receipt.VaultRoot)
+			return c.mode.write("mount.vault", "success", "Pinax vault overlay is ready at "+receipt.VaultRoot+".", map[string]any{
+				"preset": receipt.Preset, "vault_root": receipt.VaultRoot, "writable": true,
+				"overlay": receipt.Overlay, "adapter": receipt.Adapter, "space": receipt.Space,
+				"next": next,
+			})
+		},
+	}
+	vault.Flags().StringVar(&vaultPreset, "preset", "pinax", "Overlay preset (pinax)")
+	vault.Flags().StringVar(&vaultSpace, "space", "", "Existing DriveBridge space id")
+	vault.Flags().StringVar(&vaultRoot, "vault-root", "", "Absolute local vault directory")
+	vault.Flags().BoolVar(&vaultWritable, "writable", true, "Required for pinax overlay (default true)")
+	_ = vault.MarkFlagRequired("space")
+	_ = vault.MarkFlagRequired("vault-root")
+
+	for _, sub := range []*cobra.Command{webdav, vault, status, stop, fuse} {
 		mount.AddCommand(sub)
 	}
 	return mount

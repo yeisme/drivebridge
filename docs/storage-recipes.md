@@ -57,6 +57,16 @@ drivebridge storage adopt --kind local --consumer pinax --space pinax-vault \
 
 `--local-root` 缺省等于 `--root`，且必须是该目录或其父目录。成功信封含 `copied=false`。同一幂等键换位置会 `adopt_mismatch`。已 adopt 空间写入 `.pinax` / `.scaena` 元数据 / sqlite / token 返回 `owner_protected`；list/stat 仍允许。CAS 对象字节（`.scaena/objects/sha256/**`）可 transfer。
 
+Pinax 把该空间当本地 vault 用路径叠加（内容符号链接，`.pinax` 留在 vault 根）：
+
+```bash
+drivebridge preset pinax-vault --space pinax-vault --vault-root /abs/Pinax/cloud --json
+pinax init /abs/Pinax/cloud --title "Cloud notes" --json
+pinax storage set local --root /abs/Pinax/cloud --vault /abs/Pinax/cloud --json
+```
+
+S3 空间（rclone `type=s3`）走同一预设：DriveBridge 调用本机 `rclone mount` 再叠加。需要 PATH 上的 rclone 与平台 FUSE。缺少适配器时返回 `mount_path_adapter_missing`，不会把 WebDAV 端口报成 vault。Agent 不能启动预设。
+
 ## S3 兼容（可管理默认存储；MinIO/COS/OSS/R2/B2）
 
 前置：rclone `type = s3` remote（MinIO 例：`rclone config create minio s3 provider MinIO endpoint http://nas:9000 access_key_id … secret_access_key …`）。
@@ -65,6 +75,12 @@ drivebridge storage adopt --kind local --consumer pinax --space pinax-vault \
 drivebridge storage add --kind s3 --space blobs \
   --remote minio --remote-path '<bucket>/<prefix>' \
   --local-root /absolute/path
+```
+
+Pinax vault（本机 rclone mount + 叠加；需 PATH 上的 rclone 与 FUSE）：
+
+```bash
+drivebridge preset pinax-vault --space blobs --vault-root /abs/Pinax/cloud --json
 ```
 
 `--remote-path` 第一段必须是桶名。`tier=first_class_store`，进入默认 bind/adopt 发现。想要实例级去重 + 信封加密，请改走 `drivebridge-server platform-connect`（平台卷角色），两者不混用。

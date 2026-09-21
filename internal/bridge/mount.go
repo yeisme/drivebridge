@@ -12,16 +12,26 @@ import (
 // MountState is the CLI-owned mount receipt; the MCP mount_status tool reads
 // it read-only and never carries authority to start or stop a mount.
 type MountState struct {
-	Adapter   string    `json:"adapter"`
-	Listen    string    `json:"listen"`
-	Mode      string    `json:"mode"`
-	SpaceIDs  []string  `json:"space_ids"`
-	Token     string    `json:"token"`
-	PID       int       `json:"pid"`
-	StartedAt time.Time `json:"started_at"`
+	Adapter     string    `json:"adapter"`
+	Listen      string    `json:"listen"`
+	Mode        string    `json:"mode"`
+	SpaceIDs    []string  `json:"space_ids"`
+	Token       string    `json:"token"`
+	PID         int       `json:"pid"`
+	StartedAt   time.Time `json:"started_at"`
+	Preset      string    `json:"preset,omitempty"`
+	VaultRoot   string    `json:"vault_root,omitempty"`
+	Overlay     string    `json:"overlay,omitempty"`
+	ContentRoot string    `json:"content_root,omitempty"`
+	Links       []string  `json:"links,omitempty"`
 }
 
 func (s *Service) mountStatePath() string { return filepath.Join(s.state, "mount.json") }
+
+// ReadMountStatus projects the CLI receipt without taking the process lock.
+func ReadMountStatus(stateDir string) map[string]any {
+	return (&Service{state: stateDir}).MountStatus()
+}
 
 // RegisterMount claims the single per-state mount slot; a live or stale
 // receipt blocks a second mount until the owner stops it.
@@ -68,11 +78,22 @@ func (s *Service) MountStatus() map[string]any {
 		return map[string]any{"alive": false, "adapter": "", "listen": "", "mode": "", "space_ids": []string{}}
 	}
 	alive := false
-	if st.Listen != "" {
+	if st.VaultRoot != "" {
+		alive = overlayAlive(st)
+	} else if st.Listen != "" {
 		if conn, err := net.DialTimeout("tcp", st.Listen, 200*time.Millisecond); err == nil {
 			conn.Close()
 			alive = true
 		}
 	}
-	return map[string]any{"alive": alive, "adapter": st.Adapter, "listen": st.Listen, "mode": st.Mode, "space_ids": st.SpaceIDs, "started_at": st.StartedAt}
+	out := map[string]any{"alive": alive, "adapter": st.Adapter, "listen": st.Listen, "mode": st.Mode, "space_ids": st.SpaceIDs, "started_at": st.StartedAt}
+	if st.Preset != "" {
+		out["preset"] = st.Preset
+	}
+	if st.VaultRoot != "" {
+		out["vault_root"] = st.VaultRoot
+		out["overlay"] = st.Overlay
+		out["content_mount"] = map[string]any{"alive": alive, "adapter": st.Adapter}
+	}
+	return out
 }

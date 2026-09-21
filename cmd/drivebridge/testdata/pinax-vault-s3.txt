@@ -1,0 +1,44 @@
+# S3 pinax-vault uses the rclone CLI mount as the content root, then the same overlay.
+mkdir local
+mkdir bin
+exec sh -c 'umask 177; printf "[minio]\ntype = s3\nprovider = Minio\naccess_key_id = testdata\nsecret_access_key = testdata\nendpoint = http://127.0.0.1:1\n\n[gd]\ntype = drive\n" > rclone.conf'
+exec drivebridge --state $WORK/state --rclone-config $WORK/rclone.conf space add --backend generic --remote minio --remote-path bucket/pinax --space pinax-s3 --local-root $WORK/local --max-bytes 1048576 --json
+stdout '"status":"success"'
+exec drivebridge --state $WORK/state --rclone-config $WORK/rclone.conf space add --backend generic --remote gd --space gdrive-notes --local-root $WORK/local --max-bytes 1048576 --json
+
+# Non-S3 generic remotes stay missing-adapter (not a WebDAV URL).
+! exec drivebridge --state $WORK/state --rclone-config $WORK/rclone.conf preset pinax-vault --space gdrive-notes --vault-root $WORK/gvault --json
+stdout 'mount_path_adapter_missing'
+! stdout '127.0.0.1'
+! stdout '19080'
+
+cp rclone-stub bin/rclone
+chmod 0755 bin/rclone
+env PATH=$WORK/bin:${PATH}
+exec drivebridge --state $WORK/state --rclone-config $WORK/rclone.conf preset pinax-vault --space pinax-s3 --vault-root $WORK/vault --json
+stdout '"preset":"pinax-vault"'
+stdout '"adapter":"pinax-vault-rclone"'
+stdout 'pinax init'
+exec test -L $WORK/vault/notes
+exec cat $WORK/vault/notes/obj.md
+stdout from-s3
+mkdir $WORK/vault/.pinax
+exec sh -c 'printf x > "$1/vault/.pinax/config.yaml"' sh $WORK
+exec drivebridge --state $WORK/state mount status --json
+stdout '"adapter":"pinax-vault-rclone"'
+stdout '"alive":true'
+exec drivebridge --state $WORK/state --rclone-config $WORK/rclone.conf mount stop --json
+stdout '"stopped":true'
+! exists $WORK/vault/notes
+exists $WORK/vault/.pinax/config.yaml
+
+-- rclone-stub --
+#!/usr/bin/env python3
+import sys
+from pathlib import Path
+args = sys.argv[1:]
+if not args or args[0] in ("umount", "unmount") or args[0] != "mount":
+    raise SystemExit(0)
+target = args[2]
+Path(target, "notes").mkdir(parents=True, exist_ok=True)
+Path(target, "notes", "obj.md").write_text("from-s3")

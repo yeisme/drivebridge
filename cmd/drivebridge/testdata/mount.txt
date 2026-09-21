@@ -13,5 +13,6 @@ stdout '"alive":false'
 # tools/list never exposes agent-writable mount controls.
 exec drivebridge capabilities --state $WORK/state --json
 stdout 'cli_only'
+stdout 'pinax-vault'
 ! stdout 'mount_start'
 ! stdout 'mount_stop'

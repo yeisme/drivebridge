@@ -25,6 +25,8 @@
 | `config_write_failed` | 配置文件写入失败：检查目录权限后重试。 |
 | `connection_lost` | 传输中断网：查原操作后 resume 续传。 |
 | `content_mismatch` | 字节与记录摘要不符：从原始来源重试并换新的幂等键。 |
+| `content_not_writable` | pinax vault 叠加需要可写内容树：加上 --writable。 |
+| `content_unmounted` | Pinax vault 内容树未挂载：在用户终端运行 drivebridge mount vault --preset pinax 或 preset pinax-vault。 |
 | `credential_file_not_private` | 凭据文件必须是 0600 的普通文件：chmod 0600 后重试；文件内容未被读取。 |
 | `cursor_ahead` | 请求的游标领先于变更流：从当前位置重新同步（since=0 只返回当前位置，不回放历史）。 |
 | `directory_contains_unsupported_files` | 目录里有 DriveBridge 无法引用的空文件或超限文件：先移走或删除这些文件，再重试目录作业。 |
@@ -42,11 +44,14 @@
 | `listen_not_allowed` | 挂载默认仅回环：非回环 listen 必须显式加 --lan。 |
 | `mount_already_running` | 同一 state 只允许一个挂载：先 mount status 查看，或 stop 后再挂。 |
 | `mount_listener_unavailable` | 监听地址不可用：换一个空闲回环端口重试。 |
+| `mount_overlay_conflict` | vault 根下已有同名路径且不是预期的内容链接：换一个 --vault-root，或先移走冲突名字。 |
+| `mount_path_adapter_missing` | 该空间没有本机路径：kind=local 走 alias 目录；S3 走本机 rclone mount（需 FUSE/macFUSE/WinFsp）。安装 rclone 后重试；不要把 WebDAV 端口当成 vault_root。 |
 | `mount_stop_unavailable` | 本平台无法向挂载进程发停止信号：直接关闭其终端。 |
 | `operation_closed` | 操作已达终态：新工作请发起新操作。 |
 | `output_adapter_unavailable` | save_output 需要 MCP 启动时带 --scaena-url：配置后重启服务。 |
 | `owner_protected` | 该路径属于 owner 保护元数据：改用领域 owner 命令写入，DriveBridge 只允许 list/stat。 |
 | `path_not_allowed` | 路径被限制在空间根内且不可用绝对路径/..：先 list 再对列出的条目操作。 |
+| `preset_prefix_is_capsa` | 该前缀像 Capsa 密文布局：明文 Pinax 笔记请换一个对象前缀，不要把密文桶挂成 vault。 |
 | `probe_failed` | 远端无法列举：核对 remote 名称、凭据与 remote-path 后重跑 drivebridge storage probe。 |
 | `quota_exceeded` | 空间配额已满：清理空间或调整 max-bytes 后 resume 原操作。 |
 | `reference_not_found` | 稳定引用已不可解析：重新 list 目录并钉住当前引用。 |
@@ -70,3 +75,4 @@
 | `transfer_failed` | 传输重试后仍失败：查原操作、修复原因后 resume。 |
 | `unknown_config_key` | 配置文件含未知键（config show 可看来源与键名）：修正或删除该键。 |
 | `unsupported` | 默认构建不含该能力（如内核 FUSE）：改用 mount webdav，或把 rclone mount 指到 WebDAV URL。 |
+| `vault_root_not_local` | --vault-root 必须是本机绝对目录，不能是 .drivebridge-cas 缓存路径。 |
