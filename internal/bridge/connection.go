@@ -10,7 +10,7 @@ import (
 )
 
 // Connection is a named DriveBridge connection record owned by the CLI. It is
-// the consumer-facing identity (DSH and others resolve bindings by
+// the consumer-facing identity (consumers resolve bindings by
 // connection_id); credentials themselves never live on this record — only the
 // credential source type and an optional private token-file reference.
 type Connection struct {

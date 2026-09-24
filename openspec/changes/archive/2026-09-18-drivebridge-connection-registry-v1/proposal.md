@@ -1,6 +1,6 @@
 ## Why
 
-消费方（首个：DSH `dsh-drivebridge-project-connections-v1`）需要按名字引用多条 DriveBridge 连接（connectionId/label/baseURL/instanceId/spaceId/projectRef/凭据来源类型），但当前 CLI 只有单一全局 `remote_url`/`remote_token_file` 与扁平 8 键配置，Space 表虽有 `Project` 却无连接身份、label 与凭据来源引用。没有 owner-authored 的连接注册表，消费方只能各自注入一次性绑定，无法跨会话/跨项目管理。
+消费方需要按名字引用多条 DriveBridge 连接（connectionId/label/baseURL/instanceId/spaceId/projectRef/凭据来源类型），但当前 CLI 只有单一全局 `remote_url`/`remote_token_file` 与扁平 8 键配置，Space 表虽有 `Project` 却无连接身份、label 与凭据来源引用。没有 owner-authored 的连接注册表，消费方只能各自注入一次性绑定，无法跨会话/跨项目管理。
 
 ## What Changes
 
@@ -13,4 +13,4 @@
 
 ## Impact
 
-新增 GORM 表与 CLI 命令组；既有 `space`、`config`、`remote` 行为不变，全局 `remote_url`/`remote_token_file` 继续生效并映射为默认连接。新入口默认关闭（无连接注册表时消费方按现状工作）。双向链接：agent/harness-plugins `openspec/changes/dsh-drivebridge-project-connections-v1`。
+新增 GORM 表与 CLI 命令组；既有 `space`、`config`、`remote` 行为不变，全局 `remote_url`/`remote_token_file` 继续生效并映射为默认连接。新入口默认关闭（无连接注册表时消费方按现状工作）。

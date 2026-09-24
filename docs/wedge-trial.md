@@ -28,7 +28,7 @@ drivebridge operation --id '<operation-id>' --json
 drivebridge resume '<operation-id>'
 ```
 
-命名连接（DSH 按名字引用；空注册表时 list 仍投影 synthetic 默认连接）：
+命名连接（消费方按名字引用；空注册表时 list 仍投影 synthetic 默认连接）：
 
 ```bash
 drivebridge connection list --json

@@ -2,7 +2,7 @@
 
 ## 边界
 
-DriveBridge 是连接配置的唯一 owner：连接记录只通过 `drivebridge connection` 命令组写入 state 目录的 GORM/SQLite，消费方（DSH Host 等）只读 `connection list/show --json` 投影。不在 MCP 文本、日志、回执或证据中输出 token、临时 URL、token 文件路径或原始请求。
+DriveBridge 是连接配置的唯一 owner：连接记录只通过 `drivebridge connection` 命令组写入 state 目录的 GORM/SQLite，消费方只读 `connection list/show --json` 投影。不在 MCP 文本、日志、回执或证据中输出 token、临时 URL、token 文件路径或原始请求。
 
 ```mermaid
 flowchart LR
@@ -14,10 +14,10 @@ flowchart LR
         DB[(GORM/SQLite<br/>connections 表)]
     end
     subgraph Consumers[消费方]
-        DSH[DSH Host 连接注册表]
+        HOST[Host 侧连接注册表]
     end
     ADD --> DB
-    DB --> SHOW -->|只读投影<br/>无凭据| DSH
+    DB --> SHOW -->|只读投影<br/>无凭据| HOST
 ```
 
 ## 决策
