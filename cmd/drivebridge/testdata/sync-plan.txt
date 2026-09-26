@@ -1,0 +1,67 @@
+# Frozen sync plan flow: plan preview, stale refusal after a source change,
+# regenerated plan applied with the confirmed revision, status readback and
+# the read-only retention preview.
+mkdir local
+mkdir remote-files
+exec sh -c 'printf "[nas]\ntype = alias\nremote = %s\n" "$1" > rclone.conf' sh $WORK/remote-files
+chmod 0600 rclone.conf
+
+exec sh -c 'printf "state: %s\nrclone_config: %s\n" "$1" "$2" > drivebridge.yaml' sh $WORK/state $WORK/rclone.conf
+
+exec drivebridge space add --space nas --backend generic --remote nas --local-root $WORK/local --max-bytes 1048576
+stdout 'Space configured'
+
+# The first plan without a baseline is refused exactly like the legacy run.
+exec sh -c 'printf hello > local/a.txt'
+! exec drivebridge sync plan --space nas
+stderr 'resync_required'
+
+# A resync plan freezes the preview; nothing is written yet.
+exec drivebridge sync plan --space nas --resync --json
+stdout '"phase":"planned"'
+! exists $WORK/remote-files/a.txt
+
+# Extract the frozen plan id for apply.
+exec sh -c 'drivebridge sync plan --space nas --resync --json > plan.json'
+exec sh -c 'PLAN=$(sed -n "s/.*\"plan_id\":\"\([0-9a-f]*\)\".*/\1/p" plan.json | sed -n 1p); printf %s "$PLAN" > plan.id'
+
+# The remote side changes after the freeze: apply refuses with plan_stale.
+exec sh -c 'printf late > remote-files/late.txt'
+exec sh -c '! drivebridge sync apply "$(cat plan.id)" --revision 1 --json'
+stdout '"plan_stale"'
+exists $WORK/remote-files/late.txt
+
+# Regenerate: the new plan sees both the local addition and the late file.
+exec sh -c 'drivebridge sync plan --space nas --resync --json > plan2.json'
+exec sh -c 'printf %s "$(sed -n "s/.*\"plan_id\":\"\([0-9a-f]*\)\".*/\1/p" plan2.json | sed -n 1p)" > plan.id'
+exec sh -c 'grep -q late.txt plan2.json'
+exec sh -c 'grep -q a.txt plan2.json'
+
+# A wrong revision is refused before anything moves.
+exec sh -c '! drivebridge sync apply "$(cat plan.id)" --revision 9 --json'
+stdout '"version_conflict"'
+
+# Apply with the confirmed revision executes the frozen set.
+exec sh -c 'drivebridge sync apply "$(cat plan.id)" --revision 1 --json'
+stdout '"phase":"completed"'
+exists $WORK/remote-files/a.txt
+exists $WORK/local/late.txt
+
+exec sh -c '! drivebridge sync apply "$(cat plan.id)" --revision 1 --json'
+stdout '"plan_not_applicable"'
+
+# Status reads the plan back with its item page and recovery hints.
+exec sh -c 'drivebridge sync status "$(cat plan.id)" --json'
+stdout '"phase":"completed"'
+stdout '"total_items"'
+
+# The retention preview classifies without deleting anything.
+exec drivebridge retention preview --space nas --json
+stdout '"staging"'
+exists $WORK/local/late.txt
+
+# The legacy one-shot surface still works next to plans.
+exec sh -c 'printf legacy > local/legacy.txt'
+exec drivebridge sync --space nas --json
+stdout '"status":"success"'
+exists $WORK/remote-files/legacy.txt

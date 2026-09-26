@@ -40,7 +40,9 @@ func (s *Service) Search(space, query, dir string, options ...SearchOptions) ([]
 			tx = tx.Where("mime = ?", options[0].MIME)
 		}
 		if !options[0].After.IsZero() {
-			tx = tx.Where("observed_at >= ?", options[0].After)
+			// Compare instants, not local wall-clock text: ObservedAt is
+			// stored UTC and sqlite compares the serialized text.
+			tx = tx.Where("observed_at >= ?", options[0].After.UTC())
 		}
 	}
 	if needle != "" {

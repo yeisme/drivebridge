@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/glebarez/sqlite"
+	"github.com/rclone/rclone/fs"
 	"github.com/yeisme/drivebridge-server/sdk/insights"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -132,6 +133,9 @@ type Service struct {
 	mu            sync.Mutex
 	jobs          map[string]context.CancelFunc
 	wg            sync.WaitGroup
+	// syncPairOverride lets tests wrap one side of a sync fs pair (for
+	// example to inject a listing failure); production leaves it nil.
+	syncPairOverride func(ctx context.Context, p Space) (fs.Fs, fs.Fs, error)
 }
 
 // providerFor routes each space to its provider family; OneDrive keeps the
@@ -161,7 +165,7 @@ func New(state string, provider Provider, enabled bool) (*Service, error) {
 		return nil, err
 	}
 	sqlDB.SetMaxOpenConns(1)
-	if err = db.AutoMigrate(&Space{}, &File{}, &Operation{}, &Event{}, &RelayTarget{}, &Connection{}, &AdoptRecord{}, &BindRecord{}); err != nil {
+	if err = db.AutoMigrate(&Space{}, &File{}, &Operation{}, &Event{}, &RelayTarget{}, &Connection{}, &AdoptRecord{}, &BindRecord{}, &SyncPlan{}, &SyncBaseline{}, &SyncItem{}, &RemoteIntent{}); err != nil {
 		return nil, errors.New("state_unavailable")
 	}
 	if err = os.Chmod(filepath.Join(state, "state.sqlite"), 0600); err != nil {
@@ -169,6 +173,11 @@ func New(state string, provider Provider, enabled bool) (*Service, error) {
 	}
 	// A process lock is held by the composition root before opening this state.
 	if err = db.Model(&Operation{}).Where("status IN ?", []string{"transferring", "queued"}).Updates(map[string]any{"status": "interrupted", "error": "resume_required"}).Error; err != nil {
+		return nil, err
+	}
+	// A plan whose apply died with the previous process stays recoverable:
+	// the revalidation on the next apply decides resume versus stale.
+	if err = db.Model(&SyncPlan{}).Where("phase = ?", "applying").Updates(map[string]any{"phase": "interrupted", "stale_reason": "apply_interrupted"}).Error; err != nil {
 		return nil, err
 	}
 	if err = db.Model(&Operation{}).Where("status = ?", "cancelling").Updates(map[string]any{"status": "cancelled", "error": "operation_cancelled"}).Error; err != nil {

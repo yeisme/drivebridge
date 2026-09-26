@@ -157,6 +157,26 @@ var Registry = map[string]Doc{
 		HintEN: "The requested cursor is ahead of the feed; re-sync from the current position (since=0 returns the position, not history).",
 		DocZH:  "请求的游标领先于变更流：从当前位置重新同步（since=0 只返回当前位置，不回放历史）。",
 	},
+	"plan_stale": {
+		HintEN: "The frozen plan's world changed (roots, baseline, either side or deletion scale); read the original operation for partial results, then rescan and generate a new plan.",
+		DocZH:  "冻结计划的世界已变化（根身份、基线、任一端或删除规模）：先查原操作拿部分结果，再重新扫描生成新计划。",
+	},
+	"writer_handoff_required": {
+		HintEN: "Another device owns this plan's writer slot and a timeout does not prove it stopped; confirm the old writer stopped, then create a new plan on this device to rebuild the baseline.",
+		DocZH:  "该计划的写入者属于另一台设备，超时不能证明它已停止：确认旧 writer 停止后，在本机新建计划重建基线。",
+	},
+	"sync_scan_incomplete": {
+		HintEN: "A side scan was incomplete; deletions are never propagated on partial evidence. Restore listing (network or permissions) and plan again.",
+		DocZH:  "某一端扫描不完整：不完整证据绝不传播删除。恢复列举（网络或权限）后重新计划。",
+	},
+	"plan_not_found": {
+		HintEN: "No plan with this ID exists on this machine; plans live in the state of the terminal that created them.",
+		DocZH:  "本机不存在该 ID 的计划：计划保存在创建它的终端所属 state 中。",
+	},
+	"plan_not_applicable": {
+		HintEN: "The plan already reached a terminal phase; read its original operation for results and generate a new plan for further work.",
+		DocZH:  "计划已达终态：查其原操作拿结果，后续工作生成新计划。",
+	},
 	"file_trashed": {
 		HintEN: "The file is in the space trash; restore it first.",
 		DocZH:  "文件已在回收站：先 restore 再访问。",

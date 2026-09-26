@@ -51,6 +51,9 @@
 | `output_adapter_unavailable` | save_output 需要 MCP 启动时带 --scaena-url：配置后重启服务。 |
 | `owner_protected` | 该路径属于 owner 保护元数据：改用领域 owner 命令写入，DriveBridge 只允许 list/stat。 |
 | `path_not_allowed` | 路径被限制在空间根内且不可用绝对路径/..：先 list 再对列出的条目操作。 |
+| `plan_not_applicable` | 计划已达终态：查其原操作拿结果，后续工作生成新计划。 |
+| `plan_not_found` | 本机不存在该 ID 的计划：计划保存在创建它的终端所属 state 中。 |
+| `plan_stale` | 冻结计划的世界已变化（根身份、基线、任一端或删除规模）：先查原操作拿部分结果，再重新扫描生成新计划。 |
 | `preset_prefix_is_capsa` | 该前缀像 Capsa 密文布局：明文 Pinax 笔记请换一个对象前缀，不要把密文桶挂成 vault。 |
 | `probe_failed` | 远端无法列举：核对 remote 名称、凭据与 remote-path 后重跑 drivebridge storage probe。 |
 | `quota_exceeded` | 空间配额已满：清理空间或调整 max-bytes 后 resume 原操作。 |
@@ -69,6 +72,7 @@
 | `storage_kind_unknown` | storage add/adopt 的 --kind 不在支持列表：先运行 drivebridge storage kinds 查看。 |
 | `storage_missing_flag` | storage add/adopt 缺少该类型必填旗标：按提示补齐，或用 drivebridge storage kinds 查看必填项。 |
 | `symlink_rejected` | 默认拒绝符号链接防越界：改传真实文件，或在空间上显式开启 follow-symlinks。 |
+| `sync_scan_incomplete` | 某一端扫描不完整：不完整证据绝不传播删除。恢复列举（网络或权限）后重新计划。 |
 | `target_conflict` | 目标路径已有文件（原文件未动）：换一个输出路径。 |
 | `throttled` | 供应商限流：等待后 resume 原操作。 |
 | `transfer_capacity_unavailable` | 同时最多两个传输：等待任一完成（operation_get）后重试。 |
@@ -76,3 +80,4 @@
 | `unknown_config_key` | 配置文件含未知键（config show 可看来源与键名）：修正或删除该键。 |
 | `unsupported` | 默认构建不含该能力（如内核 FUSE）：改用 mount webdav，或把 rclone mount 指到 WebDAV URL。 |
 | `vault_root_not_local` | --vault-root 必须是本机绝对目录，不能是 .drivebridge-cas 缓存路径。 |
+| `writer_handoff_required` | 该计划的写入者属于另一台设备，超时不能证明它已停止：确认旧 writer 停止后，在本机新建计划重建基线。 |

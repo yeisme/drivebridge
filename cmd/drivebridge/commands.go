@@ -33,7 +33,7 @@ func newCapabilitiesCommand(c *cli) *cobra.Command {
 		Short: "Report enabled state, spaces, tool schemas and limits.",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if url := c.effective.Values["remote_url"]; url != "" {
-				return runRemoteCall(c, url, c.effective.Values["remote_token_file"], c.effective.Values["local_root"], "capabilities", nil)
+				return runRemoteCall(c, url, c.effective.Values["remote_token_file"], c.effective.Values["local_root"], "capabilities", nil, false)
 			}
 			s, release, err := c.openService(false)
 			if err != nil {
@@ -50,7 +50,7 @@ func newCapabilitiesCommand(c *cli) *cobra.Command {
 }
 
 func newMCPCommand(c *cli) *cobra.Command {
-	var enabled, handoff, usage bool
+	var enabled, handoff, usage, surfaces bool
 	var scaenaBase, scaenaTokenFile, remoteURL, remoteToken, localRoot string
 	cmd := &cobra.Command{
 		Use:   "mcp",
@@ -116,6 +116,7 @@ func newMCPCommand(c *cli) *cobra.Command {
 	cmd.Flags().BoolVar(&usage, "insights", false, "Enable the private insights control socket and opted-in daily scans")
 	cmd.Flags().BoolVar(&enabled, "enabled", false, "Explicitly enable file operations")
 	cmd.Flags().BoolVar(&handoff, "handoff", false, "Enable a private local owner socket; requires --enabled")
+	cmd.Flags().BoolVar(&surfaces, "remote-surfaces", false, "Serve the remote-surface tools when the remote_url mode is active (opt-in; discovered actions only)")
 	cmd.Flags().StringVar(&scaenaBase, "scaena-url", "", "Scaena owner URL for output recovery")
 	cmd.Flags().StringVar(&scaenaTokenFile, "scaena-token-file", "", "Private file containing the existing Scaena API credential")
 	cmd.Flags().StringVar(&remoteURL, "remote-url", "", "Remote DriveBridge service origin")
@@ -126,6 +127,7 @@ func newMCPCommand(c *cli) *cobra.Command {
 
 func newRemoteCommand(c *cli) *cobra.Command {
 	var remoteURL, remoteToken, localRoot, action string
+	var surfaces bool
 	cmd := &cobra.Command{
 		Use:   "remote",
 		Short: "Call a remote personal-space tool; JSON arguments are read from stdin.",
@@ -135,28 +137,36 @@ func newRemoteCommand(c *cli) *cobra.Command {
 				return fail("remote_url_required", "Remote mode needs --remote-url or the remote_url configuration key.")
 			}
 			var args map[string]any
-			if action != "capabilities" {
+			if action != "capabilities" && action != "remote_surfaces_status" {
 				args = map[string]any{}
 				if json.NewDecoder(io.LimitReader(os.Stdin, 1<<20)).Decode(&args) != nil {
 					return fail("invalid_remote_arguments", "Remote tool arguments must be one JSON object on stdin.")
 				}
 			}
-			return runRemoteCall(c, url, c.effective.Values["remote_token_file"], c.effective.Values["local_root"], action, args)
+			return runRemoteCall(c, url, c.effective.Values["remote_token_file"], c.effective.Values["local_root"], action, args, surfaces)
 		},
 	}
 	cmd.Flags().StringVar(&remoteURL, "remote-url", "", "Remote DriveBridge service origin")
 	cmd.Flags().StringVar(&remoteToken, "remote-token-file", "", "Private scoped Agent token file")
 	cmd.Flags().StringVar(&localRoot, "local-root", "", "Allowed absolute local directory")
 	cmd.Flags().StringVar(&action, "action", "capabilities", "Remote CLI action; JSON arguments are read from stdin")
+	// New remote-surface entry points stay opt-in: without this explicit
+	// switch the command keeps its legacy personal-space behavior only.
+	cmd.Flags().BoolVar(&surfaces, "remote-surfaces", false, "Enable the remote-surface contract (upload batches, analytics, organization, connectors, change feeds)")
 	return cmd
 }
 
-func runRemoteCall(c *cli, url, tokenFile, localRoot, action string, args map[string]any) error {
+func runRemoteCall(c *cli, url, tokenFile, localRoot, action string, args map[string]any, surfaces bool) error {
 	adapter, err := remoteclient.NewWithAigora(url, tokenFile, localRoot, c.effective.Values["aigora_url"])
 	if err != nil {
 		return err
 	}
 	defer adapter.Close()
+	if surfaces {
+		if err := adapter.AttachRemoteSurfaces(); err != nil {
+			return err
+		}
+	}
 	out, err := adapter.Call(context.Background(), action, args)
 	if err != nil {
 		return err
@@ -269,7 +279,7 @@ func newSpaceCommand(c *cli) *cobra.Command {
 		Short: "List configured spaces and their backend kinds.",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if url := c.effective.Values["remote_url"]; url != "" {
-				return runRemoteCall(c, url, c.effective.Values["remote_token_file"], c.effective.Values["local_root"], "spaces", nil)
+				return runRemoteCall(c, url, c.effective.Values["remote_token_file"], c.effective.Values["local_root"], "spaces", nil, false)
 			}
 			s, release, err := c.openService(false)
 			if err != nil {

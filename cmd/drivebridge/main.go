@@ -77,6 +77,7 @@ func newRootCommand(c *cli) *cobra.Command {
 		"doctor":       newDoctorCommand(c),
 		"pin":          newPinCommand(c),
 		"gc":           newGCCommand(c),
+		"retention":    newRetentionCommand(c),
 		"link":         newLinkCommand(c),
 		"sync":         newSyncCommand(c),
 		"capabilities": newCapabilitiesCommand(c),
