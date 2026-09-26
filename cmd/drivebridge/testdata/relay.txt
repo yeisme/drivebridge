@@ -14,7 +14,7 @@ chmod 0600 key
 # Unknown owners and non-loopback plain-http origins are rejected locally.
 ! exec drivebridge relay target-set images --state $WORK/state --space creative --project p --connection laptop --url http://storage.example.com --key-file $WORK/key --owner eikona
 stderr 'invalid_relay_target'
-! exec drivebridge relay target-set tracks --state $WORK/state --space creative --project p --connection laptop --url https://music.example.com --key-file $WORK/key --owner ordo
+! exec drivebridge relay target-set tracks --state $WORK/state --space creative --project p --connection laptop --url https://music.example.com --key-file $WORK/key --owner studio
 stderr 'invalid_relay_target'
 
 # A key file readable by others is refused.
