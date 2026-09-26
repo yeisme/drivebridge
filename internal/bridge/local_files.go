@@ -21,6 +21,11 @@ type LocalFileAction struct {
 	Name      string `json:"name"`
 	Key       string `json:"idempotency_key"`
 	Operation string `json:"operation_id"`
+	// Read-only plan projection fields (sync plan surface); apply stays a
+	// user-terminal command and is deliberately absent.
+	PlanID string `json:"plan_id,omitempty"`
+	After  uint64 `json:"after,omitempty"`
+	Limit  int    `json:"limit,omitempty"`
 }
 
 func (s *Service) RunLocalFileAction(ctx context.Context, q LocalFileAction) (any, error) {
@@ -36,6 +41,13 @@ func (s *Service) RunLocalFileAction(ctx context.Context, q LocalFileAction) (an
 		return s.Restore(ctx, q.Ref)
 	case "upload_path":
 		return s.Upload(ctx, q.Space, "", q.Path, q.Name, q.Key)
+	case "sync_plan_get":
+		return s.SyncPlanGet(q.PlanID, q.After, q.Limit)
+	case "retention_preview":
+		if _, err := s.Space(q.Space); err != nil {
+			return nil, err
+		}
+		return s.RetentionPreview(ctx, q.Space)
 	case "resume":
 		return s.Resume(q.Operation)
 	case "cancel":

@@ -85,6 +85,11 @@ func (s *Service) Tools() []mcp.Tool {
 	t := tool("usage_scan", "Run an already-enabled local inventory with its existing budget; cannot enable scanning.", "space_id")
 	t.InputSchema.Properties["resume_id"] = map[string]any{"type": "string"}
 	tools = append(tools, t)
+	planGet := tool("sync_plan_get", "Read a frozen sync plan, one item page and its recovery hints (read-only; apply stays a user-terminal command).", "plan_id")
+	planGet.InputSchema.Properties["after"] = map[string]any{"type": "string", "description": "keyset cursor from next_after"}
+	planGet.InputSchema.Properties["limit"] = map[string]any{"type": "integer", "description": "page size, default 50, max 200"}
+	tools = append(tools, planGet)
+	tools = append(tools, tool("retention_preview", "Read-only cleanup classification for a space: staging, local trash, protected unflushed VFS bytes, remote references; never deletes or purges.", "space_id"))
 	applyToolHints(tools)
 	return tools
 }
@@ -100,6 +105,17 @@ func (s *Service) Call(ctx context.Context, name string, args map[string]any) (a
 	ctx = applyBindScope(ctx, args)
 	if name == "usage_scan" {
 		return s.Scan(ctx, text("space_id"), text("resume_id"))
+	}
+	if name == "sync_plan_get" {
+		after, _ := strconv.ParseUint(text("after"), 10, 64)
+		limit := 0
+		if v, ok := args["limit"].(float64); ok {
+			limit = int(v)
+		}
+		return s.SyncPlanGet(text("plan_id"), after, limit)
+	}
+	if name == "retention_preview" {
+		return s.RetentionPreview(ctx, text("space_id"))
 	}
 	if strings.HasPrefix(name, "usage_") || name == "audit_events" {
 		q := url.Values{}
@@ -263,6 +279,7 @@ func applyToolHints(tools []mcp.Tool) {
 		"list": true, "search": true, "changes": true,
 		"stat": true, "operation_get": true, "inbox": true, "prepare_reference": true,
 		"mount_status":  true,
+		"sync_plan_get": true, "retention_preview": true,
 		"usage_summary": true, "usage_series": true, "usage_breakdown": true, "usage_scans": true,
 		"audit_events": true,
 	}

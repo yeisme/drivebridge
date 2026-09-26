@@ -53,5 +53,8 @@ func newSyncCommand(c *cli) *cobra.Command {
 	cmd.Flags().BoolVar(&resync, "resync", false, "Establish the first baseline (or repair an untrusted journal); path1 (local) seeds new paths")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Report the four-class plan without changing either side")
 	cmd.Flags().IntVar(&maxDelete, "max-delete", 0, "Deletion cap in percent per side (default 25; raise explicitly to override a safety abort)")
+	cmd.AddCommand(newSyncPlanCommand(c))
+	cmd.AddCommand(newSyncApplyCommand(c))
+	cmd.AddCommand(newSyncStatusCommand(c))
 	return cmd
 }

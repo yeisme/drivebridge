@@ -93,18 +93,7 @@ func (s *Service) Sync(ctx context.Context, space string, opt SyncOptions) (Sync
 	if err != nil {
 		return SyncReport{}, err
 	}
-	if info, e := os.Stat(p.LocalRoot); e != nil || !info.IsDir() {
-		return SyncReport{}, errors.New("local_root_unavailable")
-	}
-	local, err := fs.NewFs(ctx, filepath.ToSlash(p.LocalRoot))
-	if err != nil {
-		return SyncReport{}, errors.New("local_root_unavailable")
-	}
-	provider, ok := s.providerFor(p).(remoteFsProvider)
-	if !ok {
-		return SyncReport{}, errors.New("sync_unsupported")
-	}
-	remote, err := provider.Fs(ctx, p)
+	local, remote, err := s.syncFsPair(ctx, p)
 	if err != nil {
 		return SyncReport{}, err
 	}
@@ -191,22 +180,28 @@ func (s *Service) Sync(ctx context.Context, space string, opt SyncOptions) (Sync
 		// Sync-created remote files enter the stable reference register the
 		// same way manual uploads do: one provider listing per touched
 		// directory performs the remember pass.
-		dirs := map[string]bool{"": true}
-		for path := range fresh2 {
-			dirs[filepath.ToSlash(filepath.Dir(path))] = true
-		}
-		for dir := range dirs {
-			if dir == "." || dir == "/" {
-				dir = ""
-			}
-			_, _ = s.List(ctx, space, dir)
-		}
+		s.rememberRemoteSide(ctx, space, fresh2)
 	}
 	op.Status, op.Error = "completed", ""
 	_ = s.DB.Save(&op).Error
 	s.emit(op.SpaceID, "operation_completed", "", op.ID)
 	report.Status = "completed"
 	return report, nil
+}
+
+// rememberRemoteSide runs the stable-reference register pass for sync-created
+// remote files: one provider listing per touched directory.
+func (s *Service) rememberRemoteSide(ctx context.Context, space string, fresh2 map[string]syncEntry) {
+	dirs := map[string]bool{"": true}
+	for path := range fresh2 {
+		dirs[filepath.ToSlash(filepath.Dir(path))] = true
+	}
+	for dir := range dirs {
+		if dir == "." || dir == "/" {
+			dir = ""
+		}
+		_, _ = s.List(ctx, space, dir)
+	}
 }
 
 // trustSyncJournal validates the structural shape of an engine listing. A
@@ -226,6 +221,7 @@ func trustSyncJournal(listing string) error {
 	}
 	return nil
 }
+
 // last baseline. Without a baseline (first run), only cross-side differences
 // are classifiable: equal files are already in sync, differing files are
 // conflicts, one-sided files are additions.

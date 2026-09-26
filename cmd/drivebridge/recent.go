@@ -16,7 +16,7 @@ func newRecentCommand(c *cli) *cobra.Command {
 			return fmt.Errorf("invalid_limit")
 		}
 		if endpoint := c.effective.Values["remote_url"]; endpoint != "" {
-			return runRemoteCall(c, endpoint, c.effective.Values["remote_token_file"], c.effective.Values["local_root"], "operations", map[string]any{"space_id": space, "pending": pending, "limit": limit})
+			return runRemoteCall(c, endpoint, c.effective.Values["remote_token_file"], c.effective.Values["local_root"], "operations", map[string]any{"space_id": space, "pending": pending, "limit": limit}, false)
 		}
 		readOnly := false
 		ops, err := func() ([]bridge.Operation, error) {

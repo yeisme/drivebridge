@@ -14,16 +14,29 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/yeisme/drivebridge-server/sdk"
+	"github.com/yeisme/drivebridge/internal/bridge"
 )
 
 type Adapter struct {
-	Client          *sdk.Client
-	Root            *os.Root
-	unifiedIdentity bool
+	Client *sdk.Client
+	Root   *os.Root
+	// Surfaces consumes the server's public remote-surface contract
+	// (batches, analytics, organization, connectors, change feeds). It is
+	// attached only by an explicit opt-in and stays nil — invisible to
+	// tools/list — otherwise.
+	Surfaces *bridge.RemoteSurfaces
+	endpoint string
+	token    string
+	// surfaceGap/surfaceDiscoveryErr record the last discovery outcome so
+	// the capabilities resource can state the concrete gap.
+	surfaceGap          []string
+	surfaceDiscoveryErr string
+	unifiedIdentity     bool
 }
 
 // UploadResult is the typed upload receipt: callers that need synchronous
@@ -64,7 +77,20 @@ func NewWithAigora(endpoint, credentialFile, localRoot, aigoraOrigin string) (*A
 	if e != nil {
 		return nil, errors.New("local_root_unavailable")
 	}
-	return &Adapter{Client: client, Root: root, unifiedIdentity: aigoraOrigin != ""}, nil
+	return &Adapter{Client: client, Root: root, endpoint: endpoint, token: string(bytesTrim(b)), unifiedIdentity: aigoraOrigin != ""}, nil
+}
+
+// AttachRemoteSurfaces binds the remote-surface application contract to this
+// adapter: the shared server SDK client stays the JSON transport, the byte
+// path streams parts with the same credential, and the optional local root
+// (when configured) becomes the bounded byte source. The thin adapter keeps
+// no intent journal; the caller-held idempotency key governs recovery.
+func (a *Adapter) AttachRemoteSurfaces() error {
+	if a.Client == nil {
+		return errors.New("service_unavailable")
+	}
+	a.Surfaces = bridge.NewRemoteSurfaces(a.endpoint, a.Client, &bridge.PartUploader{Base: a.endpoint, Token: a.token}, nil, a.Root)
+	return nil
 }
 func bytesTrim(b []byte) []byte {
 	for len(b) > 0 && (b[len(b)-1] == '\n' || b[len(b)-1] == '\r' || b[len(b)-1] == ' ') {
@@ -77,6 +103,15 @@ func (a *Adapter) Call(ctx context.Context, name string, args map[string]any) (a
 	text := func(k string) string { v, _ := args[k].(string); return v }
 	if args == nil {
 		args = map[string]any{}
+	}
+	// Remote-surface actions run through the shared application contract
+	// only after the explicit opt-in attached it; otherwise they stay
+	// unsupported exactly like any unknown action.
+	if a.Surfaces != nil && (bridge.IsRemoteSurfaceAction(name) || name == "upload_batch_file" || name == "remote_surfaces_status") {
+		if name == "remote_surfaces_status" {
+			return a.Surfaces.Status(ctx), nil
+		}
+		return a.Surfaces.Run(ctx, name, args)
 	}
 	if text("tenant_context") != "" || text("space_context") != "" {
 		scoped := *a
@@ -274,12 +309,79 @@ func (a *Adapter) MCP() *server.MCPServer {
 			return mcp.NewToolResultText(string(b)), nil
 		})
 	}
+	if a.Surfaces != nil {
+		// Discovery-driven registration: only actions the server currently
+		// advertises become tools. A discovery failure registers only the
+		// read-only status tool so the gap stays observable instead of
+		// pretending availability.
+		discoverCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		surfaceTools, missing, discoverErr := a.Surfaces.DiscoverRemoteSurfaceTools(discoverCtx)
+		cancel()
+		for _, def := range surfaceTools {
+			name := def.Name
+			opts := []mcp.ToolOption{mcp.WithDescription(def.Description)}
+			for _, field := range def.Required {
+				opts = append(opts, mcp.WithString(field, mcp.Required(), mcp.Description("See the tool description and the service inputSchema")))
+			}
+			for _, field := range def.Optional {
+				opts = append(opts, mcp.WithString(field, mcp.Description("Optional; see the tool description")))
+			}
+			tool := mcp.NewTool(name, opts...)
+			if def.ReadOnly {
+				tool.Annotations.ReadOnlyHint = &[]bool{true}[0]
+			}
+			tools = append(tools, tool)
+			srv.AddTool(tool, func(ctx context.Context, q mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+				out, e := a.Call(ctx, name, q.GetArguments())
+				if e != nil {
+					if detail, ok := e.(*bridge.RemoteError); ok && len(detail.MissingActions()) > 0 {
+						hint, _ := json.Marshal(map[string]any{"code": detail.Error(), "next_action": detail.RecoveryHint(), "missing": detail.MissingActions()})
+						return &mcp.CallToolResult{IsError: true, Content: []mcp.Content{mcp.TextContent{Type: mcp.ContentTypeText, Text: detail.Error()}, mcp.TextContent{Type: mcp.ContentTypeText, Text: string(hint)}}}, nil
+					}
+					message := e.Error()
+					if len(message) > 80 {
+						message = "remote_operation_failed"
+					}
+					for _, r := range message {
+						if !(r >= 'a' && r <= 'z') && r != '_' {
+							message = "remote_operation_failed"
+							break
+						}
+					}
+					return mcp.NewToolResultError(message), nil
+				}
+				b, e := json.Marshal(out)
+				if e != nil {
+					return mcp.NewToolResultError("serialization_failed"), nil
+				}
+				return mcp.NewToolResultText(string(b)), nil
+			})
+		}
+		statusTool := mcp.NewTool("remote_surfaces_status", mcp.WithDescription("Read-only discovery report for the remote surfaces: the attached instance, the actions the server advertises now, and the concrete catalog gap. Never guesses aliases."))
+		statusTool.Annotations.ReadOnlyHint = &[]bool{true}[0]
+		tools = append(tools, statusTool)
+		srv.AddTool(statusTool, func(ctx context.Context, q mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			out, e := a.Call(ctx, "remote_surfaces_status", nil)
+			if e != nil {
+				return mcp.NewToolResultError(e.Error()), nil
+			}
+			b, e := json.Marshal(out)
+			if e != nil {
+				return mcp.NewToolResultError("serialization_failed"), nil
+			}
+			return mcp.NewToolResultText(string(b)), nil
+		})
+		a.surfaceGap = missing
+		if discoverErr != nil {
+			a.surfaceDiscoveryErr = discoverErr.Error()
+		}
+	}
 	srv.AddResource(mcp.NewResource("drivebridge://capabilities", "Remote client capabilities", mcp.WithMIMEType("application/json")), func(ctx context.Context, q mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
 		out, e := a.Call(ctx, "capabilities", nil)
 		if e != nil {
 			return nil, e
 		}
-		b, _ := json.Marshal(map[string]any{"tools": tools, "service": out, "local_file_access": true, "unsupported_actions": []string{"mkdir", "changes", "purge"}, "after_semantics": "file_updated_at", "list_path_semantics": "recursive_prefix", "provenance": "caller_declared_labels"})
+		b, _ := json.Marshal(map[string]any{"tools": tools, "service": out, "local_file_access": true, "unsupported_actions": []string{"mkdir", "changes", "purge"}, "after_semantics": "file_updated_at", "list_path_semantics": "recursive_prefix", "provenance": "caller_declared_labels", "remote_surfaces": map[string]any{"enabled": a.Surfaces != nil, "missing_actions": a.surfaceGap, "discovery_error": a.surfaceDiscoveryErr}})
 		return []mcp.ResourceContents{mcp.TextResourceContents{URI: q.Params.URI, MIMEType: "application/json", Text: string(b)}}, nil
 	})
 
