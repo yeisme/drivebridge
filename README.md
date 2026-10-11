@@ -1,10 +1,21 @@
 # DriveBridge
 
+DriveBridge 已统一为一个开发仓库：根目录维护 CLI/MCP，`server/` 维护 HTTP 服务，`web/` 维护网页。文档、active OpenSpec 和 Git 状态在本仓统一管理；模块保持原有权限与 API 边界。
+
+```bash
+pnpm --dir web install --frozen-lockfile
+make dev
+```
+
+开发页面为 `http://127.0.0.1:5173`，使用可丢弃本地 fixture。构建用 `make build`，普通测试用 `make test`，完整本地用户路径用 `make e2e`，规格列表用 `make specs`。详见 [统一开发说明](docs/development.md)、[工作台 PRD](docs/web/product/personal-agent-workspace-prd.md) 和 [迁移记录](docs/repository-consolidation.md)。前端重建仍按既有规格待实施。
+
+## CLI/MCP 使用说明
+
 本机优先的 OneDrive 文件 MCP 工具，采用固定版本 rclone 与 Microsoft Graph。上传、下载和恢复由 DriveBridge 持有；Scaena 保留生成准入、费用控制、任务查询与 artifact 真源。接口为 pre-1.0 本地候选，尚未发布或部署。
 
 ## 本机启动
 
-需要 Go 1.26；视频参考校验需要 `ffprobe`。无需安装 Eikona、Scaena 或 rclone CLI。首版支持 Linux/macOS 的 stdio 和 Unix socket；Windows 提供交叉编译分发候选（`build.py --target windows/amd64|windows/arm64`，含 view 浏览器启动分支），但 state 目录权限与 socket 隐私语义未在实机验收，不宣称可用；不提供远程多租户服务。跨平台定位见 `client/drivebridge-client/docs/cross-platform-client.md`。
+需要 Go 1.26；视频参考校验需要 `ffprobe`。无需安装 Eikona、Scaena 或 rclone CLI。首版支持 Linux/macOS 的 stdio 和 Unix socket；Windows 提供交叉编译分发候选（`build.py --target windows/amd64|windows/arm64`，含 view 浏览器启动分支），但 state 目录权限与 socket 隐私语义未在实机验收，不宣称可用；不提供远程多租户服务。跨平台定位见 [跨平台客户端](docs/web/cross-platform-client.md)。
 
 ```bash
 go build -o drivebridge ./cmd/drivebridge

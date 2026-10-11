@@ -1,0 +1,714 @@
+{
+  "AgentGroupView": {
+    "group_id": "group-fixture",
+    "name": "Research",
+    "revision": 1,
+    "created_at": "2026-01-01T00:00:00Z",
+    "updated_at": "2026-01-01T00:00:00Z"
+  },
+  "AgentOrganizationView": {
+    "agent_id": "agent-fixture",
+    "group_id": null,
+    "pinned": false,
+    "revision": 0,
+    "updated_at": "2026-01-01T00:00:00Z"
+  },
+  "AutomationManagementEnvelope": {
+    "data": {
+      "available": false
+    }
+  },
+  "AutomationPreviewEnvelope": {
+    "data": {
+      "rule_id": "rule-fixture",
+      "space_id": "space-fixture",
+      "revision": 1,
+      "checkpoint": 0,
+      "scanned": 0,
+      "items": [],
+      "coverage": "complete",
+      "preview_digest": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "executable": false,
+      "policy_max_bytes": 0,
+      "policy_expires_at": null
+    }
+  },
+  "AutomationReceiptEnvelope": {
+    "data": {
+      "rule_id": "rule-fixture",
+      "space_id": "space-fixture",
+      "action": "automation.change",
+      "request_digest": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "result_revision": 1,
+      "committed_at": "2026-01-01T00:00:00Z"
+    }
+  },
+  "BatchTaskItemsEnvelope": {
+    "data": {
+      "batch_id": "batch-fixture",
+      "revision": "sha256:fixture",
+      "items": [
+        {
+          "item_id": "item-fixture",
+          "relative_path": "fixture.txt",
+          "is_dir": false,
+          "owner_status": "pending",
+          "result_certainty": "unknown",
+          "operation_id": null
+        }
+      ],
+      "next_cursor": "",
+      "observed_at": "2026-01-01T00:00:00Z"
+    }
+  },
+  "CollectionCreationReceiptEnvelope": {
+    "data": {
+      "collection_id": "collection-fixture",
+      "space_id": "space-fixture",
+      "request_digest": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "result_revision": 1,
+      "committed_at": "2026-01-01T00:00:00Z"
+    }
+  },
+  "CollectionMemberDecisionsEnvelope": {
+    "data": {
+      "collection_id": "collection-fixture",
+      "revision": 1,
+      "items": [
+        {
+          "file_id": "0123456789abcdef0123456789abcdef0123456789abcdef",
+          "space_id": "space-fixture",
+          "path": "reference.txt",
+          "decision": "exclude"
+        }
+      ]
+    }
+  },
+  "CollectionMembersReceiptEnvelope": {
+    "data": {
+      "collection_id": "collection-fixture",
+      "request_digest": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "result_revision": 2,
+      "committed_at": "2026-01-01T00:00:00Z"
+    }
+  },
+  "DocumentCapabilityEnvelope": {
+    "data": {
+      "file_id": "file-fixture",
+      "version_id": "version-fixture",
+      "editable": true,
+      "reason": "ready",
+      "max_bytes": 2097152
+    }
+  },
+  "DocumentLookupEnvelope": {
+    "data": {
+      "found": false,
+      "save": null
+    }
+  },
+  "DocumentSaveEnvelope": {
+    "data": {
+      "file_id": "file-fixture",
+      "version_id": "version-new",
+      "operation_id": "operation-fixture",
+      "status": "completed",
+      "file_ref": "drivebridge://fixture/file/file-fixture/version/version-new"
+    }
+  },
+  "ErrorEnvelope": {
+    "error": {
+      "code": "invalid_expiry",
+      "message": "Choose a supported expiry mode and duration."
+    }
+  },
+  "FavoriteListEnvelope": {
+    "data": {
+      "items": [
+        {
+          "favorite_id": "favorite-fixture",
+          "space_id": "space-fixture",
+          "target_kind": "file",
+          "target_ref": "drivebridge://fixture/file/file-fixture",
+          "revision": 1,
+          "deleted": false
+        }
+      ],
+      "next_cursor": "",
+      "observed_at": "2026-01-01T00:00:00Z",
+      "total": null,
+      "total_kind": "unknown"
+    }
+  },
+  "FavoriteReceiptEnvelope": {
+    "data": {
+      "favorite_id": "favorite-fixture",
+      "space_id": "space-fixture",
+      "result_revision": 1,
+      "deleted": false,
+      "request_digest": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "committed_at": "2026-01-01T00:00:00Z"
+    }
+  },
+  "FileCollectionViewEnvelope": {
+    "data": {
+      "collection_id": "collection-fixture",
+      "space_id": "space-fixture",
+      "name": "Rule fixture",
+      "kind": "rule",
+      "scope": "private",
+      "rule": "{ \"mode\":\"exact\", \"filters\":[] }",
+      "rule_revision": 1,
+      "revision": 2,
+      "members_total": 0,
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z"
+    }
+  },
+  "FileLinkListEnvelope": {
+    "data": {
+      "file_id": "file-fixture",
+      "version_id": "version-fixture",
+      "indexed": true,
+      "stale": false,
+      "items": [],
+      "next_cursor": "",
+      "observed_at": "2026-01-01T00:00:00Z",
+      "total": null,
+      "total_kind": "unknown"
+    }
+  },
+  "FileLinkReceiptEnvelope": {
+    "data": {
+      "file_id": "file-fixture",
+      "version_id": "version-fixture",
+      "request_digest": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "committed_at": "2026-01-01T00:00:00Z"
+    }
+  },
+  "GrantChangeReceiptEnvelope": {
+    "data": {
+      "grant_id": "grant-fixture",
+      "action": "disable",
+      "result_revision": 2,
+      "committed_at": "2026-01-01T00:00:00Z"
+    }
+  },
+  "GrantPageEnvelope": {
+    "data": {
+      "items": [
+        {
+          "grant_id": "grant-fixture",
+          "agent_id": "agent-fixture",
+          "name": "Reader",
+          "protocol": "mcp",
+          "space_id": "space-fixture",
+          "connection_id": "connection-fixture",
+          "prefix": "references",
+          "actions": [
+            "files.read"
+          ],
+          "restriction_profile": "personal_workspace_v1",
+          "revision": 1,
+          "state": "active",
+          "expiry_mode": "never",
+          "expires_at": null,
+          "issued_at": "2026-01-01T00:00:00Z",
+          "expiry_changed_at": null,
+          "credential_generation": 1,
+          "created_at": "2026-01-01T00:00:00Z",
+          "updated_at": "2026-01-01T00:00:00Z"
+        }
+      ],
+      "next_cursor": "",
+      "observed_at": "2026-01-01T00:00:00Z",
+      "total": null,
+      "total_kind": "unknown"
+    }
+  },
+  "GrantReplayEnvelope": {
+    "data": {
+      "grant": {
+        "grant_id": "grant-fixture",
+        "agent_id": "agent-fixture",
+        "name": "Reader",
+        "protocol": "mcp",
+        "space_id": "space-fixture",
+        "connection_id": "connection-fixture",
+        "prefix": "references",
+        "actions": [
+          "files.read"
+        ],
+        "restriction_profile": "personal_workspace_v1",
+        "revision": 1,
+        "state": "active",
+        "expiry_mode": "never",
+        "expires_at": null,
+        "issued_at": "2026-01-01T00:00:00Z",
+        "expiry_changed_at": null,
+        "credential_generation": 1,
+        "created_at": "2026-01-01T00:00:00Z",
+        "updated_at": "2026-01-01T00:00:00Z"
+      },
+      "credential": {
+        "state": "not_replayable"
+      }
+    }
+  },
+  "GrantView": {
+    "grant_id": "grant-fixture",
+    "agent_id": "agent-fixture",
+    "name": "Reader",
+    "protocol": "mcp",
+    "space_id": "space-fixture",
+    "connection_id": "connection-fixture",
+    "prefix": "references",
+    "actions": [
+      "files.read"
+    ],
+    "restriction_profile": "personal_workspace_v1",
+    "revision": 1,
+    "state": "active",
+    "expiry_mode": "never",
+    "expires_at": null,
+    "issued_at": "2026-01-01T00:00:00Z",
+    "expiry_changed_at": null,
+    "credential_generation": 1,
+    "created_at": "2026-01-01T00:00:00Z",
+    "updated_at": "2026-01-01T00:00:00Z"
+  },
+  "InvocationPageEnvelope": {
+    "data": {
+      "items": [
+        {
+          "invocation_id": "invocation-fixture",
+          "agent_id": "agent-fixture",
+          "grant_id": "grant-fixture",
+          "protocol": "http",
+          "action": "files.list",
+          "resource_refs": [],
+          "result": "unknown",
+          "started_at": "2026-01-01T00:00:00Z",
+          "finished_at": null,
+          "request_id": "request-fixture"
+        }
+      ],
+      "next_cursor": "",
+      "observed_at": "2026-01-01T00:00:00Z",
+      "total": null,
+      "total_kind": "unknown",
+      "coverage": "best_effort"
+    }
+  },
+  "LabelDefinitionPageEnvelope": {
+    "data": {
+      "space_id": "space-fixture",
+      "namespace": "manual",
+      "revision": 1,
+      "management_enabled": false,
+      "definitions": [
+        {
+          "key": "source",
+          "display_name": "Source",
+          "group": "",
+          "revision": 1
+        }
+      ]
+    }
+  },
+  "LabelDefinitionReceiptEnvelope": {
+    "data": {
+      "space_id": "space-fixture",
+      "namespace": "manual",
+      "request_digest": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "result_revision": 1,
+      "committed_at": "2026-01-01T00:00:00Z"
+    }
+  },
+  "LabelMergePlanEnvelope": {
+    "data": {
+      "plan_id": "plan-fixture",
+      "space_id": "space-fixture",
+      "revision": 1,
+      "phase": "previewed",
+      "risk": "approval_required",
+      "approval_required": true,
+      "impact_digest": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "items_total": 0,
+      "items_done": 0,
+      "items_stale": 0,
+      "items_failed": 0
+    }
+  },
+  "LabelSuggestionEnvelope": {
+    "data": {
+      "suggestion_id": "suggestion-fixture",
+      "revision": 1,
+      "file_id": "file-fixture",
+      "version_id": "version-fixture",
+      "agent_id": "agent-fixture",
+      "labels": [
+        "reference"
+      ],
+      "creation_key": "fixture-request",
+      "state": "pending"
+    }
+  },
+  "OperationTaskDetailEnvelope": {
+    "data": {
+      "task": {
+        "owner_kind": "operation",
+        "owner_id": "operation-fixture",
+        "space_id": "space-fixture",
+        "title": "Synthetic upload",
+        "actor_kind": "unknown",
+        "agent_id": null,
+        "owner_status": "verifying",
+        "ui_state": "running",
+        "revision": "sha256:fixture",
+        "progress": {
+          "total": null,
+          "succeeded": null,
+          "failed": null,
+          "pending": null,
+          "bytes_sent": null,
+          "durable_bytes": null,
+          "verified_bytes": null
+        },
+        "allowed_actions": [],
+        "blocked_reason": "owner_actions_not_projected",
+        "observed_at": "2026-01-01T00:00:00Z"
+      },
+      "outputs": [],
+      "output_state": "not_published"
+    }
+  },
+  "PropertyDefinitionReceiptEnvelope": {
+    "data": {
+      "space_id": "space-fixture",
+      "request_digest": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "result_revision": 1,
+      "committed_at": "2026-01-01T00:00:00Z"
+    }
+  },
+  "PropertyDefinitionViewEnvelope": {
+    "data": {
+      "space_id": "space-fixture",
+      "revision": 1,
+      "definitions": [
+        {
+          "key": "status",
+          "display_name": "Status",
+          "group": "Project",
+          "type": "text"
+        }
+      ]
+    }
+  },
+  "PropertyMigrationCapabilityEnvelope": {
+    "data": {
+      "space_id": "space-fixture",
+      "editing_enabled": false,
+      "storage_kind": "sidecar",
+      "max_sidecars": 200,
+      "markdown_supported": false,
+      "conversion_policies": [
+        "preserve",
+        "parse_text",
+        "scalar_text",
+        "singleton_list"
+      ]
+    }
+  },
+  "PropertyMigrationReceiptEnvelope": {
+    "data": {
+      "space_id": "space-fixture",
+      "plan_id": "plan-fixture",
+      "stage": "preview",
+      "request_digest": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "result_revision": 1,
+      "committed_at": "2026-01-01T00:00:00Z"
+    }
+  },
+  "PropertyMigrationViewEnvelope": {
+    "data": {
+      "plan_id": "plan-fixture",
+      "space_id": "space-fixture",
+      "revision": 1,
+      "impact_digest": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "phase": "previewed",
+      "editing_enabled": false,
+      "request": {
+        "expected_definition_revision": 1,
+        "source_key": "status",
+        "target_key": "phase",
+        "target_type": "text",
+        "conversion_policy": "preserve"
+      },
+      "items": []
+    }
+  },
+  "PropertySidecarReceiptEnvelope": {
+    "data": {
+      "file_id": "file-fixture",
+      "version_id": "version-fixture",
+      "request_digest": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "result_revision": 1,
+      "committed_at": "2026-01-01T00:00:00Z"
+    }
+  },
+  "PropertySidecarViewEnvelope": {
+    "data": {
+      "file_id": "file-fixture",
+      "version_id": "version-fixture",
+      "definition_revision": 1,
+      "revision": 1,
+      "storage_kind": "sidecar",
+      "values": {
+        "caption": "Synthetic caption",
+        "rank": 1.25
+      },
+      "unknown_keys": []
+    }
+  },
+  "ResourceEnvelope": {
+    "data": {
+      "descriptor_id": "descriptor-fixture",
+      "space_id": "space-fixture",
+      "file_ref": "drivebridge://fixture/file/file-fixture/version/version-fixture",
+      "kind": "skill",
+      "display_name": "Synthetic resource",
+      "descriptor_revision": 1,
+      "check_state": "unknown",
+      "created_at": "2026-01-01T00:00:00Z"
+    }
+  },
+  "ResourceIntegrityReceiptEnvelope": {
+    "data": {
+      "check_id": "check-fixture",
+      "descriptor_id": "descriptor-fixture",
+      "descriptor_revision": 1,
+      "checker_version": "utf8-integrity-v1",
+      "check_scope": "fixed_bytes_sha256_utf8_no_nul",
+      "state": "passed",
+      "checked_at": "2026-01-01T00:00:00Z"
+    }
+  },
+  "ResourcePageEnvelope": {
+    "data": {
+      "items": [
+        {
+          "descriptor_id": "descriptor-fixture",
+          "space_id": "space-fixture",
+          "file_ref": "drivebridge://fixture/file/file-fixture/version/version-fixture",
+          "kind": "skill",
+          "display_name": "Synthetic resource",
+          "descriptor_revision": 1,
+          "check_state": "unknown",
+          "created_at": "2026-01-01T00:00:00Z"
+        }
+      ],
+      "next_cursor": "",
+      "observed_at": "2026-01-01T00:00:00Z",
+      "total": null,
+      "total_kind": "unknown"
+    }
+  },
+  "ResourceRegistrationReceiptEnvelope": {
+    "data": {
+      "resource": {
+        "descriptor_id": "descriptor-fixture",
+        "space_id": "space-fixture",
+        "file_ref": "drivebridge://fixture/file/file-fixture/version/version-fixture",
+        "kind": "skill",
+        "display_name": "Synthetic resource",
+        "descriptor_revision": 1,
+        "check_state": "unknown",
+        "created_at": "2026-01-01T00:00:00Z"
+      },
+      "result_revision": 1,
+      "committed_at": "2026-01-01T00:00:00Z"
+    }
+  },
+  "RotationReplayEnvelope": {
+    "data": {
+      "grant_id": "grant-fixture",
+      "credential_generation": 2,
+      "credential": {
+        "state": "not_replayable"
+      }
+    }
+  },
+  "SnapshotCreationReceiptEnvelope": {
+    "data": {
+      "collection_id": "collection-fixture",
+      "snapshot_id": "snapshot-fixture",
+      "request_digest": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "collection_revision": 1,
+      "committed_at": "2026-01-01T00:00:00Z"
+    }
+  },
+  "SnapshotIndexEnvelope": {
+    "data": {
+      "collection_id": "collection-fixture",
+      "items": [
+        {
+          "snapshot_id": "0123456789abcdef0123456789abcdef0123456789abcdef",
+          "collection_revision": 1,
+          "created_at": "2026-01-01T00:00:00Z"
+        }
+      ],
+      "observed_at": "2026-01-01T00:00:00Z"
+    }
+  },
+  "SubmissionEnvelope": {
+    "data": {
+      "file_name": "result.md",
+      "mime_type": "text/markdown",
+      "size_bytes": 32,
+      "agent_name": "Reader",
+      "submission_id": "submission-fixture",
+      "revision": 2,
+      "space_id": "space-fixture",
+      "agent_id": "agent-fixture",
+      "grant_id": "grant-fixture",
+      "source_kind": "agent",
+      "file_ref": "file-fixture",
+      "version_id": "version-fixture",
+      "upload_operation_ref": "operation-fixture",
+      "state": "submitted",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z"
+    }
+  },
+  "SubmissionPageEnvelope": {
+    "data": {
+      "items": [
+        {
+          "file_name": "result.md",
+          "mime_type": "text/markdown",
+          "size_bytes": 32,
+          "agent_name": "Reader",
+          "submission_id": "submission-fixture",
+          "revision": 2,
+          "space_id": "space-fixture",
+          "agent_id": "agent-fixture",
+          "grant_id": "grant-fixture",
+          "source_kind": "agent",
+          "file_ref": "file-fixture",
+          "version_id": "version-fixture",
+          "upload_operation_ref": "operation-fixture",
+          "state": "submitted",
+          "created_at": "2026-01-01T00:00:00Z",
+          "updated_at": "2026-01-01T00:00:00Z"
+        }
+      ],
+      "next_cursor": "",
+      "observed_at": "2026-01-01T00:00:00Z",
+      "total": null,
+      "total_kind": "unknown"
+    }
+  },
+  "SubmissionUploadEnvelope": {
+    "data": {
+      "submission_id": "submission-fixture",
+      "revision": 1,
+      "operation_id": "operation-fixture",
+      "purpose": "inbox_staging",
+      "part_size": 1048576,
+      "part_path": "/api/v1/operations/operation-fixture/parts/{index}"
+    }
+  },
+  "TaskPageEnvelope": {
+    "data": {
+      "items": [
+        {
+          "owner_kind": "operation",
+          "owner_id": "operation-fixture",
+          "space_id": "space-fixture",
+          "title": "Synthetic upload",
+          "actor_kind": "unknown",
+          "agent_id": null,
+          "owner_status": "verifying",
+          "ui_state": "running",
+          "revision": "sha256:fixture",
+          "progress": {
+            "total": null,
+            "succeeded": null,
+            "failed": null,
+            "pending": null,
+            "bytes_sent": null,
+            "durable_bytes": null,
+            "verified_bytes": null
+          },
+          "allowed_actions": [],
+          "blocked_reason": "owner_actions_not_projected",
+          "observed_at": "2026-01-01T00:00:00Z"
+        }
+      ],
+      "next_cursor": "",
+      "observed_at": "2026-01-01T00:00:00Z",
+      "total": null,
+      "total_kind": "unknown"
+    }
+  },
+  "WorkspaceHoldListEnvelope": {
+    "data": {
+      "items": [],
+      "next_cursor": "",
+      "observed_at": "2026-01-01T00:00:00Z",
+      "total": null,
+      "total_kind": "unknown",
+      "management_enabled": false
+    }
+  },
+  "WorkspaceHoldReceiptEnvelope": {
+    "data": {
+      "hold_id": "hold-fixture",
+      "file_id": "file-fixture",
+      "action": "create",
+      "result_revision": 1,
+      "request_digest": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "committed_at": "2026-01-01T00:00:00Z"
+    }
+  },
+  "WorkspaceHomeEnvelope": {
+    "data": {
+      "space_id": "space-fixture",
+      "recent_files": [],
+      "collections": [],
+      "pending_counts": {
+        "submitted": null,
+        "accepted": null
+      },
+      "usage": {
+        "used_bytes": null,
+        "reserved_bytes": null,
+        "quota_bytes": null
+      },
+      "sections": {
+        "recent_files": {
+          "state": "ready",
+          "reason": "",
+          "observed_at": "2026-01-01T00:00:00Z"
+        },
+        "collections": {
+          "state": "ready",
+          "reason": "",
+          "observed_at": "2026-01-01T00:00:00Z"
+        },
+        "pending_counts": {
+          "state": "unavailable",
+          "reason": "source_unavailable",
+          "observed_at": "2026-01-01T00:00:00Z"
+        },
+        "usage": {
+          "state": "unavailable",
+          "reason": "source_unavailable",
+          "observed_at": "2026-01-01T00:00:00Z"
+        }
+      },
+      "observed_at": "2026-01-01T00:00:00Z"
+    }
+  }
+}

@@ -1,0 +1,6 @@
+/* Transitional shell stylesheet entry. Preserve the existing cascade order
+   until each legacy layout is retired with browser evidence. */
+@import "../style.css";
+@import "../finder.css";
+@import "../workspace-layout.css";
+@import "../finder-browser.css";

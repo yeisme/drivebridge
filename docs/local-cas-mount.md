@@ -1,6 +1,6 @@
 # 本机 CAS 缓存与挂载
 
-根合同：仓库根归档 [`openspec/changes/archive/2026-09-17-drivebridge-intranet-cas-mount-v1/`](../../../openspec/changes/archive/2026-09-17-drivebridge-intranet-cas-mount-v1/)（含 `vfs-api.md`）。实现包 [`openspec/changes/drivebridge-local-cas-mount-v1/`](../openspec/changes/archive/2026-09-17-drivebridge-local-cas-mount-v1/)。
+根合同：仓库根归档 [`openspec/changes/archive/2026-09-17-drivebridge-intranet-cas-mount-v1/`](../../../openspec/changes/archive/2026-09-17-drivebridge-intranet-cas-mount-v1)（含 `vfs-api.md`）。实现包 [`openspec/changes/drivebridge-local-cas-mount-v1/`](../openspec/changes/archive/2026-09-17-drivebridge-local-cas-mount-v1)。
 
 同空间 `ReuseUpload` 在后端支持 copy 时零字节上传；本机新增跨文件下载缓存、远程 Server 秒传消费（`blob_reused` 命中时本机不发分片），以及把授权空间挂到本机的只读 WebDAV。
 
@@ -33,4 +33,4 @@ Pinax 对象存储 vault 走 `preset pinax-vault`：把已有空间叠进 `--vau
 
 需要内核 FUSE 时：默认构建不含，改用可选构建或把 `rclone mount` 指到 WebDAV URL。回滚：停 WebDAV 进程即卸载视图，CAS 目录可留；关闭远程秒传后 upload 走原分片路径。
 
-默认构建保持 `CGO_ENABLED=0`，libfuse 不进默认 CLI。Server 侧 blob 表归 `backend-server/drivebridge`，本包不拥有；无公网挂载能力。
+默认构建保持 `CGO_ENABLED=0`，libfuse 不进默认 CLI。Server 侧 blob 表归 `cli/drivebridge/server`，本包不拥有；无公网挂载能力。

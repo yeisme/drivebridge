@@ -1,0 +1,305 @@
+{
+  "AssetRangeRequest": {
+    "handle": "asset-fixture",
+    "range": {
+      "start": 0,
+      "end": 8388607
+    }
+  },
+  "BindingLookupResult": {
+    "found": false,
+    "receipt": null
+  },
+  "BindingMutationLookup": {
+    "action": "confirm",
+    "idempotency_key": "original-fixture"
+  },
+  "BindingMutationReceipt": {
+    "operation_id": "operation-fixture",
+    "action": "confirm",
+    "binding": {
+      "binding_id": "binding-fixture",
+      "source_id": "source-fixture",
+      "instance_id": "instance-fixture",
+      "state": "active",
+      "revision": 1,
+      "guard_revision": 1,
+      "protection_active": true,
+      "updated_at": "2026-01-01T00:00:00Z"
+    }
+  },
+  "BindingPreview": {
+    "preview_id": "preview-fixture",
+    "preview_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "display_name": "Fixture notes",
+    "expected_guard_revision": 0,
+    "scopes": [
+      "reader.metadata",
+      "reader.body"
+    ],
+    "decision": "ready",
+    "reason": "none",
+    "overlapping_roots": 0,
+    "pending_mutations": 0,
+    "observed_at": "2026-01-01T00:00:00Z",
+    "expires_at": "2026-01-01T00:05:00Z"
+  },
+  "BindingView": {
+    "binding_id": "binding-fixture",
+    "source_id": "source-fixture",
+    "instance_id": "instance-fixture",
+    "state": "active",
+    "revision": 1,
+    "guard_revision": 1,
+    "protection_active": true,
+    "updated_at": "2026-01-01T00:00:00Z"
+  },
+  "ByteRange": {
+    "start": 0,
+    "end": 41
+  },
+  "ConfirmBinding": {
+    "preview_id": "preview-fixture",
+    "preview_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "expected_guard_revision": 0,
+    "confirmed": true
+  },
+  "DesktopCapabilities": {
+    "schema_version": "drivebridge.desktop.v1alpha1",
+    "available": []
+  },
+  "DesktopError": {
+    "origin": "drivebridge",
+    "code": "owner_unavailable",
+    "message": "The owner is unavailable.",
+    "recovery": "owner_required",
+    "operation_id": null
+  },
+  "EmptyRequest": {},
+  "ExportLookup": {
+    "idempotency_key": "original-fixture"
+  },
+  "ExportLookupResult": {
+    "found": false,
+    "operation": null
+  },
+  "ExportOperation": {
+    "operation_id": "operation-fixture",
+    "target_ref": {
+      "kind": "pinax",
+      "instance_id": "instance-fixture",
+      "source_id": "source-fixture",
+      "object_id": "note_fixture",
+      "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "uri": "pinax://note/note_fixture?v=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "owner_status": "completed",
+    "ui_state": "completed",
+    "bytes_transferred": 42,
+    "total_bytes": 42,
+    "observed_at": "2026-01-01T00:00:00Z"
+  },
+  "ExportRequest": {
+    "target_ref": {
+      "kind": "pinax",
+      "instance_id": "instance-fixture",
+      "source_id": "source-fixture",
+      "object_id": "note_fixture",
+      "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "uri": "pinax://note/note_fixture?v=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "native_selection_id": "selection-fixture",
+    "expected_destination_revision": "absent"
+  },
+  "ExportSourceInput": {
+    "target_ref": {
+      "kind": "pinax",
+      "instance_id": "instance-fixture",
+      "source_id": "source-fixture",
+      "object_id": "note_fixture",
+      "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "uri": "pinax://note/note_fixture?v=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  },
+  "FileRef": {
+    "kind": "file",
+    "instance_id": "instance-fixture",
+    "space_id": "space-fixture",
+    "file_id": "file-fixture",
+    "version_id": "version-fixture"
+  },
+  "KnowledgeSource": {
+    "source_id": "source-fixture",
+    "kind": "pinax",
+    "instance_id": "instance-fixture",
+    "display_name": "Fixture notes",
+    "state": "blocked",
+    "capabilities": [],
+    "binding_revision": 1
+  },
+  "LookupReadingMutation": {
+    "idempotency_key": "fixture-original-key"
+  },
+  "NativeSelection": {
+    "native_selection_id": "native-fixture"
+  },
+  "PageQuery": {},
+  "PinaxRef": {
+    "kind": "pinax",
+    "instance_id": "instance-fixture",
+    "source_id": "source-fixture",
+    "object_id": "note_fixture",
+    "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "uri": "pinax://note/note_fixture?v=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "ReadingMutationResult": {
+    "found": false,
+    "state": null
+  },
+  "ReadingRef": {
+    "kind": "pinax",
+    "instance_id": "instance-fixture",
+    "source_id": "source-fixture",
+    "object_id": "note_fixture",
+    "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "uri": "pinax://note/note_fixture?v=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "ReadingState": {
+    "target_ref": {
+      "kind": "file",
+      "instance_id": "instance-fixture",
+      "space_id": "space-fixture",
+      "file_id": "file-fixture",
+      "version_id": "version-fixture"
+    },
+    "favorite": true,
+    "read_later": false,
+    "position": null,
+    "revision": 1,
+    "updated_at": "2026-01-01T00:00:00Z"
+  },
+  "ReadingStatePage": {
+    "items": [
+      {
+        "target_ref": {
+          "kind": "file",
+          "instance_id": "instance-fixture",
+          "space_id": "space-fixture",
+          "file_id": "file-fixture",
+          "version_id": "version-fixture"
+        },
+        "favorite": true,
+        "read_later": false,
+        "position": null,
+        "revision": 1,
+        "updated_at": "2026-01-01T00:00:00Z"
+      }
+    ],
+    "next_cursor": "",
+    "observed_at": "2026-01-01T00:00:00Z"
+  },
+  "ReleaseProtection": {
+    "expected_revision": 1,
+    "confirmed": true
+  },
+  "SetSourceVisibility": {
+    "expected_revision": 1,
+    "hidden": true
+  },
+  "SourcePage": {
+    "items": [
+      {
+        "source_id": "source-fixture",
+        "kind": "pinax",
+        "instance_id": "instance-fixture",
+        "display_name": "Fixture notes",
+        "state": "blocked",
+        "capabilities": [],
+        "binding_revision": 1
+      }
+    ],
+    "next_cursor": "",
+    "observed_at": "2026-01-01T00:00:00Z"
+  },
+  "SourceRangeRequest": {
+    "target_ref": {
+      "kind": "pinax",
+      "instance_id": "instance-fixture",
+      "source_id": "source-fixture",
+      "object_id": "note_fixture",
+      "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "uri": "pinax://note/note_fixture?v=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "range": {
+      "start": 0,
+      "end": 1048575
+    }
+  },
+  "TopicPin": {
+    "target_ref": {
+      "source_id": "source-fixture",
+      "kind": "tag",
+      "owner_target_id": "tag-v1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "pinned": true,
+    "revision": 1,
+    "updated_at": "2026-01-01T00:00:00Z"
+  },
+  "TopicPinLookup": {
+    "idempotency_key": "original-fixture"
+  },
+  "TopicPinLookupResult": {
+    "found": true,
+    "pin": {
+      "target_ref": {
+        "source_id": "source-fixture",
+        "kind": "tag",
+        "owner_target_id": "tag-v1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "pinned": true,
+      "revision": 1,
+      "updated_at": "2026-01-01T00:00:00Z"
+    }
+  },
+  "TopicPinPage": {
+    "items": [
+      {
+        "target_ref": {
+          "source_id": "source-fixture",
+          "kind": "tag",
+          "owner_target_id": "tag-v1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "pinned": true,
+        "revision": 1,
+        "updated_at": "2026-01-01T00:00:00Z"
+      }
+    ],
+    "next_cursor": "",
+    "observed_at": "2026-01-01T00:00:00Z"
+  },
+  "TopicRef": {
+    "source_id": "source-fixture",
+    "kind": "tag",
+    "owner_target_id": "tag-v1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "UpdateReadingState": {
+    "target_ref": {
+      "kind": "file",
+      "instance_id": "instance-fixture",
+      "space_id": "space-fixture",
+      "file_id": "file-fixture",
+      "version_id": "version-fixture"
+    },
+    "expected_revision": 0,
+    "favorite": true
+  },
+  "UpdateTopicPin": {
+    "target_ref": {
+      "source_id": "source-fixture",
+      "kind": "tag",
+      "owner_target_id": "tag-v1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "expected_revision": 0,
+    "pinned": true
+  }
+}

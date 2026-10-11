@@ -1,0 +1,16 @@
+# empty-file-upload Specification
+
+## Purpose
+TBD - created by archiving change drivebridge-admin-takeover-finder-actions. Update Purpose after archive.
+## Requirements
+### Requirement: 受管空文件
+服务 SHALL 支持通过既有上传接口创建零字节文件，仍验证权限、同名冲突、摘要、存储及加密完整性。
+
+#### Scenario: 加密空文件
+- **WHEN** 用户向加密空间创建零字节文件
+- **THEN** 存储包含经认证的空最终帧，读取结果为零字节而不是补入占位内容
+
+#### Scenario: 同名创建
+- **WHEN** 新建文件与已存在文件或目录重名
+- **THEN** 拒绝创建，不覆盖原文件
+

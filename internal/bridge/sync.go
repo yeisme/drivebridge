@@ -93,6 +93,13 @@ func (s *Service) Sync(ctx context.Context, space string, opt SyncOptions) (Sync
 	if err != nil {
 		return SyncReport{}, err
 	}
+	if !opt.DryRun {
+		s.guardMu.Lock()
+		defer s.guardMu.Unlock()
+		if err := s.rejectSyncMutation(p); err != nil {
+			return SyncReport{Space: space, Status: "refused"}, err
+		}
+	}
 	local, remote, err := s.syncFsPair(ctx, p)
 	if err != nil {
 		return SyncReport{}, err

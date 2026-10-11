@@ -1,0 +1,263 @@
+/* Consumer flows page (文件流程). Mirrors the information workspace card
+   language: cards, chips, state sections and honest hints. */
+
+.cf-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.cf-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  border-bottom: 1px solid var(--border, #e5e7eb);
+  padding-bottom: 0.5rem;
+}
+
+.cf-tabs .active {
+  font-weight: 600;
+}
+
+.cf-center {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.cf-card {
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 0.75rem;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  background: var(--card, #fff);
+}
+
+.cf-card h3 {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.cf-hint {
+  color: var(--muted-foreground, #6b7280);
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+.cf-state {
+  border: 1px dashed var(--border, #e5e7eb);
+  border-radius: 0.75rem;
+  padding: 1.5rem 1rem;
+  text-align: center;
+  color: var(--muted-foreground, #6b7280);
+}
+
+.cf-state h2,
+.cf-state h3 {
+  font-size: 1rem;
+  color: var(--foreground, inherit);
+  margin: 0 0 0.5rem;
+}
+
+.cf-state.cf-error {
+  border-color: #dc2626;
+  color: #b91c1c;
+  text-align: left;
+}
+
+.cf-state ul {
+  text-align: left;
+}
+
+.cf-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.cf-label {
+  font-size: 0.85rem;
+  color: var(--muted-foreground, #6b7280);
+}
+
+.cf-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.cf-segmented {
+  display: inline-flex;
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 0.5rem;
+  overflow: hidden;
+  width: fit-content;
+}
+
+.cf-modalities {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.cf-modalities legend {
+  font-size: 0.85rem;
+  color: var(--muted-foreground, #6b7280);
+  margin-right: 0.5rem;
+  float: left;
+}
+
+.cf-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin: 0;
+}
+
+.cf-chip {
+  font-size: 0.75rem;
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 999px;
+  padding: 0.125rem 0.5rem;
+  color: var(--muted-foreground, #6b7280);
+}
+
+.cf-chip-warn {
+  border-color: #f59e0b;
+  color: #b45309;
+}
+
+.cf-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 0.5rem 1rem;
+  margin: 0;
+}
+
+.cf-facts div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.cf-facts dt {
+  font-size: 0.75rem;
+  color: var(--muted-foreground, #6b7280);
+}
+
+.cf-facts dd {
+  margin: 0;
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+
+.cf-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.cf-table th,
+.cf-table td {
+  text-align: left;
+  padding: 0.375rem 0.5rem;
+  border-bottom: 1px solid var(--border, #e5e7eb);
+  overflow-wrap: anywhere;
+}
+
+.cf-filelist,
+.cf-candidates,
+.cf-threads {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  font-size: 0.85rem;
+}
+
+.cf-filelist li,
+.cf-candidates li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.cf-candidates li {
+  flex-direction: column;
+  align-items: flex-start;
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 0.5rem;
+  padding: 0.5rem;
+}
+
+.cf-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  color: var(--muted-foreground, #6b7280);
+  font-size: 0.75rem;
+}
+
+.cf-locator {
+  color: var(--muted-foreground, #6b7280);
+}
+
+.cf-dropzone {
+  border-style: dashed;
+}
+
+.cf-textarea {
+  width: 100%;
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 0.5rem;
+  padding: 0.5rem;
+  font: inherit;
+  resize: vertical;
+}
+
+.cf-note-preview {
+  border: 1px solid #f59e0b;
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+  font-size: 0.85rem;
+}
+
+/* Recovery rows keep their actions reachable on narrow screens. */
+.cf-card[data-region="recovery"] ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.cf-card[data-region="recovery"] li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+}
+
+@media (max-width: 480px) {
+  .cf-facts {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .cf-actions,
+  .cf-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

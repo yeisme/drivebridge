@@ -6,12 +6,12 @@
 
 当前依据：[internal/bridge/sync.go](../../../internal/bridge/sync.go)、[internal/bridge/local_files.go](../../../internal/bridge/local_files.go)、[docs/local-file-experience.md](../../../docs/local-file-experience.md)。检查源码只证明当前实现形状，本文没有执行新增运行时测试或真实后端验证。
 
-本包owner：`mcp/drivebridge`；准入：`fit`；能力账本：`required / design`。消费方只能通过公开合同；新库、新worker和新命令仍归现有owner，不新增产品仓库。
+本包owner：`cli/drivebridge`；准入：`fit`；能力账本：`required / design`。消费方只能通过公开合同；新库、新worker和新命令仍归现有owner，不新增产品仓库。
 
 ## 前置、任务依赖与唯一写入
 
-- [drivebridge-capability-readiness-v2](../../../../../backend-server/drivebridge/openspec/changes/drivebridge-capability-readiness-v2/design.md)：依赖合同先稳定；本包消费其公开接口，不写其私有状态。
-- [drivebridge-retention-guards-v2](../../../../../backend-server/drivebridge/openspec/changes/drivebridge-retention-guards-v2/design.md)：依赖合同先稳定；本包消费其公开接口，不写其私有状态。
+- [drivebridge-capability-readiness-v2](../drivebridge-capability-readiness-v2/design.md)：依赖合同先稳定；本包消费其公开接口，不写其私有状态。
+- [drivebridge-retention-guards-v2](../drivebridge-retention-guards-v2/design.md)：依赖合同先稳定；本包消费其公开接口，不写其私有状态。
 
 本包内部主链为1.1→1.2→2.1→2.2→3.1→3.2→4.1→4.2→5.1；5.2规模验收和6.1文档在5.1后推进，6.2等待二者完成。前置包的1.2合同稳定即可启动设计；运行集成需对应应用服务与入口已通过定向验证，不能以仅有spec满足运行依赖。没有子Agent自动授权，后续实现按拥有路径串行写；独立规格可分别审阅，稳定diff后才验收。
 

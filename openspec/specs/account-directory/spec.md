@@ -1,0 +1,31 @@
+# account-directory Specification
+
+## Purpose
+TBD - created by archiving change drivebridge-user-directory-management. Update Purpose after archive.
+## Requirements
+### Requirement: 受权限约束的用户目录
+服务 SHALL 提供分页用户目录及状态、角色、团队、用户/Key 搜索，沿既有用户可见范围授权。Key 元数据只向本人或平台管理员显示，SHALL NOT 输出明文、哈希或密文。
+
+#### Scenario: 无权查看 Key
+- **WHEN** 普通成员查看共享团队的其他用户
+- **THEN** Key 数量为 null、详情声明不可见，不伪装成零个 Key
+
+### Requirement: 版本化账号生命周期
+服务 SHALL 只允许已认证的平台管理员通过输入目标用户名或验证本人 Key 确认后，执行冻结、解冻、删除归档与恢复其他账号，并检查版本冲突和最后负责人。冻结/归档使会话及临时授权失效；归档保留文件且吊销 Key、Agent 和分享。
+
+#### Scenario: 归档后恢复
+- **WHEN** 管理员恢复已归档用户
+- **THEN** 用户回到冻结状态，旧凭据与授权不自动生效，文件不被删除
+
+#### Scenario: 旧接口绕过
+- **WHEN** 未携带显式接管确认，使用旧账号状态或团队权限入口停用最后一位有效负责人，或直接启用归档账号
+- **THEN** 拒绝操作并要求交接或显式恢复
+
+#### Scenario: 并发修改
+- **WHEN** 提交的 expected_revision 已过时
+- **THEN** 返回 409，账号状态不被覆盖
+
+#### Scenario: 最高管理员接管并继续
+- **WHEN** 最高管理员确认目标用户名或本人 Key，并明确接受与当前状态一致的接管清单
+- **THEN** 在同一事务中接任缺失的租户/团队管理员或网盘负责人职责并完成操作，记录每项接管；清单变化返回 409
+

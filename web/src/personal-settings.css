@@ -1,0 +1,12 @@
+@layer components {
+  .settings-shell { container:settings / inline-size; }
+  .settings-layout { display:flex; flex-direction:column; gap:16px; min-width:0; }
+  .settings-outline { padding:0 0 8px; border-bottom:1px solid var(--ui-border); }
+  .settings-outline-items { display:flex; flex-wrap:wrap; gap:4px; }
+  @container settings (min-width:800px) {
+    .settings-layout { display:grid; grid-template-columns:176px minmax(0,1fr); align-items:start; }
+    .settings-sections { grid-column:2; grid-row:1; }
+    .settings-outline { grid-column:1; grid-row:1; position:sticky; top:0; padding:0 16px 0 0; border-bottom:0; border-right:1px solid var(--ui-border); }
+    .settings-outline-items { flex-direction:column; }
+  }
+}

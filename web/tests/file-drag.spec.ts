@@ -1,0 +1,22 @@
+import { expect, test } from '@playwright/test';
+test.use({ trace: 'off', video: 'off', screenshot: 'off' });
+test('dragging a selected file into a folder moves its durable path', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('link', { name: '使用账号登录' }).click();
+  await page.getByRole('link', { name: '以 Alice 登录' }).click();
+  await page.getByRole('button', { name: /^打开网盘 / }).first().click();
+  const folder = '拖放目标-' + Date.now();
+  await page.getByRole('button', { name: '新建', exact: true }).click();
+  await page.getByRole('menuitem', { name: '新建文件夹', exact: true }).click();
+  await page.getByRole('textbox', { name: '名称', exact: true }).fill(folder);
+  await page.getByRole('button', { name: '确认', exact: true }).click();
+  const name = 'drag-source.txt';
+  await page.locator('input[type=file]').setInputFiles({ name, mimeType: 'text/plain', buffer: Buffer.from('drag fixture') });
+  const source = page.locator('.finder-file', { hasText: name });
+  const target = page.locator('.finder-folder', { hasText: folder });
+  await expect(source).toBeVisible(); await expect(target).toBeVisible();
+  await source.dragTo(target);
+  await expect(source).toHaveCount(0);
+  await target.dblclick();
+  await expect(page.getByRole('checkbox', { name: '选择 ' + folder + '/' + name, exact: true })).toBeVisible();
+});

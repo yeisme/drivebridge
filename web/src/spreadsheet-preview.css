@@ -1,0 +1,140 @@
+@layer theme, base, legacy, components, utilities;
+@layer legacy {
+  .spreadsheet-reader {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
+    color: var(--ink);
+    background: var(--surface);
+    text-align: left;
+  }
+  .spreadsheet-toolbar,
+  .spreadsheet-pagination {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 12px;
+  }
+  .spreadsheet-toolbar {
+    flex: none;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--line);
+    font-size: 12px;
+  }
+  .spreadsheet-toolbar label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    max-width: 100%;
+  }
+  .spreadsheet-toolbar [role="combobox"] {
+    max-width: min(240px, 55vw);
+  }
+  .spreadsheet-readonly {
+    margin-left: auto;
+    color: var(--muted);
+  }
+  .spreadsheet-scroll {
+    flex: 1;
+    min-width: 0;
+    min-height: 120px;
+    overflow: auto;
+    overscroll-behavior: contain;
+  }
+  .spreadsheet-scroll:focus-visible {
+    outline: 2px solid var(--green);
+    outline-offset: -2px;
+  }
+  .spreadsheet-grid {
+    border-collapse: separate;
+    border-spacing: 0;
+    width: max-content;
+    min-width: 100%;
+    font-size: 13px;
+    line-height: 1.5;
+    font-variant-numeric: tabular-nums;
+  }
+  .spreadsheet-grid th,
+  .spreadsheet-grid td {
+    border-right: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    padding: 8px 12px;
+    vertical-align: top;
+  }
+  .spreadsheet-grid td {
+    min-width: 120px;
+    max-width: 360px;
+  }
+  .spreadsheet-grid td div {
+    max-width: 336px;
+    max-height: 180px;
+    overflow: auto;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    user-select: text;
+  }
+  .spreadsheet-grid th {
+    background: var(--surface);
+    color: var(--muted);
+    font-weight: 500;
+    text-align: center;
+  }
+  .spreadsheet-grid thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+  }
+  .spreadsheet-grid tbody th {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    min-width: 48px;
+  }
+  .spreadsheet-grid .spreadsheet-corner {
+    left: 0;
+    z-index: 3;
+  }
+  .spreadsheet-message {
+    margin: auto;
+    padding: 24px;
+    display: grid;
+    gap: 12px;
+    font-size: 14px;
+  }
+  .spreadsheet-footer {
+    flex: none;
+    padding: 8px 12px;
+    border-top: 1px solid var(--line);
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .spreadsheet-footer p {
+    margin: 6px 0 0;
+  }
+  .spreadsheet-pagination > span:first-child {
+    margin-right: auto;
+  }
+  @media (max-width: 760px) {
+    .spreadsheet-toolbar {
+      gap: 6px 8px;
+    }
+    .spreadsheet-toolbar button,
+    .spreadsheet-pagination button {
+      min-height: 44px;
+    }
+    .spreadsheet-pagination button {
+      min-width: 44px;
+    }
+    .spreadsheet-readonly {
+      margin-left: 0;
+    }
+    .spreadsheet-footer {
+      padding: 6px 8px;
+    }
+  }
+}

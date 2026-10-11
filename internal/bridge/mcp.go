@@ -215,14 +215,9 @@ func (s *Service) Call(ctx context.Context, name string, args map[string]any) (a
 		if e != nil {
 			return nil, e
 		}
-		if p.Kind() != "onedrive" {
-			return nil, errors.New("handoff_not_available")
-		}
-		if f.Trashed != nil {
-			return nil, errors.New("file_trashed")
-		}
-		if !s.Handoff || p.Project == "" || p.Actor == "" {
-			return nil, errors.New("secure_handoff_unavailable")
+		f, _, e = s.reference(ctx, HandoffRequest{Ref: f.Ref, Project: p.Project, Actor: p.Actor})
+		if e != nil {
+			return nil, e
 		}
 		return map[string]any{"file": f, "status": "ready_for_owner_acquisition", "checked_at": time.Now().UTC(), "expires_at": nil}, nil
 	case "mount_status":

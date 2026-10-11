@@ -45,6 +45,9 @@ func (s *Service) reference(ctx context.Context, q HandoffRequest) (File, Space,
 	if !s.Handoff || p.Project == "" || p.Actor == "" || p.Project != q.Project || p.Actor != q.Actor {
 		return f, p, errors.New("secure_handoff_unavailable")
 	}
+	if f.Size <= 0 || f.Size > p.MaxBytes {
+		return f, p, errors.New("file_size_invalid")
+	}
 	// Pin a verified media digest, not the Graph MIME declaration. This validation
 	// cache is reusable only for this exact item version.
 	var old File
@@ -161,6 +164,7 @@ func (s *Service) Handler() http.Handler {
 	}
 	return mux
 }
+
 // dialUnixSocket reports whether the socket still answers; nil error means
 // a live consumer is on the other end.
 func dialUnixSocket(socket string) error {

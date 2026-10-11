@@ -1,0 +1,27 @@
+import { selectChoice } from "./helpers/select";
+import {test,expect} from "@playwright/test";
+import path from "node:path";
+test("role navigation, managed personal drive and compact governance",async({page})=>{
+ test.skip(process.env.DRIVEBRIDGE_TEST_TEAM_DEMO!=="1","Requires isolated team fixture");
+ await page.setViewportSize({width:1160,height:962});
+ await page.goto("/");
+ await page.getByRole("button",{name:"无需账号，进入本地体验"}).click();
+ await page.getByRole("button",{name:"工作区选项",exact:true}).click();
+ await page.getByRole("button",{name:/管理与授权中心/}).click();
+ const panel=page.getByRole("region",{name:"管理与授权中心",exact:true});
+ await panel.getByRole("tab",{name:"租户与权限",exact:true}).click();
+ await expect(panel.getByRole("textbox",{name:"租户名称",exact:true})).toBeHidden();
+ await panel.getByRole("button",{name:"创建租户",exact:true}).click();
+ await expect(page.getByRole("dialog").getByRole("textbox",{name:"租户名称",exact:true})).toBeVisible();
+ await page.screenshot({path:path.join(process.env.DRIVEBRIDGE_EVIDENCE_ARTIFACTS||"temp/browser-artifacts","compact-governance.png")});
+ await page.getByRole("dialog").getByRole("button",{name:"关闭",exact:true}).click();
+ await page.getByRole("button",{name:"工作区选项",exact:true}).click();
+ await selectChoice(page.getByLabel("体验身份"),"member");
+ await page.getByRole("button",{name:"切换体验身份",exact:true}).click();
+ await expect(page.locator(".sidebar")).not.toContainText("用户目录");
+ await expect(page.locator(".sidebar")).not.toContainText("Key 管理");
+ await expect(page.locator(".sidebar")).not.toContainText("存储管理");
+ await page.goto("/#/drive/missing-drive");
+ await expect(page.getByText("此网盘不在当前身份的可访问范围内")).toBeVisible();
+ await expect(page.locator(".finder")).toHaveCount(0);
+});

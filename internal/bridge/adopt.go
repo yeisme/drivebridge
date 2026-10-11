@@ -97,12 +97,153 @@ func (s *Service) isAdopted(spaceID string) bool {
 }
 
 func (s *Service) rejectOwnerProtected(spaceID string, rels ...string) error {
-	if !s.isAdopted(spaceID) {
+	// Unlike advisory inventory, a mutation may not treat a registry read
+	// failure as proof that the space is unprotected.
+	if s == nil || s.DB == nil || spaceID == "" {
+		return errors.New("guard_unavailable")
+	}
+	var n int64
+	if err := s.DB.Model(&AdoptRecord{}).Where("space_id = ?", spaceID).Limit(1).Count(&n).Error; err != nil {
+		return errors.New("guard_unavailable")
+	}
+	if n == 0 {
 		return nil
 	}
 	for _, rel := range rels {
 		if OwnerProtectedRel(rel) {
 			return errors.New("owner_protected")
+		}
+	}
+	return nil
+}
+
+// rejectOperationMutation revalidates the persisted operation, not a caller's
+// replacement request. Recovery must keep the original operation and key.
+func (s *Service) rejectOperationMutation(op Operation) error {
+	switch op.Kind {
+	case "upload", "save_output":
+		if err := s.rejectOwnerProtected(op.SpaceID, op.Target); err != nil {
+			return err
+		}
+		if op.Kind == "save_output" {
+			return s.rejectLocalOwnerProtected(op.SpaceID, op.LocalPath)
+		}
+	case "download":
+		return s.rejectLocalOwnerProtected(op.SpaceID, op.LocalPath)
+	}
+	return nil
+}
+
+// Local writes have a different root from provider writes. Compare physical
+// locations against every local adoption rather than assuming space equality.
+func (s *Service) rejectLocalOwnerProtected(spaceID, rel string) error {
+	if s == nil || s.DB == nil {
+		return errors.New("guard_unavailable")
+	}
+	var records []AdoptRecord
+	if err := s.DB.Where("kind = ?", "local").Find(&records).Error; err != nil {
+		return errors.New("guard_unavailable")
+	}
+	if len(records) == 0 {
+		return nil
+	}
+	p, err := s.Space(spaceID)
+	if err != nil {
+		return err
+	}
+	target, err := canonicalMutationPath(filepath.Join(p.LocalRoot, rel))
+	if err != nil {
+		return err
+	}
+	for _, record := range records {
+		root, err := canonicalMutationPath(record.Location)
+		if err != nil {
+			return err
+		}
+		// Keep both names: a metadata directory symlink must not turn its
+		// original owner-protected name into an ordinary external path.
+		for _, candidate := range []string{target, filepath.Join(p.LocalRoot, rel)} {
+			same, targetInRoot, rootInTarget := sameOrNested(candidate, root)
+			if same || rootInTarget {
+				return errors.New("owner_protected")
+			}
+			if targetInRoot {
+				relative, err := filepath.Rel(root, candidate)
+				if err != nil {
+					return errors.New("guard_unavailable")
+				}
+				if OwnerProtectedRel(relative) {
+					return errors.New("owner_protected")
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// Resolve aliases even for a destination that does not exist yet. Broken
+// links and inaccessible ancestors are not evidence of an unprotected path.
+func canonicalMutationPath(name string) (string, error) {
+	if !filepath.IsAbs(name) {
+		return "", errors.New("guard_unavailable")
+	}
+	current := filepath.Clean(name)
+	var suffix []string
+	for {
+		_, err := os.Lstat(current)
+		if err == nil {
+			resolved, err := filepath.EvalSymlinks(current)
+			if err != nil {
+				return "", errors.New("guard_unavailable")
+			}
+			for i := len(suffix) - 1; i >= 0; i-- {
+				resolved = filepath.Join(resolved, suffix[i])
+			}
+			return resolved, nil
+		}
+		if !os.IsNotExist(err) || filepath.Dir(current) == current {
+			return "", errors.New("guard_unavailable")
+		}
+		suffix = append(suffix, filepath.Base(current))
+		current = filepath.Dir(current)
+	}
+}
+
+// Whole-tree engines cannot enforce per-entry metadata exclusions. Refuse
+// overlapping local/provider roots, including a different space's alias.
+func (s *Service) rejectSyncMutation(p Space) error {
+	if err := s.rejectOwnerProtected(p.ID, ".pinax"); err != nil {
+		return err
+	}
+	var records []AdoptRecord
+	if err := s.DB.Where("kind = ?", "local").Find(&records).Error; err != nil {
+		return errors.New("guard_unavailable")
+	}
+	if len(records) == 0 {
+		return nil
+	}
+	roots := []string{p.LocalRoot}
+	if p.Kind() == "generic" {
+		remote, err := AliasContentRoot(p.Remote)
+		if err != nil {
+			return errors.New("managed_scope_unverifiable")
+		}
+		roots = append(roots, filepath.Join(remote, p.RootID))
+	}
+	for _, candidate := range roots {
+		root, err := canonicalMutationPath(candidate)
+		if err != nil {
+			return err
+		}
+		for _, record := range records {
+			owner, err := canonicalMutationPath(record.Location)
+			if err != nil {
+				return err
+			}
+			same, inside, ancestor := sameOrNested(root, owner)
+			if same || inside || ancestor {
+				return errors.New("owner_protected")
+			}
 		}
 	}
 	return nil
@@ -128,6 +269,8 @@ func (s *Service) AdoptBySpace(spaceID string) (AdoptRecord, bool) {
 // prefix. Same idempotency key and location reuses; same key and a different
 // location is adopt_mismatch.
 func (s *Service) AdoptStorage(req AdoptRequest) (*AdoptRecord, bool, error) {
+	s.guardMu.Lock()
+	defer s.guardMu.Unlock()
 	if req.Kind != "local" && req.Kind != "s3" {
 		return nil, false, errors.New("unsupported")
 	}

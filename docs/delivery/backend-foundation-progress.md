@@ -1,0 +1,51 @@
+# 后端基础实施进度
+
+当前为B02增量模型切片，不是新grant/收件端点完成。
+
+已新增WorkspaceGrant、WorkspaceAgentGroup、WorkspaceAgentOrganization、WorkspaceSubmission及追加式WorkspaceSubmissionDecision，统一通过GORM AutoMigrate接入现有服务启动。没有改旧Agent字段、File/Version/Operation身份或凭据。新表不包含明文secret，也不单独存文件字节。
+
+数据库约束覆盖：Agent与grant唯一关联；never必须无截止时间、duration必须有截止时间；组名在tenant+human范围唯一；组织在tenant+human+agent范围唯一；submission创建键按tenant+human+grant隔离；原上传operation只能属于一个submission；每个submission revision只能有一个决定。
+
+已验证可丢弃SQLite：旧Agent身份/期限保留、重复迁移、部分表已建立后继续迁移、期限非法组合拒绝、组名与组织作用域、submission幂等唯一域和决定唯一性。最新证据：temp/integration-test-runs/20261001T114137Z-39c0ae02。此前带原服务启动及旧MCP主体检查通过：20261001T113708Z-730c5432。均未触碰真实用户state。
+
+新增workspaceGrantState为独立纯状态函数，未知profile/期限组合fail closed，revoked优先于expired，过期边界包含相等，再判断disabled；可控时间测试通过。该函数尚未接入authenticate/allowOn，不能声称新grant权限已生效。
+
+已增加临时fail-closed接线：authenticate与事务内allowOn发现Agent绑定WorkspaceGrant时拒绝退回旧scope，未知profile/撤销记录和数据库错误同样拒绝。当前所有新grant仍不可用，尚未开启专用动作；旧Agent继续原认证。测试直接在单连接事务内验证旧read/write/delete/import/export均被阻止，并复验旧真实MCP主体。证据20261001T114639Z-30dc7416；CGO_ENABLED=0下Workspace定向测试通过，证据20261001T114706Z-0ea15f85。这不是专用新grant权限实现完成，也不是全入口已审计证明。
+
+已实现但未开放入口的authorizeWorkspaceActionOn：在同一事务重读human/space/Agent/grant，校验owner启用状态、tenant/space/connection/prefix一致、scope限制、当前token hash、grant状态及显式action，再调用既有governance策略。不使用旧Agent过期时间代替新grant期限。测试覆盖单连接事务、跨范围、未知动作、禁用、空身份及轮转后旧Principal；最初轮转测试因GORM更新同步修改了测试中共用的Agent指针而失败，改为真实认证语义的身份快照后通过，未放宽授权。最后CGO_ENABLED=0 Workspace测试通过：20261001T115549Z-b8e0de17。该专用gate尚未被HTTP handler调用，新grant仍默认拒绝。
+
+新增内部生命周期CAS与WorkspaceRequest幂等回执：disable/enable/revoke按owner+tenant+revision更新，状态与脱敏回执在调用者事务内提交；同键同请求返回原回执，同键不同摘要冲突。普通goroutine并发测试证明同revision单赢，回滚测试证明状态/回执同回滚，禁用与撤销不更改期限。证据20261001T120359Z-fa17e706；不运行race。这些为内部事务原语，尚未接入认证人类入口及审计，不是完整生命周期API。
+
+首个实际新HTTP读取路径已接入：GET /api/v1/agent-grants/{id}，沿用现有wrapper认证/上下文/审计，拒绝Agent和外部身份，仅当前human+tenant可读取；复核owner启用、space归属及governance权限，不返回凭据。协议来自持久字段，不硬编码为mcp。真实本地HTTP+SQLite测试以fixture预置grant，验证本人读取、跨用户404、Agent拒绝与协议/null期限；旧Agent及原MCP仍通过。证据20261001T120905Z-0f8800bb，Workspace集中复验20261001T121024Z-b7489b65。未提供签发或开放新grant凭据；生成OpenAPI仍保守标planned，待完整端点验收后更新。
+
+POST /api/v1/agent-grants/{id}/revoke已接入人类认证、CSRF、owner/tenant/space权限，必须提供原幂等键和expected_revision；同事务保存grant状态、原回执与workspace.grant.revoke审计。真实本地HTTP测试覆盖无CSRF/跨用户/缺键/缺revision拒绝、同键重放、同键不同摘要409、DB回读与仅一次领域审计。通过GORM测试回调注入审计写失败时，HTTP返回503且状态/回执回滚，再正常请求成功。证据20261001T121810Z-35d450a3；仍不提供真实凭据签发或启用新Agent。
+
+PATCH /api/v1/agent-grants/{id}已接通enabled禁用/启用，复用撤销的认证、CAS、幂等和事务审计；当时尚未实现的name/prefix/actions/expiry修改明确422，不静默吞字段。HTTP测试覆盖false、null/缺revision、stale409、同键重放、期限不续期与过期后不能enable。CGO_ENABLED=0 Workspace集中测试通过，证据20261001T122514Z-a00f4db0。新grant仍不可认证，enabled=true只改变持久状态，不绕过关闭门。
+
+新增数据库关闭后重新打开的恢复测试：重复迁移后仍读取同一个grant状态、revision、原回执ID和创建时间，同键重放不产生第二份回执，也不更改长期期限。证据temp/integration-test-runs/20261001T122818Z-da8f6aa1，CGO_ENABLED=0通过。此为SQLite连接重开验证，不冒充完整进程重启或HTTP端到端重启验证。
+
+PATCH现进一步支持单独修改expiry_mode/expires_in_seconds：服务端成功时刻计算限时，never使用SQL NULL；同键重放不续期，过期/撤销不得复活。暂不支持同时修改enabled与期限，也不支持name/prefix/actions，明确422。HTTP测试发现duration→never后复用GORM目标struct可能残留旧指针，已改为清空对象再回读，数据库与响应均保持null；失败20261001T123437Z-bffada10，修复后期限/禁用/撤销测试通过20261001T123524Z-b3d3ce13。
+
+期限验收补齐六档时长HTTP回读、审计失败回滚和期限/撤销同revision单赢，证据20261001T123941Z-7d7cedb7。新增WorkspaceCredentialHistory只持hash、不序列化hash，grant+generation与hash唯一；重复迁移保持历史。内部轮转事务使用CAS同时替换Agent当前hash、退休旧代次、写入新历史，保留期限与禁用状态；回滚不换凭据、不留下历史，拒绝历史hash复用、stale revision和过期grant。测试仅合成身份与本地SQLite，证据20261001T124612Z-13b3ba27；未接HTTP轮转/一次secret交付，未修改真实凭据。
+
+轮转请求现持久保存原credential_generation，重放不再轮转、不交付secret，之后的新轮转不改旧回执代次。POST /api/v1/agent-grants/{id}/rotate/lookup已接通人类认证/上下文和permission检查，只返回原代次与not_replayable；真实HTTP测试验证本人回查、跨用户/跨tenant 404、Agent拒绝、缺键404及无状态修改。证据20261001T125436Z-d24692ab。仍未开放POST rotate或新grant签发。
+
+POST /api/v1/agent-grants/{id}/rotate已接通人类权限、CSRF、幂等键与revision校验；随机凭据仅在状态/历史/回执/审计事务提交后返回一次，重放仅metadata。HTTP测试用本地fixture验证hash匹配、旧凭据拒绝、同键不重复审计/回执、原代次lookup；注入审计失败时503且无secret、旧hash和历史全部回滚。证据20261001T130122Z-e7f5e65c及20261001T130032Z-0b5a5f61。未访问真实账号或修改真实凭据，新grant认证仍保持关闭，创建签发入口未实现。
+
+Agent新增不对旧JSON暴露的restriction_profile持久列；标记新profile或未知profile的身份即使grant记录缺失也禁止退回旧scope，allowOn复读当前Agent阻断旧Principal快照绕过。专用action gate同时要求当前Agent和认证快照profile一致。旧表升级fixture验证新增列默认空、原hash/期限/scope保持，旧API数组响应未增加marker。证据20261001T130956Z-cb76132b；新身份仍不开放认证。
+
+轮转现在原子写入Agent restriction_profile，事务失败同步回滚，防grant关联丢失后新hash被按旧身份接受。新增创建事务原语：同事务创建无旧scope且带marker的Agent、grant、首代hash历史、原请求回执；默认never与显式never归一化，同键重放不新建、不续期；六档duration按给定服务端时间计算，失败全部回滚。证据20261001T131646Z-c3469307。此处只测合成hash和本地数据库，未接POST创建/权限校验/一次凭据交付，不能视为可用签发入口。
+
+POST /api/v1/agent-grants与/lookup已接入人类认证、CSRF、本人space/tenant/connection及permission检查；一次secret仅在创建/历史/回执/审计事务提交后交付，重放与lookup只有not_replayable。真实本地HTTP测试覆盖跨用户空间拒绝、同键恢复同一身份、改请求409、GET回读，以及审计失败时Agent/grant/history/receipt全部回滚且无secret输出。证据20261001T132436Z-d17a3686。测试只使用可丢弃fixture，未操作真实凭据。新身份认证仍被关闭门阻止，不能声明Agent业务可用。
+
+标签建议基础已增加WorkspaceLabelSuggestion与WorkspaceSuggestionDecision，按human/tenant/Agent/固定版本/原键隔离，追加式决定revision唯一。内部createWorkspaceSuggestionOn使用专用labels.suggest gate，先查固定file/version与当前权限，后幂等重放；不同Agent同键各自保存独立建议，撤销后连旧请求重放也拒绝。没有写人工标签或改变文件版本。证据20261001T133246Z-82a0e247；尚未接HTTP建议写入或人工采纳事务。
+
+人工标签采纳内部事务已实现：校验human/tenant/space/版本与pending revision，选择必须为原建议子集；CAS决定与增量manual标签/来源记录同事务写入，已有人工标签行不覆盖、未选标签不添加。拒绝Agent自批、旧版本、旧revision及非子集；事务中断测试证明建议状态、人工标签和决定记录一起回滚。证据20261001T133804Z-1a50d2d6。尚未接HTTP决定入口/幂等与审计，不称完整采纳闭环。
+
+POST /api/v1/label-suggestions/{id}/decision已接入既有认证/CSRF wrapper及事务内幂等回执和审计；同键回查先重验当前权限，不重做manual合并。真实本地HTTP+SQLite测试以预置proposal验证跨用户404、人工采纳增量保留原标签、同键重放原结果、审计故障503且状态/标签/回执回滚；证据20261001T134417Z-bdc38f83。Agent建议提交HTTP仍待新认证接线，尚非完整双向闭环。
+
+人工建议决定HTTP负例进一步验证：Agent自批与缺CSRF拒绝，同键改决定409、另一键旧revision409、用户禁用后重放403；显式reject及其重放不添加人工标签。证据20261001T134906Z-e3e633fa。当前仍使用预置建议，并未证明Agent提交→人工决定完整链。
+
+新profile认证已按精确方法/路径仅开放POST /api/v1/files/{id}/label-suggestions，仍拒绝旧上传/正文读取/人工决定/管理面。认证校验当前grant状态、owner与身份绑定，业务事务再执行专用labels.suggest权限交集。真实本地HTTP+SDK+SQLite完成创建授权→提交建议→同键重放→人类采纳→撤权后拒绝，含目录外建议拒绝、旧宽写/读与Agent自批拒绝；文件/版本为fixture预置，不声称上传链或MCP完成。证据20261001T135837Z-8cc26ef0。历史“全部关闭”记录保留为当时状态，当前只开放此窄入口。
+
+剩余：其它新profile专用认证/动作授权接线及所有应用入口拒绝绕权、发布前fencing、原请求幂等事务入口与审计、分组并发CAS/删除解绑、schema其余必要模型与迁移反例、pure-Go构建和相关业务入口。当前新grant仅允许已实现的专用标签建议POST入口；其它新动作/旧宽权限入口继续拒绝。B02与后端基础里程碑保持未完成。

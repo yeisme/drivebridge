@@ -174,6 +174,8 @@ func (s *Service) localFileRoutes(mux *http.ServeMux) {
 		http.ServeContent(w, request, f.Name, time.Time{}, seeker)
 	})
 	mux.HandleFunc("PUT /files/upload", func(w http.ResponseWriter, r *http.Request) {
+		s.guardMu.Lock()
+		defer s.guardMu.Unlock()
 		if !s.Enabled {
 			fail(w, errors.New("disabled"))
 			return
@@ -196,6 +198,14 @@ func (s *Service) localFileRoutes(mux *http.ServeMux) {
 		}
 		if r.ContentLength <= 0 || r.ContentLength > p.MaxBytes {
 			fail(w, errors.New("file_size_invalid"))
+			return
+		}
+		if err = s.rejectOwnerProtected(p.ID, dir, joinRel(dir, name)); err != nil {
+			fail(w, err)
+			return
+		}
+		if err = s.rejectLocalOwnerProtected(p.ID, ".drivebridge-staging"); err != nil {
+			fail(w, err)
 			return
 		}
 		root, err := os.OpenRoot(p.LocalRoot)

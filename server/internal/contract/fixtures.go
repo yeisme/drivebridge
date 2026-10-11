@@ -1,0 +1,71 @@
+package contract
+
+import (
+	"encoding/json"
+	"time"
+)
+
+// ResponseFixtures contains synthetic, deterministic public DTO examples.
+// No production state or credentials are read by contract generation.
+func ResponseFixtures() map[string]any {
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	grant := GrantView{GrantID: "grant-fixture", AgentID: "agent-fixture", Name: "Reader", Protocol: "mcp", SpaceID: "space-fixture", ConnectionID: "connection-fixture", Prefix: "references", Actions: []string{"files.read"}, RestrictionProfile: "personal_workspace_v1", Revision: 1, State: "active", ExpiryMode: "never", IssuedAt: now, CredentialGeneration: 1, CreatedAt: now, UpdatedAt: now}
+	resource := ResourceView{DescriptorID: "descriptor-fixture", SpaceID: "space-fixture", FileRef: "drivebridge://fixture/file/file-fixture/version/version-fixture", Kind: "skill", DisplayName: "Synthetic resource", Revision: 1, CheckState: "unknown", CreatedAt: now}
+	size := int64(32)
+	submission := SubmissionView{SubmissionID: "submission-fixture", Revision: 2, SpaceID: grant.SpaceID, AgentID: grant.AgentID, GrantID: grant.GrantID, AgentName: grant.Name, SourceKind: "agent", FileName: "result.md", MIMEType: "text/markdown", SizeBytes: &size, FileRef: "file-fixture", VersionID: "version-fixture", UploadOperationRef: "operation-fixture", State: "submitted", CreatedAt: now, UpdatedAt: now}
+	return map[string]any{
+		"LabelDefinitionPageEnvelope": DataEnvelope[LabelDefinitionPage]{Data: LabelDefinitionPage{SpaceID: "space-fixture", Namespace: "manual", Revision: 1, Definitions: []LabelDefinition{{Key: "source", DisplayName: "Source", Group: "", Revision: 1}}}},
+		"LabelDefinitionReceiptEnvelope": DataEnvelope[LabelDefinitionReceipt]{Data: LabelDefinitionReceipt{SpaceID: "space-fixture", Namespace: "manual", RequestDigest: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", ResultRevision: 1, CommittedAt: now}},
+		"LabelMergePlanEnvelope": DataEnvelope[LabelMergePlanView]{Data: LabelMergePlanView{PlanID: "plan-fixture", SpaceID: "space-fixture", Revision: 1, Phase: "previewed", Risk: "approval_required", ApprovalRequired: true, ImpactDigest: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", Items: []LabelMergePlanItemView{}}},
+		"PropertyMigrationCapabilityEnvelope": DataEnvelope[PropertyMigrationCapability]{Data: PropertyMigrationCapability{SpaceID: "space-fixture", StorageKind: "sidecar", MaxSidecars: 200, ConversionPolicies: []string{"preserve", "parse_text", "scalar_text", "singleton_list"}}},
+		"PropertyMigrationReceiptEnvelope": DataEnvelope[PropertyMigrationReceipt]{Data: PropertyMigrationReceipt{SpaceID: "space-fixture", PlanID: "plan-fixture", Stage: "preview", RequestDigest: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", ResultRevision: 1, CommittedAt: now}},
+		"PropertyMigrationViewEnvelope": DataEnvelope[PropertyMigrationView]{Data: PropertyMigrationView{SpaceID: "space-fixture", PlanID: "plan-fixture", Revision: 1, ImpactDigest: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", Phase: "previewed", Request: PropertyMigrationPreview{ExpectedDefinitionRevision: 1, SourceKey: "status", TargetKey: "phase", TargetType: "text", ConversionPolicy: "preserve"}, Items: []PropertyMigrationItem{}}},
+		"WorkspaceHoldListEnvelope": DataEnvelope[WorkspaceHoldList]{Data: WorkspaceHoldList{Items: []WorkspaceHoldView{}, ObservedAt: now, TotalKind: "unknown"}},
+		"WorkspaceHoldReceiptEnvelope": DataEnvelope[WorkspaceHoldReceipt]{Data: WorkspaceHoldReceipt{HoldID: "hold-fixture", FileID: "file-fixture", Action: "create", ResultRevision: 1, RequestDigest: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", CommittedAt: now}},
+		"FavoriteListEnvelope": DataEnvelope[FavoriteList]{Data: FavoriteList{Items: []FavoriteView{{FavoriteID: "favorite-fixture", SpaceID: "space-fixture", TargetKind: "file", TargetRef: "drivebridge://fixture/file/file-fixture", Revision: 1}}, ObservedAt: now, TotalKind: "unknown"}},
+		"FavoriteReceiptEnvelope":             DataEnvelope[FavoriteReceipt]{Data: FavoriteReceipt{FavoriteID: "favorite-fixture", SpaceID: "space-fixture", ResultRevision: 1, RequestDigest: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", CommittedAt: now}},
+		"FileLinkListEnvelope": DataEnvelope[FileLinkList]{Data: FileLinkList{FileID: "file-fixture", VersionID: "version-fixture", Indexed: true, Items: []FileLinkView{}, ObservedAt: now, TotalKind: "unknown"}},
+		"FileLinkReceiptEnvelope":             DataEnvelope[FileLinkReceipt]{Data: FileLinkReceipt{FileID: "file-fixture", VersionID: "version-fixture", RequestDigest: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", CommittedAt: now}},
+		"SubmissionEnvelope":                  DataEnvelope[SubmissionView]{Data: submission},
+		"SubmissionPageEnvelope":              DataEnvelope[Page[SubmissionView]]{Data: Page[SubmissionView]{Items: []SubmissionView{submission}, ObservedAt: now, TotalKind: "unknown"}},
+		"AutomationManagementEnvelope":        DataEnvelope[AutomationManagement]{Data: AutomationManagement{Available: false}},
+		"AutomationPreviewEnvelope":           DataEnvelope[AutomationPreview]{Data: AutomationPreview{RuleID: "rule-fixture", SpaceID: "space-fixture", Revision: 1, Items: []AutomationPreviewItem{}, Coverage: "complete", PreviewDigest: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", Executable: false}},
+		"AutomationReceiptEnvelope":           DataEnvelope[AutomationReceipt]{Data: AutomationReceipt{RuleID: "rule-fixture", SpaceID: "space-fixture", Action: "automation.change", RequestDigest: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", ResultRevision: 1, CommittedAt: now}},
+		"SnapshotIndexEnvelope":               DataEnvelope[SnapshotIndex]{Data: SnapshotIndex{CollectionID: "collection-fixture", Items: []SnapshotIndexItem{{SnapshotID: "0123456789abcdef0123456789abcdef0123456789abcdef", CollectionRevision: 1, CreatedAt: now}}, ObservedAt: now}},
+		"FileCollectionViewEnvelope":          DataEnvelope[FileCollectionView]{Data: FileCollectionView{CollectionID: "collection-fixture", SpaceID: "space-fixture", Name: "Rule fixture", Kind: "rule", Scope: "private", Rule: `{ "mode":"exact", "filters":[] }`, RuleRevision: 1, Revision: 2, MembersTotal: 0, CreatedAt: now, UpdatedAt: now}},
+		"PropertySidecarViewEnvelope":         DataEnvelope[PropertySidecarView]{Data: PropertySidecarView{FileID: "file-fixture", VersionID: "version-fixture", DefinitionRevision: 1, Revision: 1, StorageKind: "sidecar", Values: map[string]json.RawMessage{"caption": json.RawMessage(`"Synthetic caption"`), "rank": json.RawMessage(`1.25`)}, UnknownKeys: []string{}}},
+		"PropertySidecarReceiptEnvelope":      DataEnvelope[PropertySidecarReceipt]{Data: PropertySidecarReceipt{FileID: "file-fixture", VersionID: "version-fixture", RequestDigest: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", ResultRevision: 1, CommittedAt: now}},
+		"PropertyDefinitionViewEnvelope":      DataEnvelope[PropertyDefinitionView]{Data: PropertyDefinitionView{SpaceID: "space-fixture", Revision: 1, Definitions: []PropertyDefinition{{Key: "status", DisplayName: "Status", Group: "Project", Type: "text"}}}},
+		"PropertyDefinitionReceiptEnvelope":   DataEnvelope[PropertyDefinitionReceipt]{Data: PropertyDefinitionReceipt{SpaceID: "space-fixture", RequestDigest: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", ResultRevision: 1, CommittedAt: now}},
+		"SnapshotCreationReceiptEnvelope":     DataEnvelope[SnapshotCreationReceipt]{Data: SnapshotCreationReceipt{CollectionID: "collection-fixture", SnapshotID: "snapshot-fixture", RequestDigest: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", CollectionRevision: 1, CommittedAt: now}},
+		"CollectionMemberDecisionsEnvelope":   DataEnvelope[CollectionMemberDecisions]{Data: CollectionMemberDecisions{CollectionID: "collection-fixture", Revision: 1, Items: []CollectionMemberDecision{{FileID: "0123456789abcdef0123456789abcdef0123456789abcdef", SpaceID: "space-fixture", Path: "reference.txt", Decision: "exclude"}}}},
+		"CollectionMembersReceiptEnvelope":    DataEnvelope[CollectionMembersReceipt]{Data: CollectionMembersReceipt{CollectionID: "collection-fixture", RequestDigest: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", ResultRevision: 2, CommittedAt: now}},
+		"CollectionCreationReceiptEnvelope":   DataEnvelope[CollectionCreationReceipt]{Data: CollectionCreationReceipt{CollectionID: "collection-fixture", SpaceID: "space-fixture", RequestDigest: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", ResultRevision: 1, CommittedAt: now}},
+		"ResourceIntegrityReceiptEnvelope":    DataEnvelope[ResourceIntegrityReceipt]{Data: ResourceIntegrityReceipt{CheckID: "check-fixture", DescriptorID: resource.DescriptorID, DescriptorRevision: 1, CheckerVersion: ResourceIntegrityChecker, CheckScope: ResourceIntegrityScope, State: "passed", CheckedAt: now}},
+		"ResourceRegistrationReceiptEnvelope": DataEnvelope[ResourceRegistrationReceipt]{Data: ResourceRegistrationReceipt{Resource: resource, ResultRevision: 1, CommittedAt: now}},
+		"ResourceEnvelope":                    DataEnvelope[ResourceView]{Data: resource},
+		"ResourcePageEnvelope":                DataEnvelope[Page[ResourceView]]{Data: Page[ResourceView]{Items: []ResourceView{resource}, ObservedAt: now, TotalKind: "unknown"}},
+		"InvocationPageEnvelope":              DataEnvelope[InvocationPage]{Data: InvocationPage{Page: Page[InvocationView]{Items: []InvocationView{{InvocationID: "invocation-fixture", AgentID: grant.AgentID, GrantID: grant.GrantID, Protocol: "http", Action: "files.list", ResourceRefs: []string{}, Result: "unknown", StartedAt: now, RequestID: "request-fixture"}}, TotalKind: "unknown", ObservedAt: now}, Coverage: "best_effort"}},
+		"WorkspaceHomeEnvelope":               DataEnvelope[WorkspaceHome]{Data: WorkspaceHome{SpaceID: "space-fixture", RecentFiles: []HomeFileRef{}, Collections: []HomeCollection{}, Sections: HomeSections{RecentFiles: HomeSection{State: "ready", ObservedAt: now}, Collections: HomeSection{State: "ready", ObservedAt: now}, PendingCounts: HomeSection{State: "unavailable", Reason: "source_unavailable", ObservedAt: now}, Usage: HomeSection{State: "unavailable", Reason: "source_unavailable", ObservedAt: now}}, ObservedAt: now}},
+		"BatchTaskItemsEnvelope":              DataEnvelope[BatchTaskItems]{Data: BatchTaskItems{BatchID: "batch-fixture", Revision: "sha256:fixture", Items: []BatchTaskItem{{ItemID: "item-fixture", RelativePath: "fixture.txt", OwnerStatus: "pending", ResultCertainty: "unknown"}}, ObservedAt: now}},
+		"OperationTaskDetailEnvelope":         DataEnvelope[OperationTaskDetail]{Data: OperationTaskDetail{Task: TaskProjection{OwnerKind: "operation", OwnerID: "operation-fixture", SpaceID: "space-fixture", Title: "Synthetic upload", ActorKind: "unknown", OwnerStatus: "verifying", UIState: "running", Revision: "sha256:fixture", AllowedActions: []string{}, BlockedReason: "owner_actions_not_projected", ObservedAt: now}, Outputs: []TaskOutputRef{}, OutputState: "not_published"}},
+		"TaskPageEnvelope":                    DataEnvelope[Page[TaskProjection]]{Data: Page[TaskProjection]{Items: []TaskProjection{{OwnerKind: "operation", OwnerID: "operation-fixture", SpaceID: "space-fixture", Title: "Synthetic upload", ActorKind: "unknown", OwnerStatus: "verifying", UIState: "running", Revision: "sha256:fixture", AllowedActions: []string{}, BlockedReason: "owner_actions_not_projected", ObservedAt: now}}, ObservedAt: now, TotalKind: "unknown"}},
+		"DocumentCapabilityEnvelope":          DataEnvelope[DocumentCapability]{Data: DocumentCapability{FileID: "file-fixture", VersionID: "version-fixture", Editable: true, Reason: "ready", MaxBytes: DocumentMaxBytes}},
+		"DocumentSaveEnvelope":                DataEnvelope[DocumentSaveView]{Data: DocumentSaveView{FileID: "file-fixture", VersionID: "version-new", OperationID: "operation-fixture", Status: "completed", FileRef: "drivebridge://fixture/file/file-fixture/version/version-new"}},
+		"DocumentLookupEnvelope":              DataEnvelope[DocumentLookupView]{Data: DocumentLookupView{Found: false}},
+		"GrantChangeReceiptEnvelope":          DataEnvelope[GrantChangeReceiptView]{Data: GrantChangeReceiptView{GrantID: grant.GrantID, Action: "disable", ResultRevision: 2, CommittedAt: now}},
+		"GrantView":                           grant,
+		"GrantPageEnvelope":                   DataEnvelope[Page[GrantView]]{Data: Page[GrantView]{Items: []GrantView{grant}, ObservedAt: now, TotalKind: "unknown"}},
+		"GrantReplayEnvelope":                 DataEnvelope[GrantReplayView]{Data: GrantReplayView{Grant: grant, Credential: ReplayCredential{State: "not_replayable"}}},
+		"RotationReplayEnvelope":              DataEnvelope[RotationReplayView]{Data: RotationReplayView{GrantID: grant.GrantID, CredentialGeneration: 2, Credential: ReplayCredential{State: "not_replayable"}}},
+		"SubmissionUploadEnvelope":            DataEnvelope[SubmissionUploadView]{Data: SubmissionUploadView{SubmissionID: "submission-fixture", Revision: 1, OperationID: "operation-fixture", Purpose: "inbox_staging", PartSize: 1048576, PartPath: "/api/v1/operations/operation-fixture/parts/{index}"}},
+		"LabelSuggestionEnvelope":             DataEnvelope[LabelSuggestionView]{Data: LabelSuggestionView{SuggestionID: "suggestion-fixture", Revision: 1, FileID: "file-fixture", VersionID: "version-fixture", AgentID: grant.AgentID, Labels: []string{"reference"}, CreationKey: "fixture-request", State: "pending"}},
+		"ErrorEnvelope":                       ErrorEnvelope{Error: ErrorDetail{Code: "invalid_expiry", Message: "Choose a supported expiry mode and duration."}},
+		"AgentGroupView":                      AgentGroupView{GroupID: "group-fixture", Name: "Research", Revision: 1, CreatedAt: now, UpdatedAt: now},
+		"AgentOrganizationView":               AgentOrganizationView{AgentID: "agent-fixture", Pinned: false, Revision: 0, UpdatedAt: now},
+	}
+}
+
+func EncodeResponseFixtures() ([]byte, error) {
+	return json.MarshalIndent(ResponseFixtures(), "", "  ")
+}

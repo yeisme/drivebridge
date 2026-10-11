@@ -1,0 +1,45 @@
+{
+  "name": "DriveBridge 个人文件空间",
+  "short_name": "DriveBridge",
+  "description": "个人文件与存储可视化；文件、版本、Agent 授权与安全审计。",
+  "start_url": "/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone"],
+  "background_color": "#f7f9f7",
+  "theme_color": "#214f43",
+  "lang": "zh-CN",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "我的网盘",
+      "short_name": "网盘",
+      "url": "/#/drives",
+      "description": "打开可访问网盘"
+    },
+    {
+      "name": "传输中心",
+      "short_name": "传输",
+      "url": "/#/transfers",
+      "description": "查看传输进度与恢复"
+    }
+  ]
+}

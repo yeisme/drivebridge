@@ -1,0 +1,50 @@
+@layer theme, base, legacy, components, utilities;
+@layer components {
+.key-explainer {
+  flex-wrap: nowrap;
+  align-items: center;
+  padding: 16px 18px;
+}
+
+.key-directory-table [data-slot="table"] { min-width:800px; }
+.key-directory-table td:last-child { min-width:224px; }
+.key-directory-table td:nth-child(4) { min-width:128px; }
+.key-explainer > svg {
+  flex: 0 0 auto;
+}
+.key-explainer p {
+  line-height: 1.7;
+}
+.key-secret-field {
+  display: grid;
+  gap: 8px;
+  margin: 20px 0;
+  font-size: 12px;
+}
+.key-secret-field > div {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.key-secret-field input {
+  flex: 1;
+  width: 100%;
+  font-family: ui-monospace, monospace;
+}
+.key-rotation-summary {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+}
+.key-impact-list {
+  padding-left: 20px;
+  color: var(--muted);
+  line-height: 1.9;
+  margin: 18px 0;
+}
+@media (max-width: 600px) {
+  .key-name strong {
+    flex-wrap: wrap;
+  }
+}
+}

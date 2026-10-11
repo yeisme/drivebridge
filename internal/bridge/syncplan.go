@@ -487,6 +487,8 @@ func (s *Service) ApplySyncPlan(ctx context.Context, planID string, opt ApplySyn
 	if !s.Enabled {
 		return SyncPlanResult{}, errors.New("disabled")
 	}
+	s.guardMu.Lock()
+	defer s.guardMu.Unlock()
 	var plan SyncPlan
 	if err := s.DB.First(&plan, "id = ?", planID).Error; err != nil {
 		return SyncPlanResult{Recovery: planRecovery(plan, "plan_not_found")}, errors.New("plan_not_found")
@@ -503,6 +505,9 @@ func (s *Service) ApplySyncPlan(ctx context.Context, planID string, opt ApplySyn
 	}
 	p, err := s.Space(plan.SpaceID)
 	if err != nil {
+		return SyncPlanResult{Plan: plan}, err
+	}
+	if err := s.rejectSyncMutation(p); err != nil {
 		return SyncPlanResult{Plan: plan}, err
 	}
 	if plan.WriterHost != s.writerIdentity() {

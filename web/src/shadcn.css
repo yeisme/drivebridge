@@ -1,0 +1,96 @@
+@import "tw-animate-css";
+@import "./app/theme/tokens.css";
+@import "./app/team-compat.css";
+@custom-variant dark (&:is(.dark *));
+@theme inline {
+  /* Pixel spacing keeps control geometry stable with the legacy 14px root font. */
+  --spacing: 4px;
+  --text-xs: 12px;
+  --text-xs--line-height: 16px;
+  --text-sm: 14px;
+  --text-sm--line-height: 20px;
+  --text-base: 16px;
+  --text-base--line-height: 24px;
+  --text-lg: 18px;
+  --text-xl: 20px;
+  --text-2xl: 24px;
+  --color-background: var(--ui-background);
+  --color-foreground: var(--ui-foreground);
+  --color-card: var(--ui-card);
+  --color-card-foreground: var(--ui-card-foreground);
+  --color-popover: var(--ui-popover);
+  --color-popover-foreground: var(--ui-popover-foreground);
+  --color-primary: var(--ui-primary);
+  --color-primary-foreground: var(--ui-primary-foreground);
+  --color-secondary: var(--ui-secondary);
+  --color-secondary-foreground: var(--ui-secondary-foreground);
+  --color-muted: var(--ui-muted);
+  --color-muted-foreground: var(--ui-muted-foreground);
+  --color-accent: var(--ui-accent);
+  --color-accent-foreground: var(--ui-accent-foreground);
+  --color-destructive: var(--ui-destructive);
+  --color-border: var(--ui-border);
+  --color-input: var(--ui-input);
+  --color-ring: var(--ui-ring);
+  --color-chart-1: var(--ui-chart-1);
+  --color-chart-2: var(--ui-chart-2);
+  --color-chart-3: var(--ui-chart-3);
+  --color-chart-4: var(--ui-chart-4);
+  --color-chart-5: var(--ui-chart-5);
+  --color-sidebar: var(--ui-sidebar);
+  --color-sidebar-foreground: var(--ui-sidebar-foreground);
+  --color-sidebar-primary: var(--ui-sidebar-primary);
+  --color-sidebar-primary-foreground: var(--ui-sidebar-primary-foreground);
+  --color-sidebar-accent: var(--ui-sidebar-accent);
+  --color-sidebar-accent-foreground: var(--ui-sidebar-accent-foreground);
+  --color-sidebar-border: var(--ui-sidebar-border);
+  --color-sidebar-ring: var(--ui-sidebar-ring);
+  --radius-sm: calc(var(--ui-radius) - 4px);
+  --radius-md: calc(var(--ui-radius) - 2px);
+  --radius-lg: var(--ui-radius);
+  --radius-xl: calc(var(--ui-radius) + 4px);
+}
+
+/* Reusable density and motion policies also cover existing list layouts. */
+@layer components {
+  .topbar .storage-mobile { display: none !important; }
+  .nav-group[data-open="false"] .nav-item { display: none !important; }
+  .sidebar-collapsed .nav-group[data-open="false"] .nav-item { display: inline-flex !important; }
+  .finder-upload { background: var(--ui-primary) !important; color: var(--ui-primary-foreground) !important; border-color: var(--ui-primary) !important; }
+  @media (max-width: 760px) { .topbar .storage-mobile { display: inline-flex !important; } }
+  @media (max-width: 700px) { .nav-group[data-open="false"] .nav-item { display: inline-flex !important; } }
+  html[data-motion="reduced"] *, html[data-motion="reduced"] *::before, html[data-motion="reduced"] *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer components {
+  .data-table tr:has(td small) { height:64px; }
+  .data-table td small { display:block; color:var(--ui-muted-foreground); font-size:12px; }
+  .data-table td strong { font-weight:600; }
+  .data-table th { font-size:12px; color:var(--ui-muted-foreground); }
+  .data-table td { font-size:14px; }
+  [data-slot="button"][data-layout="control"], [data-slot="select-trigger"], [data-slot="input"] { font-variant-numeric:tabular-nums; }
+  @media (pointer:coarse) {
+    [class~="group/button"], [data-slot="select-trigger"], [data-slot="input"], [data-slot="input-group"], [data-slot="combobox-input"] { min-height:44px; min-width:44px; }
+  }
+
+}
+
+@layer utilities {
+  @media (pointer:coarse) {
+    [data-slot="checkbox"]::after { inset:-14px; }
+  }
+}
+

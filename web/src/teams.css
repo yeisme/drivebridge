@@ -1,0 +1,312 @@
+@layer theme, base, legacy, components, utilities;
+@layer legacy {
+.teams-workspace {
+  min-width: 0;
+}
+.team-header {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  padding: 18px 0 24px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 20px;
+}
+.team-header > div {
+  flex: 1;
+  min-width: 0;
+}
+.team-header h2 {
+  font-size: 20px;
+  margin: 0 0 7px;
+  overflow-wrap: anywhere;
+}
+.team-header p {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 0;
+}
+.team-layout {
+  display: grid;
+  grid-template-columns: 166px minmax(0, 1fr);
+  gap: 22px;
+}
+.team-layout.team-nav-collapsed {
+  grid-template-columns: 48px minmax(0, 1fr);
+}
+.team-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  position: sticky;
+  top: 85px;
+  align-self: start;
+}
+.team-nav > a {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 12px;
+  border-radius: 7px;
+  color: var(--muted);
+  font-size: 12px;
+  text-decoration: none;
+}
+.team-nav > a[aria-current="page"] {
+  color: var(--green);
+  background: var(--accent-soft);
+  font-weight: 600;
+}
+.team-nav > a:hover {
+  background: var(--surface);
+}
+.team-nav-collapsed .team-nav > a {
+  justify-content: center;
+  padding: 12px;
+}
+.team-body {
+  min-width: 0;
+}
+.team-body > section {
+  margin-bottom: 20px;
+}
+.team-body h3 {
+  font-size: 14px;
+  font-weight: 600;
+}
+.team-body .metric-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+.team-body .metric-card {
+  padding: 16px;
+}
+.team-body .metric-card > strong {
+  font-size: 24px;
+}
+.team-card-stats {
+  display: flex;
+  gap: 18px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.team-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin: 18px 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.team-invitation-row,
+.team-invitations article {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+  flex-wrap: wrap;
+}
+.team-invitation-row > div,
+.team-invitations article > div {
+  flex: 1;
+  min-width: 100px;
+}
+.team-invitation-row strong {
+  font-weight: 500;
+}
+.team-invitation-row small,
+.team-invitations small {
+  display: block;
+  color: var(--muted);
+  margin-top: 6px;
+  font-size: 11px;
+}
+.team-invitation-row time {
+  color: var(--muted);
+  font-size: 11px;
+}
+.team-settings-body {
+  padding: 20px;
+  font-size: 12px;
+  line-height: 1.8;
+}
+.team-settings-body small {
+  color: var(--muted);
+}
+.team-impact {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding: 15px;
+  background: var(--accent-soft);
+  border-radius: 9px;
+  margin: 20px 0;
+  font-size: 12px;
+}
+.team-drawer form > label {
+  margin: 18px 0;
+}
+.team-drawer form > p {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.8;
+}
+.team-demo-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: var(--accent-soft);
+  border-bottom: 1px solid var(--line);
+  font-size: 11px;
+  color: var(--muted);
+}
+.invite-hits {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 220px;
+  overflow: auto;
+  margin: 8px 0 16px;
+}
+.invite-hit {
+  text-align: left;
+  padding: 10px 12px;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+.invite-hit.selected,
+.invite-hit[aria-selected="true"] {
+  border-color: var(--green);
+  background: var(--accent-soft);
+}
+.invite-hit small {
+  display: block;
+  color: var(--muted);
+  margin-top: 4px;
+}
+.invite-confirm {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.invite-packet {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+  background: var(--accent-soft);
+  padding: 12px;
+  border-radius: var(--radius-control);
+  color: var(--ink);
+}
+.invite-focus {
+  box-shadow: inset 0 0 0 1px var(--green);
+}
+.team-invitations {
+  margin-bottom: 20px;
+}
+.team-body .recent-media {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.team-body .surface-panel header a {
+  font-size: 12px;
+  color: var(--green);
+}
+@media (max-width: 1050px) {
+  .team-layout {
+    grid-template-columns: 132px minmax(0, 1fr);
+    gap: 14px;
+  }
+  .team-body .metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .team-header {
+    flex-wrap: wrap;
+  }
+  .team-header > div {
+    min-width: 160px;
+  }
+}
+@media (max-width: 760px) {
+  .team-layout,
+  .team-layout.team-nav-collapsed {
+    display: block;
+  }
+  .team-nav {
+    position: static;
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-bottom: 16px;
+  }
+  .team-nav > a {
+    padding: 9px;
+    font-size: 11px;
+    gap: 5px;
+  }
+  .team-nav-collapsed .team-nav > a {
+    padding: 9px;
+  }
+  .team-header {
+    gap: 8px;
+    padding-top: 0;
+  }
+  .team-header .surface-icon {
+    width: 32px;
+    height: 32px;
+  }
+  .team-header h2 {
+    font-size: 18px;
+  }
+  .team-body .recent-media {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .team-invitation-row {
+    padding: 14px;
+    gap: 10px;
+  }
+  .team-demo-switch {
+    flex-wrap: wrap;
+  }
+  .team-body .workspace-toolbar h3 {
+    flex-basis: 100%;
+  }
+  .team-impact {
+    font-size: 11px;
+  }
+}
+.team-header {
+  position: sticky;
+  top: 65px;
+  z-index: 4;
+  background: var(--canvas, #f7f8f4);
+}
+.team-nav {
+  top: 168px;
+}
+.compact-governance label:nth-of-type(2),
+.compact-governance .governance-logout {
+  display: none;
+}
+@media (max-width: 760px) {
+  .team-header {
+    top: 60px;
+  }
+  .compact-governance {
+    gap: 8px;
+  }
+  .compact-governance > span {
+    font-size: 10px;
+  }
+}
+
+}
+
+@layer components {
+  .team-body > p { margin-block:16px; line-height:1.6; }
+  .team-body > h3 { margin:24px 0 12px; font-size:16px; }
+}

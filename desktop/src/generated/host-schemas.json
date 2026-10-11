@@ -1,0 +1,269 @@
+{
+  "HostBootstrap": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "schema_version": {
+        "type": "string",
+        "enum": [
+          "drivebridge.desktop.host.v1alpha1"
+        ]
+      },
+      "session_nonce": {
+        "type": "string",
+        "maxLength": 128,
+        "minLength": 16
+      },
+      "bearer": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      },
+      "binary_digest": {
+        "type": "string",
+        "pattern": "^sha256:[a-f0-9]{64}$"
+      },
+      "manifest_digest": {
+        "type": "string",
+        "pattern": "^sha256:[a-f0-9]{64}$"
+      }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "required": [
+      "schema_version",
+      "session_nonce",
+      "bearer",
+      "binary_digest",
+      "manifest_digest"
+    ]
+  },
+  "HostCancel": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "schema_version": {
+        "type": "string",
+        "enum": [
+          "drivebridge.desktop.host.v1alpha1"
+        ]
+      },
+      "action": {
+        "type": "string",
+        "enum": [
+          "cancel"
+        ]
+      },
+      "request_id": {
+        "type": "string",
+        "maxLength": 128,
+        "minLength": 1
+      },
+      "selection_id": {
+        "type": "string",
+        "maxLength": 128,
+        "minLength": 1
+      }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "required": [
+      "schema_version",
+      "action",
+      "request_id",
+      "selection_id"
+    ]
+  },
+  "HostEvent": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "oneOf": [
+      {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "schema_version": {
+            "type": "string",
+            "enum": [
+              "drivebridge.desktop.host.v1alpha1"
+            ]
+          },
+          "type": {
+            "const": "ready"
+          },
+          "session_nonce": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 16,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+          },
+          "address": {
+            "type": "string",
+            "maxLength": 64,
+            "pattern": "^http://127\\.0\\.0\\.1:[1-9][0-9]*$"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "schema_version",
+          "type",
+          "session_nonce",
+          "address"
+        ]
+      },
+      {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "schema_version": {
+            "type": "string",
+            "enum": [
+              "drivebridge.desktop.host.v1alpha1"
+            ]
+          },
+          "type": {
+            "const": "selection"
+          },
+          "request_id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+          },
+          "selection_id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "schema_version",
+          "type",
+          "request_id",
+          "selection_id"
+        ]
+      },
+      {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "schema_version": {
+            "type": "string",
+            "enum": [
+              "drivebridge.desktop.host.v1alpha1"
+            ]
+          },
+          "type": {
+            "const": "cancelled"
+          },
+          "request_id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "schema_version",
+          "type",
+          "request_id"
+        ]
+      },
+      {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "schema_version": {
+            "type": "string",
+            "enum": [
+              "drivebridge.desktop.host.v1alpha1"
+            ]
+          },
+          "type": {
+            "const": "shutdown"
+          },
+          "session_nonce": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 16,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "schema_version",
+          "type",
+          "session_nonce"
+        ]
+      },
+      {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "schema_version": {
+            "type": "string",
+            "enum": [
+              "drivebridge.desktop.host.v1alpha1"
+            ]
+          },
+          "type": {
+            "const": "error"
+          },
+          "request_id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+          },
+          "code": {
+            "type": "string",
+            "enum": [
+              "desktop_host_invalid",
+              "native_selection_invalid"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "schema_version",
+          "type",
+          "code"
+        ]
+      }
+    ]
+  },
+  "HostSelection": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "schema_version": {
+        "type": "string",
+        "enum": [
+          "drivebridge.desktop.host.v1alpha1"
+        ]
+      },
+      "action": {
+        "type": "string",
+        "enum": [
+          "select"
+        ]
+      },
+      "request_id": {
+        "type": "string",
+        "maxLength": 128,
+        "minLength": 1
+      },
+      "native_path": {
+        "type": "string",
+        "maxLength": 32768,
+        "minLength": 1
+      }
+    },
+    "additionalProperties": false,
+    "type": "object",
+    "required": [
+      "schema_version",
+      "action",
+      "request_id",
+      "native_path"
+    ]
+  }
+}

@@ -1,0 +1,37 @@
+@layer theme, base, legacy, components, utilities;
+@layer components {
+  /* Keep field layout independent of nesting and legacy checkbox class names. */
+  .app-dialog form label:has(> :is(input:not([type="hidden"], [type="checkbox"], [type="radio"]), textarea, [data-slot="select-trigger"], [data-slot="combobox-trigger"])) {
+    display: grid;
+    min-width: 0;
+    gap: 8px;
+    font-size: 14px;
+  }
+  .app-dialog form label > :is([data-slot="select-trigger"], [data-slot="combobox-trigger"]) {
+    width: 100%;
+  }
+  .app-dialog form label:has(> [data-slot="checkbox"]) {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 12px;
+    min-width: 0;
+    font-size: 14px;
+    line-height: 20px;
+    cursor: pointer;
+  }
+  .app-dialog form label > [data-slot="checkbox"] { margin-top: 2px; }
+  .app-dialog .form-columns { gap: 16px; }
+  .app-dialog .form-options {
+    display: grid;
+    gap: 12px;
+    padding: 0;
+    min-width: 0;
+    border: 0;
+  }
+  .app-dialog .form-options legend { margin-bottom: 12px; font-size: 14px; }
+  @media (pointer: coarse) {
+    .app-dialog form label:has(> [data-slot="checkbox"]) { min-height: 44px; align-items: center; }
+    .app-dialog form label > [data-slot="checkbox"] { margin-top: 0; }
+  }
+}

@@ -1,0 +1,33 @@
+import {test,expect} from "@playwright/test";
+import path from "node:path";
+test("history cleanup, Chinese errors, expiring notices and separate analytics",async({page})=>{
+ await page.goto('/');
+ await page.locator('#login-key').fill('dbu_'+'1'.repeat(96));
+ await page.getByRole('button',{name:'登录',exact:true}).click();await expect(page.locator('.sidebar')).toBeVisible();
+ await page.evaluate(async()=>{const me=(await(await fetch('/api/v1/me')).json()).data;const r=await fetch('/api/v1/spaces',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':me.csrf_token},body:JSON.stringify({name:'History test',connection_id:'platform'})});if(!r.ok)throw new Error('Space fixture failed');});
+ await page.reload();await page.getByRole('button',{name:'打开网盘 History test',exact:true}).click();
+ const popupPromise=page.waitForEvent('popup');await page.getByRole("link",{name:/在新标签页专注使用网盘/}).click();const focused=await popupPromise;await focused.waitForLoadState();await expect(focused.locator('.finder')).toBeVisible();await expect(focused.locator('.sidebar')).toBeHidden();await expect(focused.locator('.topbar')).toBeHidden();await focused.reload();await expect(focused.locator('.finder')).toBeVisible();await focused.close();
+ await page.locator('input[type=file]').first().setInputFiles({name:'history.txt',mimeType:'text/plain',buffer:Buffer.from('history stays as a file')});
+ await expect(page.getByText('文件已保存并完成校验',{exact:true})).toBeVisible();
+ await expect(page.getByText('文件已保存并完成校验',{exact:true})).toHaveCount(0,{timeout:8000});
+ await page.getByRole('button',{name:'打开交付中心',exact:true}).click();
+ await page.getByRole('searchbox',{name:'搜索文件、来源或任务'}).fill('no-match');
+ await expect(page.getByText('没有符合条件的记录')).toBeVisible();
+ await page.getByRole('searchbox',{name:'搜索文件、来源或任务'}).fill('history');
+ await page.getByRole('button',{name:'清理历史',exact:true}).click();await page.getByRole('button',{name:'确认清理',exact:true}).click();
+ await expect(page.locator('[data-list-item]')).toHaveCount(0);
+ await page.reload();
+ // Other specs share the fixture identity; re-apply the filter so only this spec's record is counted.
+ await page.getByRole('searchbox',{name:'搜索文件、来源或任务'}).fill('history');
+ await expect(page.locator('[data-list-item]')).toHaveCount(0);
+ await page.getByRole('button',{name:'显示已清理记录',exact:true}).click();await expect(page.locator('[data-list-item]')).toHaveCount(1);
+ await page.getByRole('button',{name:'待处理产物',exact:true}).click();await page.getByRole('searchbox',{name:'搜索文件、来源或任务'}).fill('history');await expect(page.locator('[data-list-item]')).toHaveCount(1);
+ await page.getByRole('button',{name:'预览并选版本'}).click();await expect(page.locator('.quicklook-dialog')).toBeVisible();await page.locator('.quicklook-dialog').getByRole('button',{name:'关闭',exact:true}).click();
+ await page.getByRole('button',{name:'打开交付中心',exact:true}).click();await page.getByRole('searchbox',{name:'搜索文件、来源或任务'}).fill('history');await page.getByRole('button',{name:'查看结果',exact:true}).click();await expect(page.locator('.quicklook-dialog')).toBeVisible();await page.locator('.quicklook-dialog').getByRole('button',{name:'关闭',exact:true}).click();await page.getByRole('button',{name:'待处理产物',exact:true}).click();
+ await page.route('**/api/v1/files/*',route=>route.fulfill({status:404,contentType:'application/json',body:JSON.stringify({error:{code:'not_found',message:'The referenced resource does not exist or is not visible to this identity.'}})}));
+ await page.getByRole('searchbox',{name:'搜索文件、来源或任务'}).fill('history');
+ await page.getByRole('button',{name:'预览并选版本'}).click();await expect(page.getByRole('alert')).toContainText('资源不存在，或当前身份无权访问。');
+ await page.getByRole('button',{name:'资源态势',exact:true}).click();await expect(page.getByRole('alert')).toHaveCount(0);await expect(page.getByText('开始日期（UTC）',{exact:true})).toHaveCount(0);
+ await page.getByRole('tab',{name:'容量',exact:true}).click();await expect(page).toHaveURL(/view=capacity/);await expect(page.getByRole('heading',{name:'资源态势',exact:true})).toBeVisible();
+ await page.screenshot({path:path.join(process.env.DRIVEBRIDGE_EVIDENCE_ARTIFACTS||'temp/browser-artifacts','analytics-page.png')});
+});

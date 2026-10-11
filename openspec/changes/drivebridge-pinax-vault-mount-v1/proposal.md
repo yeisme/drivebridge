@@ -23,4 +23,4 @@
 
 ## Impact
 
-Owner：`mcp/drivebridge`。触及 `cmd/drivebridge` 挂载/预设、`internal/bridge` overlay、recovery 码、testdata、docs。Pinax 实现在 `cli/pinax` 的 `pinax-mounted-vault-local-v1`。
+Owner：`cli/drivebridge`。触及 `cmd/drivebridge` 挂载/预设、`internal/bridge` overlay、recovery 码、testdata、docs。Pinax 实现在 `cli/pinax` 的 `pinax-mounted-vault-local-v1`。

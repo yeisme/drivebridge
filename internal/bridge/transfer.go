@@ -99,7 +99,7 @@ func (s *Service) Download(ctx context.Context, ref, path, key string) (Operatio
 	if err != nil {
 		return Operation{}, err
 	}
-	return s.enqueue(Operation{ID: newID(), SpaceID: p.ID, Kind: "download", Key: operationKey(p.ID, "download", key), Status: "queued", LocalPath: rel, FileRef: ref, Bytes: f.Size, Fingerprint: ref + ":" + rel})
+	return s.enqueue(Operation{ID: newID(), SpaceID: p.ID, Kind: "download", Key: operationKey(p.ID, "download", key), Status: "queued", LocalPath: rel, FileRef: ref, SourceVersion: f.Version, Bytes: f.Size, Fingerprint: ref + ":" + rel})
 }
 func (s *Service) enqueue(op Operation) (Operation, error) {
 	s.mu.Lock()
@@ -110,6 +110,9 @@ func (s *Service) enqueue(op Operation) (Operation, error) {
 			return old, errors.New("idempotency_conflict")
 		}
 		return old, nil
+	}
+	if err := s.rejectOperationMutation(op); err != nil {
+		return op, err
 	}
 	if len(s.jobs) >= 2 {
 		return op, errors.New("transfer_capacity_unavailable")
@@ -153,11 +156,16 @@ func (s *Service) Resume(id string) (Operation, error) {
 	if op.Status == "cancelled" {
 		return op, errors.New("operation_cancelled")
 	}
+	if err := s.rejectOperationMutation(op); err != nil {
+		return op, err
+	}
 	if len(s.jobs) >= 2 {
 		return op, errors.New("transfer_capacity_unavailable")
 	}
 	op.Status = "queued"
-	op.Error = ""
+	if op.Error != "resume_required" {
+		op.Error = ""
+	}
 	if s.DB.Save(&op).Error != nil {
 		return op, errors.New("state_unavailable")
 	}
@@ -180,6 +188,12 @@ func (s *Service) Cancel(id string) (Operation, error) {
 		s.DB.Model(&Operation{}).Where("id = ?", id).Update("status", "cancelling")
 		return op, nil
 	}
+	if (op.FileRef != "" || op.Error == "resume_required") && (op.Kind == "upload" || op.Kind == "save_output") {
+		// Neither a known commit nor an unresolved interrupted write is rollback.
+		op.Status, op.Error = "interrupted", "resume_required"
+		err = s.DB.Save(&op).Error
+		return op, err
+	}
 	op.Status = "cancelled"
 	err = s.DB.Save(&op).Error
 	return op, err
@@ -190,7 +204,7 @@ func (s *Service) run(ctx context.Context, op Operation) {
 		current, _ := s.Get(op.ID)
 		op.Status = "interrupted"
 		op.Error = "resume_required"
-		if current.Status == "cancelling" {
+		if current.Status == "cancelling" && !((op.Kind == "upload" || op.Kind == "save_output") && (op.FileRef != "" || current.Error == "resume_required")) {
 			op.Status = "cancelled"
 			op.Error = "operation_cancelled"
 		}
@@ -220,10 +234,12 @@ func (s *Service) run(ctx context.Context, op Operation) {
 	if err != nil {
 		op.Status = "failed"
 		op.Error = safeError(err)
-		if ctx.Err() != nil {
+		current, currentErr := s.Get(op.ID)
+		unresolved := currentErr == nil && current.Error == "resume_required" && (op.Kind == "upload" || op.Kind == "save_output")
+		if ctx.Err() != nil || unresolved {
 			op.Status = "interrupted"
 			op.Error = "resume_required"
-			if current, e := s.Get(op.ID); e == nil && current.Status == "cancelling" {
+			if currentErr == nil && current.Status == "cancelling" && !unresolved && err.Error() != "resume_required" && !((op.Kind == "upload" || op.Kind == "save_output") && op.FileRef != "") {
 				op.Status = "cancelled"
 				op.Error = "operation_cancelled"
 			}
@@ -260,7 +276,7 @@ func safeError(err error) string {
 	switch err.Error() {
 	case "relay_target_unavailable", "relay_target_rejected", "invalid_relay_response", "untrusted_transfer", "relay_transfer_failed", "relay_transfer_rejected", "relay_completion_pending", "remote_cancel_pending", "unsupported_media", "relay_target_not_found", "relay_target_conflict", "invalid_relay_target", "source_not_allowed", "relay_input_terminal":
 		return err.Error()
-	case "audit_unavailable", "insights_unavailable", "file_trashed", "file_not_trashed", "cursor_ahead", "invalid_search", "transfer_capacity_unavailable", "disabled", "idempotency_conflict", "idempotency_key_required", "invalid_upload", "file_size_invalid", "local_file_unavailable", "local_root_unavailable", "state_unavailable", "operation_not_found", "operation_cancelled", "unknown_tool", "output_adapter_unavailable", "output_not_ready", "output_not_allowed", "output_grant_invalid", "scaena_unavailable", "graph_unavailable", "graph_unreachable", "download_unavailable", "download_access_unavailable", "media_probe_failed", "media_type_unsupported", "media_duration_invalid", "region_not_supported", "source_changed", "file_version_changed", "target_conflict", "space_not_allowed", "reference_not_found", "quota_exceeded", "throttled", "authentication_required", "path_not_allowed", "invalid_file_metadata", "remote_not_found", "remote_outside_space", "secure_handoff_unavailable", "handoff_not_available", "access_unsupported", "backend_unavailable", "symlink_rejected", "invalid_space", "space_conflict", "content_mismatch", "owner_protected", "directory_contains_unsupported_files", "adopt_mismatch", "bind_mismatch", "bind_prefix_denied", "bind_revoked", "bind_escape_denied", "bind_purpose_unknown", "bind_not_found", "bind_missing_flag":
+	case "guard_unavailable", "audit_unavailable", "insights_unavailable", "file_trashed", "file_not_trashed", "cursor_ahead", "invalid_search", "transfer_capacity_unavailable", "disabled", "idempotency_conflict", "idempotency_key_required", "invalid_upload", "file_size_invalid", "local_file_unavailable", "local_root_unavailable", "state_unavailable", "operation_not_found", "operation_cancelled", "unknown_tool", "output_adapter_unavailable", "output_not_ready", "output_not_allowed", "output_grant_invalid", "scaena_unavailable", "graph_unavailable", "graph_unreachable", "download_unavailable", "download_access_unavailable", "media_probe_failed", "media_type_unsupported", "media_duration_invalid", "region_not_supported", "source_changed", "file_version_changed", "target_conflict", "space_not_allowed", "reference_not_found", "quota_exceeded", "throttled", "authentication_required", "path_not_allowed", "invalid_file_metadata", "remote_not_found", "remote_outside_space", "secure_handoff_unavailable", "handoff_not_available", "access_unsupported", "backend_unavailable", "symlink_rejected", "invalid_space", "space_conflict", "content_mismatch", "owner_protected", "directory_contains_unsupported_files", "adopt_mismatch", "bind_mismatch", "bind_prefix_denied", "bind_revoked", "bind_escape_denied", "bind_purpose_unknown", "bind_not_found", "bind_missing_flag":
 		return err.Error()
 	}
 	return "transfer_failed"
@@ -284,6 +300,9 @@ func (p *progressReader) Read(b []byte) (int, error) {
 	return n, e
 }
 func (s *Service) transfer(ctx context.Context, op *Operation) error {
+	if err := s.rejectOperationMutation(*op); err != nil {
+		return err
+	}
 	p, err := s.Space(op.SpaceID)
 	if err != nil {
 		return err
@@ -298,14 +317,21 @@ func (s *Service) transfer(ctx context.Context, op *Operation) error {
 		if e != nil {
 			return e
 		}
+		op.SourceVersion = f.Version
 		// A cache hit still went through Stat above: the pinned remote version
 		// is re-verified before any cached byte is published, so a changed
 		// version can never be served stale content.
 		if f.SHA256 != "" {
 			publish := func(source *os.File, sourceRel string) error {
 				defer source.Close()
+				s.guardMu.Lock()
+				defer s.guardMu.Unlock()
+				if err := s.rejectOperationMutation(*op); err != nil {
+					return err
+				}
 				if e = root.Link(sourceRel, op.LocalPath); e == nil {
 					op.CacheHit = true
+					op.ContentSHA256 = f.SHA256
 					return nil
 				}
 				existing, openErr := root.Open(op.LocalPath)
@@ -318,6 +344,7 @@ func (s *Service) transfer(ctx context.Context, op *Operation) error {
 					return errors.New("target_conflict")
 				}
 				op.CacheHit = true
+				op.ContentSHA256 = f.SHA256
 				return nil
 			}
 			if existing, openErr := root.Open(op.LocalPath); openErr == nil {
@@ -325,6 +352,7 @@ func (s *Service) transfer(ctx context.Context, op *Operation) error {
 				existing.Close()
 				if hashErr == nil && old == f.SHA256 {
 					op.CacheHit = true
+					op.ContentSHA256 = old
 					return nil
 				}
 			}
@@ -335,13 +363,25 @@ func (s *Service) transfer(ctx context.Context, op *Operation) error {
 		// An operation-owned partial file is retained across failures. Final publication
 		// uses Link, which atomically refuses to replace an existing destination.
 		temp := filepath.Join(filepath.Dir(op.LocalPath), ".drivebridge-"+op.ID+"-"+newID())
-		out, e := root.OpenFile(temp, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+		in, e := s.providerFor(p).Open(ctx, p, f)
 		if e != nil {
 			return e
 		}
-		in, e := s.providerFor(p).Open(ctx, p, f)
+		s.guardMu.Lock()
+		if err := s.rejectOperationMutation(*op); err != nil {
+			s.guardMu.Unlock()
+			in.Close()
+			return err
+		}
+		if err := s.rejectLocalOwnerProtected(op.SpaceID, temp); err != nil {
+			s.guardMu.Unlock()
+			in.Close()
+			return err
+		}
+		out, e := root.OpenFile(temp, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
 		if e != nil {
-			out.Close()
+			s.guardMu.Unlock()
+			in.Close()
 			return e
 		}
 		if s.Insights != nil {
@@ -351,6 +391,7 @@ func (s *Service) transfer(ctx context.Context, op *Operation) error {
 		in.Close()
 		syncErr := out.Sync()
 		out.Close()
+		s.guardMu.Unlock()
 		if e != nil || syncErr != nil || n != f.Size {
 			return errors.New("content_mismatch")
 		}
@@ -360,7 +401,18 @@ func (s *Service) transfer(ctx context.Context, op *Operation) error {
 		if _, e = s.Stat(ctx, op.FileRef); e != nil {
 			return e
 		}
-		casStore(root, h, temp)
+		s.guardMu.Lock()
+		defer s.guardMu.Unlock()
+		if err := s.rejectOperationMutation(*op); err != nil {
+			return err
+		}
+		// Cache population is optional, but its physical destination requires
+		// independent admission: it can be an alias into owner metadata.
+		if err := s.rejectLocalOwnerProtected(op.SpaceID, casPath(h)); err == nil {
+			casStore(root, h, temp)
+		} else if err.Error() != "owner_protected" {
+			return err
+		}
 		if e = root.Link(temp, op.LocalPath); e != nil {
 			existing, openErr := root.Open(op.LocalPath)
 			if openErr != nil {
@@ -373,6 +425,7 @@ func (s *Service) transfer(ctx context.Context, op *Operation) error {
 			}
 		}
 		_ = root.Remove(temp)
+		op.ContentSHA256 = h
 		return nil
 	}
 	source, e := root.Open(op.LocalPath)
@@ -403,18 +456,73 @@ func (s *Service) transfer(ctx context.Context, op *Operation) error {
 	}
 	var remote File
 	for _, candidate := range items {
-		if candidate.Name == op.Target {
+		if candidate.Name == filepath.Base(op.Target) {
 			remote = candidate
 			break
 		}
 	}
+	if op.FileRef != "" {
+		// Recovery verifies the already-recorded commit, never recreates it if
+		// it disappeared or silently follows a replacement at the same target.
+		pinned, err := s.Stat(ctx, op.FileRef)
+		if err != nil {
+			return err
+		}
+		if remote.ItemID != pinned.ItemID || remote.Version != pinned.Version {
+			return errors.New("file_version_changed")
+		}
+	}
 	if remote.ItemID == "" {
+		// A successful scoped listing proved the old target absent. Only now
+		// may scheduling uncertainty be cleared before a new upload attempt.
+		if op.Error == "resume_required" {
+			if e = s.DB.Model(&Operation{}).Where("id = ?", op.ID).Update("error", "").Error; e != nil {
+				return errors.New("state_unavailable")
+			}
+			op.Error = ""
+		}
 		meter := &insights.ObservedReader{Reader: source}
-		remote, e = s.providerFor(p).Upload(ctx, p, op.Target, &progressReader{r: meter, s: s, id: op.ID}, n)
+		s.guardMu.Lock()
+		e = s.rejectOperationMutation(*op)
+		if e == nil {
+			remote, e = s.providerFor(p).Upload(ctx, p, op.Target, &progressReader{r: meter, s: s, id: op.ID}, n)
+		}
+		s.guardMu.Unlock()
 		s.observe(*op, "local_to_storage", "transfer", meter.Bytes)
 		if e != nil {
-			return e
+			if ctx.Err() == nil {
+				return e
+			}
+			// The cancelled request may have committed without an acknowledgement.
+			// One bounded read of the original target is reconciliation, not retry.
+			reconcile, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+			items, lookupErr := s.providerFor(p).List(reconcile, p, scanDir)
+			cancel()
+			if lookupErr != nil {
+				return errors.New("resume_required")
+			}
+			for _, candidate := range items {
+				if candidate.Name == filepath.Base(op.Target) {
+					remote = candidate
+					break
+				}
+			}
+			if remote.ItemID == "" {
+				return e
+			}
 		}
+	}
+	// Persist metadata before byte verification: cancellation after a successful
+	// remote commit must expose its stable identity and remain recoverable.
+	remote.Provenance = op.Provenance
+	remote.Dir = scanDir
+	committed, e := s.remember(p, remote)
+	if e != nil {
+		return e
+	}
+	op.FileRef = committed.Ref
+	if e = s.DB.Model(&Operation{}).Where("id = ?", op.ID).Update("file_ref", op.FileRef).Error; e != nil {
+		return errors.New("state_unavailable")
 	}
 	in, e := s.providerFor(p).Open(ctx, p, remote)
 	if e != nil {
@@ -428,6 +536,9 @@ func (s *Service) transfer(ctx context.Context, op *Operation) error {
 	if e != nil || remoteHash != h || remoteN != n {
 		return errors.New("content_mismatch")
 	}
+	if _, e = s.Stat(ctx, committed.Ref); e != nil {
+		return e
+	}
 	remote.Provenance = op.Provenance
 	remote.SHA256 = h
 	remote.Dir = scanDir
@@ -436,5 +547,6 @@ func (s *Service) transfer(ctx context.Context, op *Operation) error {
 		return e
 	}
 	op.FileRef = f.Ref
+	op.ContentSHA256 = remoteHash
 	return nil
 }

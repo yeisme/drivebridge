@@ -10,7 +10,7 @@ require (
 	github.com/rogpeppe/go-internal v1.15.0
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
-	gorm.io/gorm v1.30.0
+	gorm.io/gorm v1.31.1
 )
 
 require (
@@ -152,6 +152,7 @@ require (
 	github.com/unknwon/goconfig v1.0.0 // indirect
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
 	github.com/yeisme/drivebridge-server v0.0.0
+	github.com/yeisme/pinax v0.0.0
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	golang.org/x/crypto v0.57.0 // indirect
@@ -171,4 +172,6 @@ require (
 	modernc.org/sqlite v1.53.0 // indirect
 )
 
-replace github.com/yeisme/drivebridge-server => ../../backend-server/drivebridge
+replace github.com/yeisme/drivebridge-server => ./server
+
+replace github.com/yeisme/pinax => ../pinax

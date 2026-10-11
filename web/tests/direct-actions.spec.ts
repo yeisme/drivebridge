@@ -1,0 +1,11 @@
+import {test,expect} from "@playwright/test";
+test("direct creation and floating analytics navigation",async({page})=>{
+ test.skip(process.env.DRIVEBRIDGE_TEST_TEAM_DEMO!=="1","Uses team fixture");
+ await page.goto('/');await page.getByRole('button',{name:'无需账号，进入本地体验'}).click();
+ await page.getByRole('button',{name:'访问凭据',exact:true}).click();await page.getByRole('tab',{name:'用户',exact:true}).click();await page.getByRole('button',{name:'新建用户',exact:true}).click();
+ let dialog=page.getByRole('dialog',{name:'新建用户',exact:true});await expect(dialog.getByLabel('用户名称')).toBeVisible();await dialog.getByRole('button',{name:'关闭',exact:true}).first().click();
+ await page.getByRole('button',{name:'新建团队',exact:true}).click();dialog=page.getByRole('dialog',{name:'新建团队',exact:true});await dialog.getByLabel('团队名称').fill('Direct team');await dialog.getByRole('button',{name:'下一步'}).click();await dialog.getByRole('button',{name:'下一步'}).click();await dialog.getByRole('button',{name:'确认创建'}).click();await expect(dialog).toHaveCount(0);await expect(page.getByRole('heading',{name:'Direct team',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'访问凭据',exact:true}).click();await page.getByRole('tab',{name:'Key',exact:true}).click();await page.getByRole('button',{name:'新建 Key',exact:true}).click();dialog=page.getByRole('dialog',{name:'新建 Key',exact:true});await dialog.getByLabel('Key 名称').fill('Separate device');await dialog.getByRole('button',{name:'创建 Key',exact:true}).click();
+ dialog=page.getByRole('dialog',{name:'查看与复制 Key',exact:true});await expect(dialog).toBeVisible();await dialog.getByRole('button',{name:'关闭',exact:true}).first().click();await expect(page.getByRole('row').filter({hasText:'Separate device'})).toBeVisible();
+ await page.getByRole('button',{name:'资源态势',exact:true}).click();await page.getByRole('tab',{name:'容量',exact:true}).click();await expect(page.getByRole('heading',{name:'容量构成与趋势',exact:true})).toBeVisible();await page.evaluate(()=>window.scrollTo({top:650,behavior:'instant'}));const tabs=page.getByRole('tablist');await expect(tabs).toBeVisible();await page.getByRole('tab',{name:'机器人'}).click();await expect(page.getByRole('tab',{name:'机器人'})).toHaveAttribute('aria-selected','true');await expect(page.getByRole('tablist')).toHaveCount(1);
+});

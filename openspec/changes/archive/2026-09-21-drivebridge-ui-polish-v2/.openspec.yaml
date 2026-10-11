@@ -1,0 +1,3 @@
+schema: spec-driven
+created: 2026-09-21
+goal: 完成 shadcn/ui 控件迁移并提供可跨设备保存的个人资料设置

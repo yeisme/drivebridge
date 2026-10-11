@@ -2,7 +2,9 @@
 
 ## Context
 
-根合同：仓库根 `openspec/changes/pinax-drivebridge-mounted-vault-v1/`。WebDAV 挂载交付端口；Pinax 要的是目录。SQLite 不能放在 VFS 上。
+2026-10-01：旧mount/overlay继续兼容，不自动迁移。新 [Electron阅读受管绑定](../drivebridge-desktop-knowledge-reader-v1/design.md) 是另一个显式opt-in：本包 `writable=true` 只表示文件通道，不能充当owner guard证据；新绑定须证明content roots/别名/在途写都受控，无法证明就拒绝。此说明不改旧receipt或自动停挂载。
+
+根合同已归档于仓库根 `openspec/changes/archive/2026-09-21-pinax-drivebridge-mounted-vault-v1/`。WebDAV 挂载交付端口；Pinax 要的是目录。SQLite 不能放在 VFS 上。
 
 ## Decisions
 

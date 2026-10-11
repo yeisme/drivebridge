@@ -11,7 +11,7 @@ import (
 
 // LockFileEx maps the flock-style single-process state lock onto Windows byte
 // ranges. Compiled but not yet accepted on a real Windows machine; the on-host
-// gates are listed in client/drivebridge-client/docs/cross-platform-client.md.
+// gates are listed in docs/web/cross-platform-client.md.
 const (
 	lockExclusive   = 0x2 // LOCKFILE_EXCLUSIVE_LOCK
 	lockNonBlocking = 0x1 // LOCKFILE_FAIL_IMMEDIATELY

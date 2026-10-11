@@ -1,0 +1,19 @@
+/* Mobile shell owns geometry; legacy desktop selectors remain outside it. */
+@media (max-width: 767px) {
+  .app.mobile-shell {
+    display: flex;
+    flex-direction: column;
+    --sidebar-width: 0px;
+  }
+  .app.mobile-shell > .main {
+    margin-left: 0;
+    width: 100%;
+    flex: 1 1 0;
+    min-height: 0;
+    min-width: 0;
+  }
+  .app.mobile-shell > nav[aria-label="手机主导航"] {
+    flex: 0 0 auto;
+    order: 2;
+  }
+}

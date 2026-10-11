@@ -1,0 +1,10 @@
+import { build } from 'esbuild';
+import { cp, mkdir, rm, access } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+const root = new URL('../', import.meta.url);
+await access(new URL('../../web/dist/index.html', import.meta.url));
+await mkdir(new URL('dist/', root), { recursive: true });
+await build({ absWorkingDir: fileURLToPath(root), entryPoints: ['src/main.ts', 'src/preload.ts'], outdir: 'dist', platform: 'node', format: 'cjs', bundle: true, external: ['electron'], target: 'node22' });
+await rm(new URL('web/', root), { recursive: true, force: true });
+await cp(new URL('../../web/dist/', import.meta.url), new URL('web/', root), { recursive: true, dereference: false });
+console.log('Desktop host built with the existing Web artifact. Runtime acceptance pending.');

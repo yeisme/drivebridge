@@ -14,7 +14,7 @@ import urllib.parse
 import urllib.request
 
 root=pathlib.Path(__file__).resolve().parents[1]
-backend=root.parents[1]/'backend-server'/'drivebridge'
+backend=root/'server'
 with tempfile.TemporaryDirectory(prefix='drivebridge-remote-') as temporary:
     temp=pathlib.Path(temporary)
     subprocess.run(['go','build','-o',str(temp/'fixture'),'./cmd/drivebridge-fixture'],cwd=backend,check=True)
@@ -64,7 +64,7 @@ with tempfile.TemporaryDirectory(prefix='drivebridge-remote-') as temporary:
             proc=subprocess.run([str(temp/'bridge'),'--config',str(config),*args,'--json'],cwd=temp,env=cli_env,capture_output=True,text=True,timeout=45)
             if not ok:
                 assert proc.returncode!=0,'Unsupported remote command succeeded'
-                return proc.stderr
+                return json.loads(proc.stdout)
             assert proc.returncode==0,'Remote CLI failed: '+proc.stderr
             return json.loads(proc.stdout)
         cli('config','init')
@@ -78,7 +78,7 @@ with tempfile.TemporaryDirectory(prefix='drivebridge-remote-') as temporary:
         cli('download','--ref',ref,'--out','cli-copy.txt')
         assert (files/'cli-copy.txt').read_bytes()==(files/'source.txt').read_bytes()
         assert cli('find','--space',space['id'],'--query','SOURCE','--path','reports')['data']['count']==1
-        assert 'remote_unsupported' in cli('changes','--space',space['id'],ok=False)
+        assert cli('changes','--space',space['id'],ok=False).get('error',{}).get('code') == 'remote_unsupported', 'Unexpected unsupported-action error code'
         assert not (temp/'must-not-open-local-state').exists(),'Remote command opened local state'
         print('PASS: config-authored remote CLI upload -> provenance -> pinned download -> search -> unsupported capability; no local state.')
         call('/agents/'+grant['agent']['id']+'/revoke',{},me['csrf_token']);result=tool(9,'files',{'space_id':space['id']});assert result.get('isError'), 'Revoked credential accepted'

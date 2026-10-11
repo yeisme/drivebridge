@@ -34,7 +34,7 @@
 
 在 owner 机器用 `drivebridge usage scan --space SPACE_ID --enable --configure-only` 开启扫描，用 `drivebridge usage scan --space SPACE_ID` 手动执行，用 `--cancel-id SCAN_ID` 取消；`--disable --configure-only` 停止后续调度。用 `drivebridge mcp --enabled --insights` 启动带统计调度和私有控制 socket 的 owner。
 
-`drivebridge view` 使用发行包附带的 web 资产；开发时用 `drivebridge view --web-dir ../../client/drivebridge-client/dist`。视图仅监听 127.0.0.1，一次性启动链接保存在 0600 文件，默认打开浏览器，敏感链接不打印到 stdout。可使用 `--no-open` 和 `--launch-file` 指定私有交接文件。会话通过一次性 fragment 换取 HttpOnly/SameSite cookie，fragment 随即移除；校验 Host、Origin、CSRF。文件操作只读，扫描和导出通过 owner 的 0600 Unix socket 执行。
+`drivebridge view` 使用发行包附带的 web 资产；开发时用 `drivebridge view --web-dir web/dist`。视图仅监听 127.0.0.1，一次性启动链接保存在 0600 文件，默认打开浏览器，敏感链接不打印到 stdout。可使用 `--no-open` 和 `--launch-file` 指定私有交接文件。会话通过一次性 fragment 换取 HttpOnly/SameSite cookie，fragment 随即移除；校验 Host、Origin、CSRF。文件操作只读，扫描和导出通过 owner 的 0600 Unix socket 执行。
 
 `drivebridge usage export --json` 和 `drivebridge audit export --json` 输出带 audit_recorded 的结果。普通查询使用只读数据库连接，不夺取正在运行的 owner 锁；离线扫描遵守单进程状态锁。发行脚本同时构建并打包前端资产，保留 CLI 无图形环境路径。
 

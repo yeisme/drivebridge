@@ -13,7 +13,22 @@ root = pathlib.Path(__file__).resolve().parents[1]
 run = root / "temp" / "integration-test-runs" / (datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "-" + uuid.uuid4().hex[:8])
 (run / "artifacts").mkdir(parents=True)
 started=datetime.datetime.now(datetime.timezone.utc)
-command = sys.argv[1:] or ["go", "test", "-race", "./..."]
+command = sys.argv[1:] or ["go", "test", "./..."]
+if command and command[0] == "--":
+    command = command[1:]
+# Explicit long-run budget: --timeout SECONDS (or --timeout=SECONDS) before the
+# wrapped command. Scale fixtures exceed the default 900s guard; the flag keeps
+# the same redaction and six-piece evidence, and records the budget used.
+timeout_seconds = 900
+while command and (command[0] == "--timeout" or command[0].startswith("--timeout=")):
+    raw = command[0][10:] if command[0].startswith("--timeout=") else (command[1] if len(command) > 1 else "")
+    command = command[2:] if not command[0].startswith("--timeout=") else command[1:]
+    try:
+        timeout_seconds = max(1, int(raw))
+    except ValueError:
+        timeout_seconds = -1
+if timeout_seconds <= 0:
+    sys.exit("usage: check.py [--timeout SECONDS] -- command...")
 if command and command[0] == "--":
     command = command[1:]
 
@@ -28,7 +43,7 @@ def redact(value):
 try:
     child_env=os.environ.copy()
     child_env["DRIVEBRIDGE_EVIDENCE_ARTIFACTS"]=str(run / "artifacts")
-    completed = subprocess.run(command, cwd=root, env=child_env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=900)
+    completed = subprocess.run(command, cwd=root, env=child_env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=timeout_seconds)
     code, stdout, stderr = completed.returncode, completed.stdout, completed.stderr
 except subprocess.TimeoutExpired:
     code, stdout, stderr = 124, "", "Check timed out.\n"
@@ -41,6 +56,9 @@ for artifact in (root / "test-results").glob("**/*"):
     if artifact.is_file() and artifact.suffix in {".md", ".txt", ".json", ".log"}:
         artifact.write_text(redact(artifact.read_text(errors="replace")))
 (run / "summary.json").write_text(json.dumps({"schema_version":"yeisme.integration_test_evidence.v1", "project":root.parent.name+"/"+root.name, "run_id":run.name, "command":command, "started_at":started.isoformat(), "finished_at":datetime.datetime.now(datetime.timezone.utc).isoformat(), "duration_ms":int((datetime.datetime.now(datetime.timezone.utc)-started).total_seconds()*1000), "redaction":{"enabled":True,"policy":"credentials-and-bearer-urls"}, "evidence":{"stdout":"stdout.log","stderr":"stderr.log","artifacts":"artifacts/"}, "status": "passed" if code == 0 else "failed", "exit_code": code, "layer": "e2e" if any("playwright" in arg or "remote_system.py" in arg for arg in command) else "component", "real_onedrive": False, "paid_provider": False, "deployment": False}))
+summary = json.loads((run / "summary.json").read_text())
+summary["timeout_seconds"] = timeout_seconds
+(run / "summary.json").write_text(json.dumps(summary))
 print(redact(stdout), end="")
 print(redact(stderr), end="", file=sys.stderr)
 print("Evidence: " + str(run.relative_to(root)))

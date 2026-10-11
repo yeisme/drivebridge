@@ -1,0 +1,83 @@
+import { selectChoice } from "./helpers/select";
+import { test, expect } from "@playwright/test";
+import path from "node:path";
+
+test("user directory filters, key metadata and account lifecycle use real services", async ({ page, browser }) => {
+  test.skip(process.env.DRIVEBRIDGE_TEST_TEAM_DEMO !== "1", "Requires explicit team demo");
+  await page.goto("/");
+  await page.getByRole("button", { name: "无需账号，进入本地体验" }).click();
+  await page.getByRole("button", { name: "访问凭据", exact: true }).click();
+  await page.getByRole("tab", { name: "用户", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "访问凭据", exact: true })).toBeVisible();
+  await selectChoice(page.getByLabel("筛选账号角色"),"member");
+  await selectChoice(page.getByLabel("筛选所属团队"),{ label: "设计协作团队" });
+  await page.getByLabel("搜索用户或团队").fill("团队成员");
+  const row = page.getByRole("row").filter({ hasText: "团队成员" });
+  await expect(row).toHaveCount(1);
+  await row.getByRole("button", { name: "1 个 Key", exact: true }).click();
+  const detail = page.getByRole("dialog", { name: "用户与 Key 详情" });
+  await expect(detail).toContainText("团队成员");
+  await expect(detail.locator(".user-key-list code")).toHaveCount(1);
+  await expect(detail.getByRole("button", { name: /复制/ })).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  const other = await browser.newContext();
+  try {
+    const member = await other.newPage();
+    await member.goto("/");
+    await member.getByRole("button", { name: "无需账号，进入本地体验" }).click();
+    await member.getByRole("button", { name: "工作区选项", exact: true }).click();
+    await selectChoice(member.getByLabel("体验身份"),"member");
+    await member.getByRole("button", { name: "切换体验身份", exact: true }).click();
+    await expect(member.getByRole("heading", { name: "团队", exact: true })).toBeVisible();
+    const confirm = async (name: string) => {
+      const modal = page.getByRole("dialog", { name, exact: true });
+      await expect(modal).toBeVisible();
+      await modal.getByLabel("输入目标用户名确认", { exact: true }).fill("团队成员");
+      await modal.getByRole("button", { name: "确认" + name, exact: true }).click();
+      await expect(modal).toHaveCount(0);
+    };
+    await row.getByRole("button", { name: "冻结", exact: true }).click();
+    await confirm("冻结账号");
+    await selectChoice(page.getByLabel("筛选账号状态"),"frozen");
+    await expect(row).toContainText("已冻结");
+    expect((await other.request.get(new URL("/api/v1/me", page.url()).href)).status()).toBe(401);
+    await row.getByRole("button", { name: "解冻", exact: true }).click();
+    await confirm("解冻账号");
+    await expect(row).toHaveCount(0);
+    await selectChoice(page.getByLabel("筛选账号状态"),"active");
+    await expect(row).toContainText("正常");
+    await row.getByRole("button", { name: "删除并归档 团队成员", exact: true }).click();
+    await expect(page.getByRole("dialog")).toContainText("保留文件及审计记录");
+    await confirm("删除并归档");
+    await expect(row).toHaveCount(0);
+    await selectChoice(page.getByLabel("筛选账号状态"),"archived");
+    await expect(row).toContainText("已归档");
+    await expect(row).toContainText("0 个有效凭据");
+    await row.getByRole("button", { name: "恢复归档", exact: true }).click();
+    await confirm("恢复归档");
+    await selectChoice(page.getByLabel("筛选账号状态"),"frozen");
+    await expect(row).toContainText("已冻结");
+  } finally { await other.close(); }
+  const artifacts = process.env.DRIVEBRIDGE_EVIDENCE_ARTIFACTS || "temp/browser-artifacts";
+  await page.getByLabel("搜索用户或团队").fill("");
+  await selectChoice(page.getByLabel("筛选账号角色"),"");
+  await selectChoice(page.getByLabel("筛选所属团队"),"");
+  await selectChoice(page.getByLabel("筛选账号状态"),"");
+  await expect(page.getByRole("row").filter({ hasText: "本地体验" })).toBeVisible();
+  await page.setViewportSize({ width: 1110, height: 962 });
+  await page.screenshot({ path: path.join(artifacts, "user-directory-desktop.png"), fullPage: true });
+  await page.getByRole("button", { name: "租户设置", exact: true }).click();
+  const management = page.getByRole("region", { name: "管理与授权中心" });
+  for (const viewport of [{ width: 1110, height: 962 }, { width: 868, height: 962 }, { width: 390, height: 844 }]) {
+    await page.setViewportSize(viewport);
+    await expect(management).toBeVisible();
+    expect(await management.evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+    await management.getByRole("button", {name:"创建租户",exact:true}).click();
+    const form = page.getByRole("dialog",{name:"创建租户",exact:true}).locator("form");
+    const bounds = await page.getByRole("dialog",{name:"创建租户",exact:true}).boundingBox();
+    const inner = await form.boundingBox();
+    expect(inner!.x + inner!.width).toBeLessThanOrEqual(bounds!.x + bounds!.width);
+    await page.screenshot({ path: path.join(artifacts, `governance-fit-${viewport.width}.png`), fullPage: true });
+    await page.keyboard.press("Escape");
+  }
+});

@@ -1,0 +1,524 @@
+@layer theme, base, legacy, components, utilities;
+@layer legacy {
+.insights {
+  container: insights / inline-size;
+  --soft: var(--accent-soft);
+  color: var(--ink);
+  min-width: 0;
+}
+.insight-tabs {
+  display: flex;
+  gap: 8px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 22px;
+  overflow-x: auto;
+}
+.insight-tabs button {
+  white-space: nowrap;
+  background: none;
+  border: 0;
+  padding: 13px 15px;
+  font: inherit;
+  color: var(--muted);
+  border-bottom: 3px solid transparent;
+  cursor: pointer;
+}
+.insight-tabs button[aria-selected="true"] {
+  color: var(--ink);
+  border-color: var(--ink);
+  font-weight: 650;
+}
+.insight-filters {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: end;
+  margin: 16px 0;
+}
+.insight-filters label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  min-width: 135px;
+  flex: 1;
+}
+.insight-filters input {
+  padding: 9px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--ink);
+  min-width: 0;
+  font: inherit;
+}
+.insight-period {
+  display: flex;
+  gap: 12px;
+  padding-bottom: 10px;
+}
+.insight-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 15px 0;
+}
+.insight-toolbar > span {
+  flex: 1;
+  font-size: 12px;
+  color: var(--muted);
+}
+.insight-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin: 22px 0 12px;
+}
+.insight-kpis article {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-surface);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  padding: 19px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.insight-kpis strong {
+  font-size: 26px;
+  letter-spacing: -1px;
+}
+.insight-kpis small,
+.insight-caption {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.7;
+}
+.insight-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+.insight-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-surface);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  padding: 20px;
+  margin: 18px 0;
+  min-width: 0;
+}
+.insight-card h3 {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 14px;
+}
+.insight-card > p {
+  font-size: 12px;
+  line-height: 1.8;
+  color: var(--muted);
+}
+.insight-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.insight-chart {
+  width: 100%;
+  min-height: 150px;
+  margin-top: 18px;
+  overflow: visible;
+}
+.insight-chart text {
+  font-size: 12px;
+  fill: var(--muted);
+}
+.insight-chart g[role="button"] {
+  cursor: pointer;
+  outline: none;
+}
+.insight-chart g[role="button"]:focus rect:first-child {
+  fill: var(--accent-soft);
+  stroke: var(--ink);
+  stroke-width: 1;
+}
+.tone-0 {
+  fill: var(--ui-chart-1);
+  background: var(--ui-chart-1);
+}
+.tone-1 {
+  fill: var(--ui-chart-2);
+  background: var(--ui-chart-2);
+}
+.tone-2 {
+  fill: var(--ui-chart-3);
+  background: var(--ui-chart-3);
+}
+.tone-3 {
+  fill: var(--ui-chart-4);
+  background: var(--ui-chart-4);
+}
+.chart-legend {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--muted);
+}
+.chart-legend > span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.swatch {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+}
+.chart-readout {
+  min-height: 38px;
+}
+.insight-table-wrap {
+  overflow: auto;
+}
+.insights table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  text-align: left;
+}
+.insights th,
+.insights td {
+  padding: 12px 10px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+.insights td small {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  margin-top: 5px;
+}
+.insights td code {
+  font-size: 10px;
+  display: block;
+  max-width: 220px;
+}
+.insights table .text-button {
+  display: block;
+  font-size: 11px;
+  margin-top: 5px;
+}
+.insight-empty {
+  padding: 25px 5px;
+  color: var(--muted);
+}
+.insight-rank {
+  display: grid;
+  grid-template-columns: minmax(65px, 1fr) minmax(30px, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  width: 100%;
+  background: none;
+  border: 0;
+  padding: 13px 0;
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+  color: inherit;
+}
+.rank-name {
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+.rank-name small {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+}
+.rank-track {
+  height: 8px;
+  background: var(--ui-muted);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.rank-track i {
+  height: 100%;
+  background: var(--ui-chart-1);
+  display: block;
+}
+.insight-rank strong {
+  font-size: 12px;
+  white-space: nowrap;
+}
+.capacity-row {
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  padding: 14px 0;
+  display: grid;
+  grid-template-columns: minmax(0,1fr) auto;
+  font-variant-numeric:tabular-nums;
+  gap: 8px;
+  color: inherit;
+  cursor: pointer;
+}
+.capacity-row small {
+  grid-column: 1/-1;
+  font-size: 12px;
+  color: var(--muted);
+}
+.insight-alerts {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.insight-alert {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid var(--line);
+  background: var(--warning-soft);
+  padding: 10px;
+  border-radius: 8px;
+  color: var(--warning);
+  cursor: pointer;
+  font-size: 12px;
+}
+.insight-alert.critical {
+  border-color: var(--line);
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+.audit-day-bars {
+  display: grid;
+  gap: 8px;
+}
+.audit-day-bars button {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px;
+  background: var(--ui-muted);
+  border: 0;
+  border-radius: 6px;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+  font-size: 12px;
+}
+.insight-notice {
+  padding: 12px;
+  background: var(--ui-muted);
+  border-radius: 8px;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+.scan-confirm {
+  position: fixed;
+  inset: 50% auto auto 50%;
+  transform: translate(-50%, -50%);
+  z-index: 10;
+  background: var(--surface);
+  padding: 26px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: 0 0 0 100vmax #153c2d55;
+  max-width: 500px;
+  width: calc(100% - 40px);
+}
+.scan-confirm p {
+  line-height: 1.8;
+  font-size: 13px;
+}
+.insights details summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 12px;
+  padding: 8px 0;
+}
+.insight-standalone {
+  max-width: 1350px;
+  margin: 0 auto;
+  padding: 30px 24px;
+}
+.insight-standalone > header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.insight-standalone h1 {
+  font-size: 30px;
+  letter-spacing: -1px;
+}
+.insight-standalone .eyebrow {
+  display: block;
+  margin-bottom: 12px;
+}
+@media (max-width: 950px) {
+  .insight-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+}
+@media (max-width: 600px) {
+  .insight-kpis {
+    gap: 8px;
+  }
+  .insight-kpis article {
+    padding: 13px;
+  }
+  .insight-kpis strong {
+    font-size: 21px;
+  }
+  .insight-card {
+    padding: 14px;
+  }
+  .insight-filters label {
+    min-width: 130px;
+  }
+  .insight-standalone {
+    padding: 20px 12px;
+  }
+  .insight-toolbar > span {
+    flex-basis: 100%;
+  }
+}
+
+.backend-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 14px 0 0;
+}
+
+.storage-browser .storage-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 14px;
+  margin-bottom: 10px;
+}
+.storage-browser .storage-toolbar label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+.storage-browser .storage-toggle {
+  flex-direction: row !important;
+  align-items: center;
+  padding-bottom: 6px;
+}
+.storage-browser .storage-goto {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 6px !important;
+}
+.storage-breadcrumb {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+.storage-banner {
+  margin: 0 0 10px;
+  opacity: 0.8;
+  font-size: 12.5px;
+}
+.storage-note {
+  margin-top: 10px;
+  opacity: 0.7;
+  font-size: 12px;
+}
+.chart-stage {
+  position: relative;
+}
+.chart-hairline {
+  stroke: var(--line);
+  stroke-width: 1;
+}
+.chart-cursor {
+  stroke: var(--pine);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+.chart-float {
+  position: absolute;
+  top: 8px;
+  transform: none;
+  z-index: 2;
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  max-width: calc(100% - 16px);
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  box-shadow: var(--shadow-popover);
+  font-size: 12px;
+  pointer-events: none;
+}
+.chart-float strong {
+  font-variant-numeric: tabular-nums;
+}
+.meter-bar {
+  margin-top: 8px;
+}
+.meter-track {
+  display: flex;
+  height: 8px;
+  border-radius: var(--radius-xs);
+  background: var(--accent-soft);
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+}
+.meter-track[data-filled="false"] {
+  background: var(--accent-soft);
+}
+.meter-track i {
+  display: block;
+  height: 100%;
+  min-width: 0;
+}
+.meter-bar ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 11px;
+  color: var(--muted);
+}
+@media (prefers-reduced-motion: reduce) {
+  .chart-cursor {
+    stroke-dasharray: none;
+  }
+}
+
+.insight-advanced {display:flex;flex:1;flex-wrap:wrap;align-items:center;gap:8px;min-width:min(240px,100%);font-size:12px;}
+
+@container insights (min-width: 880px) {
+  .insight-grid { grid-template-columns:minmax(0,1.5fr) minmax(0,1fr); }
+}
+.capacity-row > .meter-bar { grid-column:1/-1; min-width:0; }
+.capacity-row > span { white-space:nowrap; }
+.capacity-row small { overflow-wrap:anywhere; }
+.chart-zero { stroke:var(--ui-chart-1); stroke-width:2; }
+.collection-info { margin-block:12px; }
+.collection-info summary { cursor:pointer; }
+.chart-float { max-width:calc(100% - 16px); box-sizing:border-box; overflow-wrap:anywhere; pointer-events:none; }
+.insight-card { overflow-wrap:anywhere; }
+
+}

@@ -1,0 +1,19 @@
+import {expect,test} from '@playwright/test';
+test.use({trace:'off',video:'off',screenshot:'off'});
+test('task page observes original organization plan without claiming proven action results',async({page})=>{
+ await page.goto('/');await page.getByRole('link',{name:'使用账号登录'}).click();await page.getByRole('link',{name:'以 Alice 登录'}).click();await expect(page.getByRole('heading',{name:'我的网盘',exact:true})).toBeVisible();
+ const plan=await page.evaluate(async()=>{
+  const me=(await(await fetch('/api/v1/me')).json()).data;const headers={'Content-Type':'application/json','X-CSRF-Token':me.csrf_token};
+  async function post(path:string,body:unknown,key?:string){const response=await fetch('/api/v1'+path,{method:'POST',headers:{...headers,...(key?{'Idempotency-Key':key}:{})},body:JSON.stringify(body)});if(!response.ok)throw new Error('organization_fixture_failed');return(await response.json()).data;}
+  const space=await post('/spaces',{name:'Organization task fixture',connection_id:'platform'});const bytes=new TextEncoder().encode('organization fixture');const sha256=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),b=>b.toString(16).padStart(2,'0')).join('');
+  const op=await post('/uploads',{space_id:space.id,path:'source.txt',size_bytes:bytes.length,sha256},'plan-source');const part=await fetch('/api/v1/operations/'+op.id+'/parts/0',{method:'PUT',headers:{'X-CSRF-Token':me.csrf_token},body:bytes});if(!part.ok)throw new Error('organization_fixture_part_failed');const done=await post('/operations/'+op.id+'/complete',{});
+  const stat=(await(await fetch('/api/v1/files/'+done.file_id)).json()).data;
+  const created=await post('/organization-plans',{refs:[stat.ref],actions:[{kind:'add_label',namespace:'rule',value:'reviewed'}]},'organization-task');return{id:created.plan_id as string,revision:created.revision as number,impact:created.impact_digest as string};
+ });
+ await page.goto('/#/tasks');const tasks=page.getByRole('region',{name:'持久操作任务',exact:true});await tasks.getByRole('combobox',{name:'任务类别'}).click();await page.getByRole('option',{name:'整理计划',exact:true}).click();
+ const card=tasks.getByRole('listitem').filter({has:page.getByText('原操作：organization_plan:'+plan.id,{exact:true})});await expect(card.getByText('显示状态：待确认 · 原状态：previewed',{exact:true})).toBeVisible();await expect(card.getByText('未提供',{exact:true})).toHaveCount(7);await expect(card.getByRole('button')).toHaveCount(0);
+ const confirmed=await page.evaluate(async plan=>{const me=(await(await fetch('/api/v1/me')).json()).data;const response=await fetch('/api/v1/organization-plans/'+plan.id+'/confirm',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':me.csrf_token},body:JSON.stringify({expected_revision:plan.revision,impact_digest:plan.impact})});if(!response.ok)throw new Error('organization_confirm_failed');return(await response.json()).data.revision as number;},plan);
+ await tasks.getByRole('button',{name:'刷新操作投影'}).click();await expect(card.getByText('显示状态：进行中 · 原状态：confirmed',{exact:true})).toBeVisible();
+ await page.evaluate(async({id,revision})=>{const me=(await(await fetch('/api/v1/me')).json()).data;const response=await fetch('/api/v1/organization-plans/'+id+'/execute',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':me.csrf_token},body:JSON.stringify({expected_revision:revision})});if(!response.ok)throw new Error('organization_execute_failed');const view=(await response.json()).data;if(view.phase!=='completed')throw new Error('organization_owner_not_completed');},{id:plan.id,revision:confirmed});
+ await tasks.getByRole('button',{name:'刷新操作投影'}).click();await expect(card.getByText('显示状态：未知 · 原状态：completed',{exact:true})).toBeVisible();await expect(card.getByText('来源：未知（不从调用方声明推断）',{exact:true})).toBeVisible();await expect(card.getByRole('button')).toHaveCount(0);await expect(tasks.getByText(/原 completed 不代表已证明全部动作成功/)).toBeVisible();
+});

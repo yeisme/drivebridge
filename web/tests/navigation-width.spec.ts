@@ -1,0 +1,51 @@
+import { test, expect } from "@playwright/test";
+import path from "node:path";
+
+test("desktop navigation matches Pine geometry and restores automatic layout", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto("/");
+  await page.locator("#login-key").fill("dbu_" + "2".repeat(96));
+  await page.getByRole("button", { name: "登录", exact: true }).click();
+  await expect(page.locator(".app")).toBeVisible();
+  const me = (await (await page.request.get("/api/v1/me")).json()).data;
+  const preferenceKey = `drivebridge:sidebar:${encodeURIComponent(me.instance_id)}:${encodeURIComponent(me.user.id)}`;
+  const sidebar = page.locator(".sidebar");
+  const expectWidth = async (expected: number) => expect.poll(async () => Math.round((await sidebar.boundingBox())!.width)).toBe(expected);
+  await expect.poll(async () => Math.round((await page.locator(".main > .topbar").boundingBox())!.height)).toBe(48);
+  await expectWidth(184);
+  await expect.poll(async () => Math.round((await sidebar.getByRole("button", { name: "我的网盘", exact: true }).boundingBox())!.height)).toBe(36);
+  await page.getByRole("button", { name: "折叠侧边栏", exact: true }).click();
+  await expectWidth(56);
+  await page.getByRole("button", { name: "展开侧边栏", exact: true }).click();
+  await expectWidth(184);
+  const group = sidebar.getByRole("button", { name: "工作台", exact: true });
+  await group.click();
+  await expect(group).toHaveAttribute("aria-expanded", "false");
+  await expect(group.locator(".nav-group-current")).toHaveText("我的网盘");
+  await expect(sidebar.getByRole("button", { name: "我的网盘", exact: true })).toBeHidden();
+  await page.reload();
+  await expect(group).toHaveAttribute("aria-expanded", "false");
+  await group.click();
+  await expect(sidebar.getByRole("button", { name: "我的网盘", exact: true })).toHaveAttribute("aria-current", "page");
+  await page.getByRole("button", { name: "恢复自动导航布局" }).click();
+  expect(await page.evaluate(key => localStorage.getItem(key), preferenceKey)).toBeNull();
+  await page.setViewportSize({ width: 1279, height: 1000 });
+  await expectWidth(56);
+  await page.setViewportSize({ width: 1280, height: 1000 });
+  await expectWidth(184);
+  await page.setViewportSize({ width: 1024, height: 1000 });
+  await expectWidth(56);
+  await page.getByRole("button", { name: "展开侧边栏", exact: true }).click();
+  await expectWidth(184);
+  await page.reload();
+  await expectWidth(184);
+  await page.getByRole("button", { name: "恢复自动导航布局" }).click();
+  await expectWidth(56);
+  for (const width of [320, 390, 768, 1024, 1440, 1920]) {
+    await page.setViewportSize({ width, height: 1000 });
+    if (width >= 768) await expectWidth(width >= 1280 ? 184 : 56);
+    else await expect(sidebar).toHaveCount(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    if (process.env.DRIVEBRIDGE_EVIDENCE_ARTIFACTS) await page.screenshot({ path: path.join(process.env.DRIVEBRIDGE_EVIDENCE_ARTIFACTS, `pine-shell-${width}.png`) });
+  }
+});

@@ -1,0 +1,6 @@
+/temp/
+/dist/
+/drivebridge-server
+/.state/
+
+__pycache__/

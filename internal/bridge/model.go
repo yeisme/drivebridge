@@ -113,6 +113,9 @@ type Provider interface {
 	Delete(context.Context, Space, File) error
 }
 type Service struct {
+	// Serializes cooperating adoption changes with byte publication. This is
+	// not cross-state or legacy-writer admission evidence for desktop binding.
+	guardMu       sync.Mutex
 	previewLocks  [32]sync.Mutex
 	previewSlots  chan struct{}
 	state         string

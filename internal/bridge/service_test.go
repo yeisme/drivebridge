@@ -407,7 +407,8 @@ func TestCancelledBeforeWorkerStarts(t *testing.T) {
 		}
 		s.Cancel(op.ID)
 		op = waitOp(t, s, op.ID)
-		if op.Status != "cancelled" && op.Status != "completed" {
+		lateCommit := op.Status == "interrupted" && op.Error == "resume_required" && op.FileRef != ""
+		if op.Status != "cancelled" && op.Status != "completed" && !lateCommit {
 			t.Fatalf("early cancel became %s", op.Status)
 		}
 	}

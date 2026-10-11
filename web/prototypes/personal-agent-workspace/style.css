@@ -1,0 +1,107 @@
+@import "tailwindcss";
+@import "../../src/shadcn.css";
+@source "../../src/components/ui";
+
+@layer base {
+  :root {
+    --ui-background: #f5f6f4;
+    --ui-sidebar: #eef1ed;
+    --cover-sea-sky: #d8e9eb;
+    --cover-sea: #769fa5;
+    --cover-sea-deep: #476e77;
+    --cover-sand-sky: #eee1ca;
+    --cover-sand: #e5caa4;
+    --cover-sun: #f9ecd2;
+    --cover-pine-sky: #d7e1d6;
+    --cover-ridge: #8b9d81;
+    --cover-forest: #3a5c4c;
+    --cover-clay: #bf9177;
+    --cover-clay-deep: #865e4e;
+    --cover-ink: #263b33;
+    --cover-audio: #e8e1d1;
+    --cover-audio-ink: #68604c;
+  }
+  .dark {
+    --ui-background: #141b17;
+    --ui-sidebar: #19241e;
+  }
+
+  html {
+    font-family: "SF Pro Text", "PingFang SC", system-ui, sans-serif;
+    font-size: 14px;
+  }
+  body {
+    margin: 0;
+    background: var(--ui-background);
+    color: var(--ui-foreground);
+  }
+  * {
+    box-sizing: border-box;
+    scrollbar-width: thin;
+    scrollbar-color: var(--ui-border) transparent;
+  }
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+  }
+  button:not(:disabled),
+  [role="button"] {
+    cursor: pointer;
+  }
+  :focus-visible:not(input):not(textarea):not([data-slot="button"]):not(
+      [role="combobox"]
+    ):not([data-overlay-surface]) {
+    outline: 1.5px solid var(--ui-ring);
+    outline-offset: 1px;
+  }
+  ::selection {
+    background: var(--ui-accent);
+    color: var(--ui-foreground);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation: none !important;
+      transition: none !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer base {
+  html[data-reduced-motion="true"] *,
+  html[data-reduced-motion="true"] *::before,
+  html[data-reduced-motion="true"] *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Dense controls keep reserved geometry; touch targets remain independent. */
+[data-workspace-page] {
+  font-size: 13px;
+}
+[data-view-toolbar] button,
+[data-page-heading] button {
+  flex-shrink: 0;
+}
+[data-detail-list] tbody td {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+[data-compact-status] {
+  min-height: 48px;
+  border-bottom: 1px solid var(--ui-border);
+}
+@media (pointer: coarse), (max-width: 767px) {
+  [data-compact-status] {
+    min-height: 56px;
+  }
+}
+.record-details > article { border: 0; background: transparent; border-radius: 0; padding: 0; }
+.record-details > article > h2 { display: none; }
+[data-compact-status] > div:first-of-type button { min-width: 0; }

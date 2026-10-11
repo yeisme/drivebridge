@@ -3,6 +3,7 @@ package bridge
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -105,6 +106,11 @@ func (c *ScaenaOutput) OpenOutput(ctx context.Context, p Space, submission strin
 	if e != nil || grant.Data.Grant == "" || grant.Data.Kind != "resource_link" || grant.Data.Size <= 0 || grant.Data.Size > p.MaxBytes || !strings.HasPrefix(grant.Data.Digest, "sha256:") {
 		return nil, 0, "", errors.New("output_grant_invalid")
 	}
+	digest := strings.TrimPrefix(grant.Data.Digest, "sha256:")
+	decoded, decodeErr := hex.DecodeString(digest)
+	if decodeErr != nil || len(decoded) != 32 || digest != strings.ToLower(digest) {
+		return nil, 0, "", errors.New("output_grant_invalid")
+	}
 	// Construct the authenticated owner path, ignoring any resource_link URL.
 	response, e = c.request(ctx, "GET", path+"/"+url.PathEscape(grant.Data.Grant), "")
 	if e != nil {
@@ -130,6 +136,9 @@ func (s *Service) SaveOutput(space, submission, key string) (Operation, error) {
 	return s.enqueue(Operation{ID: id, Key: operationKey(space, "save_output", key), SpaceID: space, Kind: "save_output", SourceRef: submission, Status: "queued", LocalPath: filepath.Join(".drivebridge-output", id+".mp4"), Target: id + "-output.mp4", Fingerprint: submission})
 }
 func (s *Service) saveOutput(ctx context.Context, op *Operation) error {
+	if err := s.rejectOperationMutation(*op); err != nil {
+		return err
+	}
 	if s.Output == nil {
 		return errors.New("output_adapter_unavailable")
 	}
@@ -142,50 +151,73 @@ func (s *Service) saveOutput(ctx context.Context, op *Operation) error {
 		return e
 	}
 	defer root.Close()
-	if e = root.MkdirAll(".drivebridge-output", 0700); e != nil {
-		return e
-	}
 	in, n, digest, e := s.Output.OpenOutput(ctx, p, op.SourceRef)
 	if e != nil {
 		return e
 	}
 	defer in.Close()
-	temp := op.LocalPath + "-" + newID()
-	out, e := root.OpenFile(temp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	// Opening the owner stream may block or install new adoption facts. Only
+	// acquire publication admission afterwards, before any local mutation.
+	e = func() error {
+		s.guardMu.Lock()
+		defer s.guardMu.Unlock()
+		temp := op.LocalPath + "-" + newID()
+		if err := s.rejectOperationMutation(*op); err != nil {
+			return err
+		}
+		for _, rel := range []string{".drivebridge-output", temp} {
+			if err := s.rejectLocalOwnerProtected(op.SpaceID, rel); err != nil {
+				return err
+			}
+		}
+		if err := root.MkdirAll(".drivebridge-output", 0700); err != nil {
+			return err
+		}
+		out, err := root.OpenFile(temp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+		if err != nil {
+			return err
+		}
+		op.Bytes = n
+		s.DB.Model(&Operation{}).Where("id = ?", op.ID).Update("bytes", n)
+		actual, count, err := digestReader(io.TeeReader(io.LimitReader(&progressReader{r: in, s: s, id: op.ID}, p.MaxBytes+1), out))
+		syncErr := out.Sync()
+		out.Close()
+		if err != nil || syncErr != nil || count != n || digest != actual {
+			return errors.New("content_mismatch")
+		}
+		if err := s.rejectOperationMutation(*op); err != nil {
+			return err
+		}
+		if err := root.Link(temp, op.LocalPath); err != nil {
+			existing, openErr := root.Open(op.LocalPath)
+			if openErr != nil {
+				return errors.New("target_conflict")
+			}
+			h, oldN, hashErr := digestReader(io.LimitReader(existing, p.MaxBytes+1))
+			existing.Close()
+			if hashErr != nil || h != digest || oldN != n {
+				return errors.New("target_conflict")
+			}
+		}
+		_ = root.Remove(temp)
+		return nil
+	}()
 	if e != nil {
 		return e
 	}
-	op.Bytes = n
-	s.DB.Model(&Operation{}).Where("id = ?", op.ID).Update("bytes", n)
-	actual, count, e := digestReader(io.TeeReader(io.LimitReader(&progressReader{r: in, s: s, id: op.ID}, p.MaxBytes+1), out))
-	syncErr := out.Sync()
-	out.Close()
-	if e != nil || syncErr != nil || count != n || digest != actual {
-		return errors.New("content_mismatch")
-	}
-	if e = root.Link(temp, op.LocalPath); e != nil {
-		existing, openErr := root.Open(op.LocalPath)
-		if openErr != nil {
-			return errors.New("target_conflict")
-		}
-		h, oldN, hashErr := digestReader(io.LimitReader(existing, p.MaxBytes+1))
-		existing.Close()
-		if hashErr != nil || h != digest || oldN != n {
-			return errors.New("target_conflict")
-		}
-	}
-	_ = root.Remove(temp)
 	// Keep the original operation's idempotency identity. Reuse only its transfer
 	// implementation, never the generation submit/reconcile path.
 	copy := *op
 	copy.Kind = "upload"
 	copy.Bytes = n
 	copy.Fingerprint = digest + ":output.mp4"
-	if e = s.transfer(ctx, &copy); e != nil {
+	e = s.transfer(ctx, &copy)
+	op.FileRef = copy.FileRef
+	op.ContentSHA256 = copy.ContentSHA256
+	op.Bytes = n
+	if e != nil {
 		return e
 	}
-	op.FileRef = copy.FileRef
-	op.Bytes = n
 	// Default retention: retain verified local output for recovery. Cleanup is an
 	// explicit operator action, not implicit deletion of the user's files.
 	return nil

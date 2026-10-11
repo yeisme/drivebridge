@@ -1,0 +1,51 @@
+import { test, expect } from "@playwright/test";
+import path from "node:path";
+
+test("team content takes priority over chrome across viewport sizes", async ({ page }) => {
+  test.skip(process.env.DRIVEBRIDGE_TEST_TEAM_DEMO !== "1", "Requires explicit team demo");
+  await page.goto("/");
+  await page.getByRole("button", { name: "无需账号，进入本地体验" }).click();
+  await page.getByRole("button", { name: "团队", exact: true }).click();
+  await page.getByRole("button",{name:"打开团队 设计协作团队",exact:true}).click();
+  await expect(page.locator(".team-body")).toBeVisible();
+  await expect(page.locator(".page-heading")).toHaveCount(0);
+  await expect(page.locator(".topbar").getByLabel("切换租户")).toBeVisible();
+  await expect(page.locator(".main > .team-demo-switch, .main > .governance-bar")).toHaveCount(0);
+  const artifacts = process.env.DRIVEBRIDGE_EVIDENCE_ARTIFACTS || "temp/browser-artifacts";
+  for (const viewport of [{ width: 1440, height: 1000 }, { width: 868, height: 962 }, { width: 390, height: 844 }]) {
+    await page.setViewportSize(viewport);
+    await expect(page.locator(".team-body")).toBeVisible();
+    await expect.poll(async () => Math.round((await page.locator(".topbar").boundingBox())!.height)).toBe(48);
+    await page.screenshot({ path: path.join(artifacts, `team-room-${viewport.width}.png`), fullPage: true });
+    const body = await page.locator(".team-body").boundingBox();
+    expect(body!.y, JSON.stringify(await page.locator(".topbar, .team-header, .team-nav").evaluateAll(nodes => nodes.map(node => ({ name: node.className, y: node.getBoundingClientRect().y, height: node.getBoundingClientRect().height }))))).toBeLessThan(220);
+    if (viewport.width === 868) expect(body!.width).toBeGreaterThanOrEqual(viewport.width - 224 - 40);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    expect(await page.locator(".team-header").evaluate(el => getComputedStyle(el).position)).toBe("static");
+    expect(await page.locator(".team-nav").evaluate(el => getComputedStyle(el).position)).toBe("static");
+    await page.screenshot({ path: path.join(artifacts, `team-room-${viewport.width}.png`), fullPage: true });
+    await page.getByRole("button", { name: "工作区选项", exact: true }).click();
+    await expect(page.getByLabel("体验身份")).toBeVisible();
+    await expect(page.getByRole("combobox", { name: "切换租户", exact: true })).toBeVisible();
+    await expect(page.getByLabel("切换管理空间")).toBeVisible();
+    const popup = await page.locator('[data-slot="popover-content"]').boundingBox();
+    expect(popup!.x).toBeGreaterThanOrEqual(0);
+    expect(popup!.x + popup!.width).toBeLessThanOrEqual(viewport.width);
+    await page.keyboard.press("Escape");
+    await expect(page.getByLabel("体验身份")).not.toBeVisible();
+  }
+  await page.getByRole("button", { name: "折叠团队导航" }).click();
+  await page.getByRole("link", { name: "成员", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "团队成员", exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.locator(".page-heading")).toHaveCount(0);
+  await page.goBack();
+  await expect(page.locator(".team-body .metric-grid")).toBeVisible();
+  await page.setViewportSize({ width: 868, height: 962 });
+  await page.getByRole("button", { name: "展开侧边栏", exact: true }).click();
+  const width = (await page.locator(".team-body").boundingBox())!.width;
+  await page.getByRole("button", { name: "折叠侧边栏", exact: true }).click();
+  expect((await page.locator(".team-body").boundingBox())!.width).toBeGreaterThan(width);
+  await page.getByRole("button", { name: "返回团队列表", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "团队", exact: true })).toBeVisible();
+});

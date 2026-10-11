@@ -17,7 +17,7 @@ func TestLocalShareRemoteCopyAndRevocation(t *testing.T) {
 	if testing.Short() {
 		t.Skip("two-owner system fixture")
 	}
-	owner, err := filepath.Abs("../../../../backend-server/drivebridge")
+	owner, err := filepath.Abs("../../server")
 	if err != nil {
 		t.Fatal(err)
 	}
