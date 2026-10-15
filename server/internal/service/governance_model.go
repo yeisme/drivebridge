@@ -197,7 +197,7 @@ func (s *Service) activeScopeRole(p Principal, sp Space, dbs ...*gorm.DB) string
 		return ""
 	}
 	m, e := s.membership(p.UserID, tenant, dbs...)
-	if e == nil && sp.TeamID == "" && m.DataOwner == sp.Owner {
+	if sp.TeamID == "" && ((e == nil && m.DataOwner == sp.Owner) || (s.Config.AdminDirectWrite && sp.Owner == p.UserID && s.platformAdmin(p.UserID, dbs...))) {
 		return "owner"
 	}
 	if e != nil {
@@ -205,6 +205,9 @@ func (s *Service) activeScopeRole(p Principal, sp Space, dbs ...*gorm.DB) string
 			return "admin"
 		}
 		return ""
+	}
+	if s.Config.AdminDirectWrite && (s.platformAdmin(p.UserID, dbs...) || m.Role == "admin" || (sp.TeamID != "" && s.teamRole(p.UserID, sp.TeamID, dbs...) == "admin")) {
+		return "admin"
 	}
 	if sp.TeamID != "" && s.teamRole(p.UserID, sp.TeamID, dbs...) != "" {
 		if role := s.permission(p.UserID, sp.ID, dbs...); role != "" {
@@ -254,6 +257,9 @@ func (s *Service) governanceAllow(db *gorm.DB, p Principal, space, path, action 
 		}
 	}
 	if action == "read" && (role != "admin" || !s.Config.RequireExplicitAdminRead) {
+		return nil
+	}
+	if role == "admin" && s.Config.AdminDirectWrite && p.Agent == nil && p.ServiceIdentity == nil && !p.ExternalRead && p.ShareID == "" && p.AccessGrantHash == "" {
 		return nil
 	}
 	if role == "owner" || ((role == "editor" || role == "custodian") && action != "permission") {
@@ -378,7 +384,11 @@ func (s *Service) bindContext(p Principal, r *http.Request) (Principal, error) {
 	// Identity and invitations remain accessible after a membership is removed.
 	identity := strings.HasPrefix(r.URL.Path, "/api/v1/governance") || r.URL.Path == "/api/v1/me" || r.URL.Path == "/auth/logout"
 	if e != nil && !identity && p.ScopeSpace == "" {
-		return p, code("forbidden")
+		// Platform administrators need a usable workspace without impersonating a tenant member.
+		var t Tenant
+		if !s.Config.AdminDirectWrite || p.Agent != nil || !s.platformAdmin(p.UserID) || s.DB.First(&t, "id = ? AND disabled = ?", tenant, false).Error != nil {
+			return p, code("forbidden")
+		}
 	}
 	return p, nil
 }

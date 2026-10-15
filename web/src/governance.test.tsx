@@ -3,6 +3,7 @@ import { afterEach, describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent, cleanup, waitFor } from "@testing-library/react";
 import { api, setDataContext, contextURL } from "./api";
 import { GovernanceBar, type GovernanceState } from "./Governance";
+import { governanceMode } from "./governance-context";
 
 // Base UI popup positioning is covered by Playwright; this test verifies tenant state transitions.
 vi.mock("./components/SelectField", () => ({ SelectField: ({ options, value, onValueChange, "aria-label": label }: any) =>
@@ -24,6 +25,13 @@ afterEach(() => {
   setDataContext("");
 });
 describe("tenant context", () => {
+  it("uses administrator write access only when the server enables it", () => {
+    setDataContext("a", "space");
+    const data = { enabled: true, space_roles: { space: "admin" }, requests: [] } as unknown as GovernanceState;
+    expect(governanceMode(data)).toBe("admin");
+    expect(governanceMode({ ...data, admin_direct_write: true })).toBe("admin_editor");
+    expect(governanceMode({ ...data, admin_direct_write: true, space_roles: { space: "viewer" } })).toBe("viewer");
+  });
   it("attaches the selected context and leaves governance requests out of data scope", async () => {
     const fetcher = vi
       .spyOn(globalThis, "fetch")

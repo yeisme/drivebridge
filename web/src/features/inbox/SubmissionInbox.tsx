@@ -21,7 +21,7 @@ function ScopedSubmissionInbox({scope,spaces,spaceFilter,initialState,syncRoute}
   const [deciding,setDeciding]=useState<Submission|null>(null);
   const [items,setItems]=useState<Submission[]>([]), [filter,setFilter]=useState<Submission['state']|''>(initialState);
   const [cursor,setCursor]=useState(''), [next,setNext]=useState(''), [attempt,setAttempt]=useState(0);
-  const [state,setState]=useState<'loading'|'ready'|'stale'|'error'|'denied'|'unsupported'>('loading');
+  const [state,setState]=useState<'loading'|'ready'|'stale'|'error'|'denied'|'unsupported'|'offline'>('loading');
   const [preview,setPreview]=useState<Submission|null>(null);
   const epoch=useRef(0);
   const focusTargets=useRef(new Map<string,HTMLButtonElement>());
@@ -38,7 +38,10 @@ function ScopedSubmissionInbox({scope,spaces,spaceFilter,initialState,syncRoute}
   useEffect(()=>{
     const abort=new AbortController(),generation=++epoch.current;setState('loading');
     const deny=()=>{pendingFocus.current=null;epoch.current++;abort.abort();setItems([]);setNext('');setPreview(null);setDeciding(null);setArchiving(null);setState('denied');};
+    const offline=()=>{pendingFocus.current=null;epoch.current++;abort.abort();setItems([]);setNext('');setPreview(null);setDeciding(null);setArchiving(null);setState('offline');};
     window.addEventListener('drivebridge-context',deny);
+    window.addEventListener('offline',offline);
+    if(!navigator.onLine){offline();return()=>{abort.abort();window.removeEventListener('drivebridge-context',deny);window.removeEventListener('offline',offline);};}
     listSubmissions(filter,cursor,abort.signal,spaceFilter).then(page=>{
       if(abort.signal.aborted||generation!==epoch.current)return;
       if(!Array.isArray(page.items)||page.items.some(item=>(spaceFilter&&item.space_id!==spaceFilter)||(filter&&item.state!==filter))||page.items.length>50||typeof page.next_cursor!=='string'||(cursor&&page.next_cursor===cursor))throw new Error('invalid_contract');
@@ -49,7 +52,7 @@ function ScopedSubmissionInbox({scope,spaces,spaceFilter,initialState,syncRoute}
       if(error.status===401||error.status===403)deny();
       else setState(error.status===410?'stale':error.status===404||error.status===405?'unsupported':'error');
     });
-    return()=>{abort.abort();epoch.current++;window.removeEventListener('drivebridge-context',deny);};
+    return()=>{abort.abort();epoch.current++;window.removeEventListener('drivebridge-context',deny);window.removeEventListener('offline',offline);};
   },[filter,cursor,attempt,spaceFilter]);
   function reset(value=filter){epoch.current++;setState('loading');setItems([]);setNext('');setCursor('');setPreview(null);setDeciding(null);setArchiving(null);setFilter(value);setAttempt(value=>value+1);}
   const resetAndRestore=(key:string)=>{pendingFocus.current=key;reset();};
@@ -61,6 +64,7 @@ function ScopedSubmissionInbox({scope,spaces,spaceFilter,initialState,syncRoute}
     {state==='loading'&&<p role="status">正在读取提交收件…</p>}
     {state==='ready'&&!items.length&&<div role="status" className="flex items-start gap-3 border-y border-border py-8"><Inbox className="mt-0.5 size-5 shrink-0 text-muted-foreground"/><div className="space-y-2"><p className="text-sm font-medium">当前范围没有匹配的提交收件。</p><p className="text-[13px] text-muted-foreground">Agent 交回成果后，可在这里检查固定版本并进行人工验收。</p></div></div>}
     {state==='stale'&&<p role="alert">提交收件分页已变化，请刷新从第一页读取。</p>}
+    {state==='offline'&&<p role="alert">当前离线，收件列表与预览已清除；联网后请手动刷新原提交，不会重复验收或归档。</p>}
     {state==='error'&&<p role="alert">提交收件读取失败，不能将失败当作空收件箱。</p>}
     {state==='unsupported'&&<p role="status">当前服务不提供新提交收件接口，请使用兼容入口。</p>}
     {state==='denied'&&<p role="alert">收件权限或范围已变化，列表与预览已清除。</p>}

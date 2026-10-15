@@ -43,7 +43,7 @@ export function GrantOverview({ spaces = [], scope }: { spaces?: Space[]; scope?
   const [cursor, setCursor] = useState('');
   const [next, setNext] = useState('');
   const [attempt, setAttempt] = useState(0);
-  const [state, setState] = useState<'loading' | 'ready' | 'error' | 'forbidden' | 'stale' | 'unsupported'>('loading');
+  const [state, setState] = useState<'loading' | 'ready' | 'error' | 'forbidden' | 'stale' | 'unsupported' | 'offline'>('loading');
   const [checking, setChecking] = useState('');
   const [reports, setReports] = useState<Record<string, GrantChecks>>({});
   const [notice, setNotice] = useState('');
@@ -67,7 +67,10 @@ export function GrantOverview({ spaces = [], scope }: { spaces?: Space[]; scope?
     const generation = ++epoch.current;
     checkController.current?.abort(); setChecking(''); setReports({}); setNotice(''); setState('loading');
     const invalidate = () => { controller.abort(); revoke(); };
+    const offline = () => { controller.abort(); revoke(); setState('offline'); };
     window.addEventListener('drivebridge-context', invalidate);
+    window.addEventListener('offline', offline);
+    if (!navigator.onLine) { offline(); return () => { controller.abort(); window.removeEventListener('drivebridge-context', invalidate); window.removeEventListener('offline', offline); }; }
     const filter: GrantOrganizationFilter = organizationView.kind === 'all' ? {} : organizationView.kind === 'group' ? { group_id: organizationView.id, order: 'pinned' } : organizationView.kind === 'pinned' ? { pinned: true, order: 'pinned' } : organizationView.kind === 'ungrouped' ? { ungrouped: true, order: 'pinned' } : { order: 'pinned' };
     if (grantState !== 'all') filter.state = grantState;
     listGrants(cursor, controller.signal, filter).then(page => {
@@ -82,7 +85,7 @@ export function GrantOverview({ spaces = [], scope }: { spaces?: Space[]; scope?
       else if (error.status === 404 || error.status === 405) { setGrants([]); setState('unsupported'); }
       else setState('error');
     });
-    return () => { controller.abort(); checkController.current?.abort(); epoch.current++; window.removeEventListener('drivebridge-context', invalidate); };
+    return () => { controller.abort(); checkController.current?.abort(); epoch.current++; window.removeEventListener('drivebridge-context', invalidate); window.removeEventListener('offline', offline); };
   }, [cursor, attempt, organizationView, grantState]);
   const selectOrganization = (view: OrganizationView) => {
     epoch.current++; checkController.current?.abort(); setGrants([]); setReports({}); setCursor(''); setNext(''); setState('loading'); setOrganizationView(view);
@@ -122,10 +125,11 @@ export function GrantOverview({ spaces = [], scope }: { spaces?: Space[]; scope?
       {scope && <Button ref={focusRef('create')} className="min-h-11 text-[13px] md:min-h-8" disabled={state !== 'ready'} onClick={() => setCreating(true)}><Plus className="size-4"/>接入 Agent</Button>}
     </>}/>
     <p className="m-0 text-[13px] text-muted-foreground">每个 Agent 有独立目录、动作与有效期。检查只观察本地配置，不执行任务或续期。</p>
-    {scope && state !== 'forbidden' && <GrantOrganizationNav key={attempt} selected={organizationView} onSelect={selectOrganization} onDenied={revoke}/>}
+    {scope && state !== 'forbidden' && state !== 'offline' && <GrantOrganizationNav key={attempt} selected={organizationView} onSelect={selectOrganization} onDenied={revoke}/>}
     {state !== 'forbidden' && <label className="flex max-w-sm items-center gap-3 text-[13px] text-muted-foreground"><span className="shrink-0">授权状态筛选</span><SelectAdapter className="min-h-11 md:min-h-8" aria-label="授权状态筛选" value={grantState} onChange={event => selectGrantState(event.target.value as GrantStateFilter)}><option value="all">全部状态</option>{Object.entries(states).map(([value,label]) => <option key={value} value={value}>{label}</option>)}</SelectAdapter></label>}
     {state === 'loading' && <p role="status">正在读取授权…</p>}
     {state === 'forbidden' && <p role="alert">访问权限已失效，授权与检查结果已清除。请重新确认当前账户与空间。</p>}
+    {state === 'offline' && <p role="alert">当前离线，授权与检查观察已清除；联网后请手动刷新，不会自动签发、轮转或检查。</p>}
     {state === 'unsupported' && <p role="status">当前服务尚未提供新授权列表，请切换到“旧版机器人授权”。</p>}
     {state === 'error' && <p role="alert">无法读取授权列表。请刷新重试，不将失败视为没有授权。</p>}
     {state === 'stale' && <p role="alert">分页已过期，请刷新授权后从第一页重新读取。</p>}

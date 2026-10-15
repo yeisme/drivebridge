@@ -15,14 +15,11 @@ import { api, type Space } from "../api";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
-import { SelectAdapter } from "../components/SelectAdapter";
 import { CapabilityGate, flowErrorText } from "./ConsumerFlows";
-import { clearActorDraft, readActorDraft, writeActorDraft } from "./compat";
 import {
   createFileThread,
   getDeliveryManifest,
   getPrivateNote,
-  prepareDeliveryManifest,
   previewNotePublication,
   publishDeliveryManifest,
   recordDeliveryReceipt,
@@ -32,13 +29,9 @@ import {
   type ReceiptKind,
 } from "./client";
 import { listFileThreads } from "../info-workspace/client";
-import { publishGuard, RECEIPT_GRADE_LABELS, type DeliveryManifestView, type ReceiptGrade } from "./model";
+import { publishGuard, RECEIPT_GRADE_LABELS, type DeliveryManifestView } from "./model";
+import { PrepareDelivery } from './PrepareDelivery';
 
-interface ShareRow {
-  id: string;
-  name: string;
-  revoked: boolean;
-}
 
 export function DeliverCenter({
   spaces,
@@ -49,9 +42,6 @@ export function DeliverCenter({
   capability: FlowCapability;
   actor: string;
 }) {
-  const [shares, setShares] = useState<ShareRow[]>([]);
-  const [shareId, setShareId] = useState("");
-  const [shareRevision, setShareRevision] = useState(1);
   const [manifest, setManifest] = useState<DeliveryManifestView | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -59,10 +49,6 @@ export function DeliverCenter({
   const [versionId, setVersionId] = useState("");
   const [reply, setReply] = useState("");
   const [note, setNote] = useState("");
-  // The idempotency key minted for the CURRENT unsent reply. It persists
-  // with the draft so a retry after a failure or lost response replays the
-  // same key (server-side key+fingerprint dedupe) instead of minting a new
-  // one that would duplicate the thread.
   const [threadKey, setThreadKey] = useState("");
   const [posting, setPosting] = useState(false);
   // retrying the SAME draft replays it, while editing the draft is a new
@@ -75,68 +61,42 @@ export function DeliverCenter({
   const receiptKeys = useRef(new Map<string, string>());
   const [receiptBusy, setReceiptBusy] = useState(false);
   const [threads, setThreads] = useState<{ thread_id: string; version_id: string; state: string }[]>([]);
+  const [readAttempt, setReadAttempt] = useState(0);
+  const [threadState, setThreadState] = useState<'idle' | 'loading' | 'ready' | 'error' | 'denied' | 'offline'>('idle');
+  const [noteState, setNoteState] = useState<'idle' | 'loading' | 'ready' | 'error' | 'denied' | 'offline'>('idle');
+  const [noteRevision, setNoteRevision] = useState<number | undefined>();
+  const noteDirty = useRef(false);
+  const noteGeneration = useRef(0);
+  const discussionController = useRef<AbortController | null>(null);
 
-  useEffect(() => {
-    api<ShareRow[]>("/shares")
-      .then((rows) => setShares(rows.filter((row) => !row.revoked)))
-      .catch((err) => setError(flowErrorText(err)));
-  }, []);
 
-  // Draft recovery: an unsent reply or note survives a failed post (and a
-  // reload) per the discussion contract; it is UI-only state. The unsent
-  // reply's idempotency key travels with it so a retry after reload still
-  // replays the same key.
+  // Draft text stays in memory. A failed read is never an empty note/thread list.
   useEffect(() => {
-    const draft = readActorDraft(localStorage, actor);
-    if (draft) {
-      setFileId(draft.file_id);
-      setVersionId(draft.version_id);
-      setReply(draft.reply);
-      setNote(draft.note);
-      if (draft.thread_key) setThreadKey(draft.thread_key);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (fileId) {
-      writeActorDraft(localStorage, actor, {
-        version: 2,
-        file_id: fileId,
-        version_id: versionId,
-        reply,
-        note,
-        saved_at: new Date().toISOString(),
-        ...(threadKey ? { thread_key: threadKey } : {}),
+    const request = new AbortController(); discussionController.current = request;
+    setThreads([]); setNotePreview(null); setThreadNotice('');
+    const invalidate = () => { request.abort(); setReply(''); setNote(''); setThreads([]); setNotePreview(null); setThreadKey(''); threadKeyFor.current = ''; setThreadState('denied'); setNoteState('denied'); };
+    const offline = () => { request.abort(); setThreads([]); setNotePreview(null); setThreadState('offline'); setNoteState('offline'); };
+    window.addEventListener('drivebridge-context', invalidate); window.addEventListener('offline', offline);
+    if (!fileId) { setThreadState('idle'); setNoteState('idle'); }
+    else if (!navigator.onLine) offline();
+    else {
+      setThreadState('loading'); setNoteState('loading');
+      listFileThreads(fileId, request.signal).then(rows => { if (!request.signal.aborted) { setThreads(rows.map(row => ({ thread_id: row.thread_id, version_id: row.version_id, state: row.state }))); setThreadState('ready'); } }).catch(error => {
+        if (request.signal.aborted) return;
+        const status = error && typeof error === 'object' && 'status' in error ? error.status : undefined;
+        if (status === 401 || status === 403) invalidate(); else setThreadState('error');
+      });
+      getPrivateNote(fileId, request.signal).then(view => { if (!request.signal.aborted) { if (!noteDirty.current) setNote(view?.body || ''); setNoteRevision(view?.revision); setNoteState('ready'); } }).catch(error => {
+        if (request.signal.aborted) return;
+        const status = error && typeof error === 'object' && 'status' in error ? error.status : undefined;
+        if (status === 401 || status === 403) invalidate();
+        else if (status === 404) { api<{ file: { id: string } }>('/files/' + encodeURIComponent(fileId), 'GET', undefined, {}, request.signal).then(value => { if (!request.signal.aborted && value.file?.id === fileId) { setNoteRevision(0); setNoteState('ready'); } }).catch(error => { if (request.signal.aborted) return; if (error?.status === 401 || error?.status === 403) invalidate(); else setNoteState('error'); }); }
+        else setNoteState('error');
       });
     }
-  }, [fileId, versionId, reply, note, threadKey]);
+    return () => { request.abort(); window.removeEventListener('drivebridge-context', invalidate); window.removeEventListener('offline', offline); };
+  }, [fileId, readAttempt]);
 
-  useEffect(() => {
-    if (!fileId) return;
-    listFileThreads(fileId)
-      .then((rows) => setThreads(rows.map((row) => ({ thread_id: row.thread_id, version_id: row.version_id, state: row.state }))))
-      .catch(() => setThreads([]));
-    void getPrivateNote(fileId)
-      .then((view) => {
-        if (view) setNote(view.body);
-      })
-      .catch(() => undefined);
-  }, [fileId]);
-
-  const prepare = async () => {
-    if (!shareId) return;
-    setBusy(true);
-    setError("");
-    try {
-      const key = crypto.randomUUID();
-      const view = await prepareDeliveryManifest(shareId, { snapshot_id: "share-current", expected_share_revision: shareRevision }, key);
-      setManifest(view);
-    } catch (err) {
-      setError(flowErrorText(err));
-    } finally {
-      setBusy(false);
-    }
-  };
 
   const publish = async () => {
     if (!manifest) return;
@@ -144,7 +104,10 @@ export function DeliverCenter({
     if (!guard.ok) return; // The button is disabled; this is a second guard.
     setBusy(true);
     try {
-      setManifest(await publishDeliveryManifest(manifest.share_id, manifest.manifest_revision));
+      const signal = discussionController.current?.signal;
+      if (!signal || signal.aborted || !navigator.onLine) return;
+      const value = await publishDeliveryManifest(manifest.share_id, manifest.manifest_revision, signal);
+      if (!signal.aborted) setManifest(value);
     } catch (err) {
       setError(flowErrorText(err));
     } finally {
@@ -155,7 +118,10 @@ export function DeliverCenter({
   const reloadManifest = async () => {
     if (!manifest) return;
     try {
-      setManifest(await getDeliveryManifest(manifest.share_id, manifest.manifest_revision));
+      const signal = discussionController.current?.signal;
+      if (!signal || signal.aborted || !navigator.onLine) return;
+      const value = await getDeliveryManifest(manifest.share_id, manifest.manifest_revision, signal);
+      if (!signal.aborted) setManifest(value);
     } catch (err) {
       setError(flowErrorText(err));
     }
@@ -202,14 +168,11 @@ export function DeliverCenter({
       threadKeyFor.current = contentKey;
     }
     try {
-      await createFileThread(fileId, { ...(versionId ? { version_id: versionId } : {}), body: reply }, key);
-      setReply("");
-      setThreadKey("");
-      threadKeyFor.current = "";
-      clearActorDraft(localStorage, actor);
-      setThreadNotice("讨论已发布到固定版本锚点。");
-      const rows = await listFileThreads(fileId);
-      setThreads(rows.map((row) => ({ thread_id: row.thread_id, version_id: row.version_id, state: row.state })));
+      const signal = discussionController.current?.signal;
+      if (!signal || signal.aborted || !navigator.onLine || threadState !== 'ready') return;
+      await createFileThread(fileId, { ...(versionId ? { version_id: versionId } : {}), body: reply }, key, signal);
+      if (signal.aborted) return;
+      setReply(''); setThreadKey(''); threadKeyFor.current = ''; setReadAttempt(value => value + 1); setThreadNotice('讨论已发布到固定版本锚点。');
     } catch (err) {
       // The draft AND its key stay in place for a retry; nothing is lost.
       setError(flowErrorText(err) + " 草稿已保留。");
@@ -220,7 +183,13 @@ export function DeliverCenter({
   const saveNote = async () => {
     if (!fileId) return;
     try {
-      await setPrivateNote(fileId, { body: note });
+      const signal = discussionController.current?.signal;
+      if (!signal || signal.aborted || !navigator.onLine || noteState !== 'ready') return;
+      const submittedGeneration = noteGeneration.current;
+      await setPrivateNote(fileId, { body: note, ...(noteRevision === undefined ? {} : { expected_revision: noteRevision }) }, signal);
+      if (signal.aborted) return;
+      if (noteGeneration.current === submittedGeneration) noteDirty.current = false;
+      setReadAttempt(value => value + 1);
       setThreadNotice("私人备注已保存（仅本人可见，且需保持文件权限）。");
     } catch (err) {
       setError(flowErrorText(err));
@@ -230,7 +199,10 @@ export function DeliverCenter({
   const previewNote = async () => {
     if (!fileId) return;
     try {
-      setNotePreview(await previewNotePublication(fileId));
+      const signal = discussionController.current?.signal;
+      if (!signal || signal.aborted || !navigator.onLine || noteState !== 'ready') return;
+      const value = await previewNotePublication(fileId, signal);
+      if (!signal.aborted) setNotePreview(value);
     } catch (err) {
       setError(flowErrorText(err));
     }
@@ -255,33 +227,7 @@ export function DeliverCenter({
         <div className="cf-card" data-region="delivery">
           <h3>固定交付清单</h3>
           <p className="cf-hint">发布仅在全部必需成员可读、摘要校验、清单提交且保留保护就绪后可用；缺项时不能发布不完整集合。</p>
-          <div className="cf-row">
-            <label className="cf-label" htmlFor="cf-share">
-              分享
-            </label>
-            <SelectAdapter id="cf-share" value={shareId} onChange={(event) => setShareId(event.target.value)} aria-label="选择分享">
-              <option value="">选择分享…</option>
-              {shares.map((row) => (
-                <option key={row.id} value={row.id}>
-                  {row.name}
-                </option>
-              ))}
-            </SelectAdapter>
-            <label className="cf-label" htmlFor="cf-share-rev">
-              期望分享版本
-            </label>
-            <Input
-              id="cf-share-rev"
-              type="number"
-              min={1}
-              value={shareRevision}
-              onChange={(event) => setShareRevision(Number(event.target.value) || 1)}
-              aria-label="期望分享版本"
-            />
-            <Button variant="default" type="button" disabled={!shareId || busy} onClick={() => void prepare()}>
-              {busy ? "准备中…" : "准备清单"}
-            </Button>
-          </div>
+          <PrepareDelivery actor={actor} spaces={spaces} onManifest={setManifest}/>
 
           {manifest && (
             <div data-region="manifest" data-phase={manifest.phase}>
@@ -336,11 +282,19 @@ export function DeliverCenter({
         <div className="cf-card" data-region="discussion">
           <h3>版本讨论与私人备注</h3>
           <p className="cf-hint">讨论锚定固定文件版本；旧版本讨论保留旧标记。正文为纯文本，最长 10000 字符。</p>
+          <p className="cf-hint">讨论和私人备注草稿仅保留在当前页面内存，不写入浏览器存储。</p>
+          {(threadState === 'loading' || noteState === 'loading') && <p role="status">正在读取当前文件的讨论与私人备注…</p>}
+          {threadState === 'error' && <p role="alert">讨论读取失败，不代表没有讨论。</p>}
+          {noteState === 'error' && <p role="alert">私人备注读取失败，不代表没有备注；已输入草稿保留，请重读后再保存。</p>}
+          {(threadState === 'denied' || noteState === 'denied') && <p role="alert">权限或范围已变化，讨论与私人备注已清除。</p>}
+          {(threadState === 'offline' || noteState === 'offline') && <p role="alert">当前离线，草稿保留在内存；联网后请手动重读，不会自动发布。</p>}
+          {fileId && <Button variant="outline" className="min-h-11" disabled={threadState === 'loading' || noteState === 'loading' || threadState === 'denied'} onClick={() => setReadAttempt(value => value + 1)}>重读讨论与私人备注</Button>}
+          {threadState === 'ready' && !threads.length && <p role="status">当前文件没有可见讨论。</p>}
           <div className="cf-row">
             <label className="cf-label" htmlFor="cf-file">
               文件 ID
             </label>
-            <Input id="cf-file" type="text" value={fileId} onChange={(event) => setFileId(event.target.value)} aria-label="文件 ID" />
+            <Input id="cf-file" type="text" value={fileId} onChange={event => { noteDirty.current = false; setNote(''); setReply(''); setThreadKey(''); setNoteRevision(undefined); discussionController.current?.abort(); setFileId(event.target.value); }} aria-label="文件 ID" />
             <label className="cf-label" htmlFor="cf-version">
               版本锚点
             </label>
@@ -358,7 +312,7 @@ export function DeliverCenter({
             onChange={(event) => setReply(event.target.value)}
             aria-label="讨论内容"
           />
-          <Button variant="default" type="button" disabled={posting} onClick={() => void postThread()}>
+          <Button variant="default" type="button" disabled={posting || threadState !== 'ready'} onClick={() => void postThread()}>
             发布讨论
           </Button>
           {threads.length > 0 && (
@@ -379,14 +333,14 @@ export function DeliverCenter({
             rows={3}
             maxLength={10000}
             value={note}
-            onChange={(event) => setNote(event.target.value)}
+            onChange={event => { noteGeneration.current++; noteDirty.current = true; setNote(event.target.value); setNotePreview(null); }}
             aria-label="私人备注"
           />
           <div className="cf-actions">
-            <Button variant="outline" type="button" onClick={() => void saveNote()}>
+            <Button variant="outline" type="button" disabled={noteState !== 'ready'} onClick={() => void saveNote()}>
               保存私人备注
             </Button>
-            <Button variant="outline" type="button" onClick={() => void previewNote()}>
+            <Button variant="outline" type="button" disabled={noteState !== 'ready'} onClick={() => void previewNote()}>
               公开前预览
             </Button>
           </div>

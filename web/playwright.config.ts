@@ -2,18 +2,18 @@ import { defineConfig } from "@playwright/test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-const cache = path.join(os.homedir(), ".cache/ms-playwright");
-const candidates = fs.existsSync(cache)
-  ? fs
-      .readdirSync(cache)
-      .filter((x) => /^chromium-\d+$/.test(x))
-      .sort()
-      .reverse()
-  : [];
+const browserRoots = [...new Set([
+  process.env.PLAYWRIGHT_BROWSERS_PATH && process.env.PLAYWRIGHT_BROWSERS_PATH !== "0" ? process.env.PLAYWRIGHT_BROWSERS_PATH : "",
+  path.join(os.homedir(), ".cache/ms-playwright"),
+].filter(Boolean))];
+const candidates = browserRoots.flatMap((root) => {
+  if (!fs.existsSync(root)) return [];
+  return fs.readdirSync(root).filter((x) => /^chromium-\d+$/.test(x)).map((x) => path.join(root, x));
+}).sort().reverse();
 const executable =
   process.env.PLAYWRIGHT_CHROMIUM ||
   candidates
-    .map((x) => path.join(cache, x, "chrome-linux64/chrome"))
+    .map((x) => path.join(x, "chrome-linux64/chrome"))
     .find((x) => fs.existsSync(x));
 const port = Number(process.env.DRIVEBRIDGE_TEST_PORT || 31878);
 const webDir = process.env.DRIVEBRIDGE_WEB_DIR

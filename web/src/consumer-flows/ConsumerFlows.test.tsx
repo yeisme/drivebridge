@@ -1,9 +1,10 @@
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ConsumerFlows, type CenterId } from "./ConsumerFlows";
 import { memoryRecoveryStore, type RecoveryStore } from "./compat";
 import { setDataContext, type Space, type UserIdentity } from "../api";
+const locks = Object.getOwnPropertyDescriptor(navigator, 'locks');
 // TestFPPlatformConsumers: page entry suite. The human entries are wired to
 // the real typed client behind per-center capability gates; old routes are
 // untouched (covered by the workspace suites).
@@ -30,20 +31,16 @@ function allAvailableHandler(extra?: (url: string, init?: RequestInit) => Respon
     const override = extra?.(url, init);
     if (override) return override;
     if (url.includes("/api/v1/operations/lookup")) return envelope({ found: false });
+    if (url.includes('/files/f-1')) return envelope({ ref: 'drivebridge://fixture/file/f-1/version/v-1', file: { id: 'f-1', space_id: 'sp-1', version_id: 'v-1' } });
+    if (url.includes('/references?')) return envelope({ ref: 'drivebridge://fixture/file/f-1/version/v-1', file: { id: 'f-1', space_id: 'sp-1', version_id: 'v-1' } });
     if (url.includes("/api/v1/spaces")) return envelope(spaces);
     return failure("not_found", 404);
   };
 }
 
 function renderFlows(over?: { initialCenter?: CenterId; store?: RecoveryStore }) {
-  return render(
-    <ConsumerFlows
-      user={user}
-      spaces={spaces}
-      initialCenter={over?.initialCenter}
-      store={over?.store ?? memoryRecoveryStore()}
-    />,
-  );
+  Object.defineProperty(navigator, 'locks', { configurable: true, value: { request: async (_name: string, options: LockOptions | (() => unknown), callback?: () => unknown) => typeof options === 'function' ? options() : callback!() } });
+  return render(<ConsumerFlows user={user} spaces={spaces} initialCenter={over?.initialCenter} store={over?.store ?? memoryRecoveryStore()}/>);
 }
 
 afterEach(() => {
@@ -51,6 +48,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   localStorage.clear();
   setDataContext("", "");
+  if (locks) Object.defineProperty(navigator, 'locks', locks); else Reflect.deleteProperty(navigator, 'locks');
 });
 
 describe("TestFPPlatformConsumers/page", () => {
@@ -200,8 +198,8 @@ describe("TestFPPlatformConsumers/page", () => {
     );
     renderFlows({ initialCenter: "organize" });
     await userEvent.type(await screen.findByLabelText("目录前缀"), "docs/");
-    await userEvent.click(screen.getByRole("button", { name: "物化快照" }));
-    await waitFor(() => expect(screen.getByText(/快照已固定/)).toBeTruthy());
+    await userEvent.click(screen.getByRole("button", { name: "固定所选文件" }));
+    await waitFor(() => expect(screen.getByText(/已固定 1 个文件版本/)).toBeTruthy());
     await userEvent.click(screen.getByRole("button", { name: "生成标签整理计划" }));
     await waitFor(() => expect(screen.getByText(/PLAN_ID/)).toBeTruthy());
     await userEvent.click(screen.getByRole("button", { name: "确认并执行" }));
@@ -212,6 +210,10 @@ describe("TestFPPlatformConsumers/page", () => {
       .spyOn(globalThis, "fetch")
       .mock.calls.filter(([input]) => String(input).includes("/confirm"));
     expect(confirmCalls).toHaveLength(1);
+    await userEvent.click(screen.getByRole('button', { name: '释放已拒绝请求并重新预览' }));
+    await screen.findByText(/原请求已明确拒绝/);
+    expect(screen.getByRole('button', { name: '固定所选文件' })).toHaveProperty('disabled', false);
+    expect(Object.values(localStorage).some(value => value.includes('organize_apply'))).toBe(false);
   });
 
   it("disables publishing incomplete deliveries and keeps the discussion draft on failure", async () => {
@@ -224,7 +226,9 @@ describe("TestFPPlatformConsumers/page", () => {
         if (url.includes("/delivery-manifests"))
           return envelope({ share_id: "SHARE_ID", manifest_revision: 1, phase: "verifying", required_items: 10, verified_items: 9, complete: false, retention_ready: true });
         if (url.includes("/api/v1/shares"))
-          return envelope([{ id: "SHARE_ID", name: "交付一批", mode: "fixed", audience: "user", path: "/", expires_at: "", revoked: false, allow_download: true }]);
+          return envelope([{ id: "SHARE_ID", name: "交付一批", revision: 3, revoked: false }]);
+        if (url.includes('/file-collections?')) return envelope([{ collection_id: 'COLLECTION_ID', name: 'Collection', space_id: 'sp-1' }]);
+        if (url.includes('/file-collections/COLLECTION_ID/snapshots')) return envelope({ collection_id: 'COLLECTION_ID', observed_at: '2026-01-01T00:00:00Z', items: [{ snapshot_id: 'a'.repeat(48), collection_revision: 1, created_at: '2026-01-01T00:00:00Z' }] });
         if (url.includes("/files/f-1/threads") && init?.method === "POST") {
           threadCalls++;
           return failure("revision_conflict", 409);
@@ -236,9 +240,12 @@ describe("TestFPPlatformConsumers/page", () => {
     );
     renderFlows({ initialCenter: "deliver" });
     const deliver = await screen.findByRole("tabpanel", { name: "交付与讨论" });
-    await userEvent.click(within(deliver).getByLabelText("选择分享"));
-    await userEvent.click(await screen.findByRole("option", { name: "交付一批" }));
-    await userEvent.click(screen.getByRole("button", { name: "准备清单" }));
+    await userEvent.click(screen.getByRole('button', { name: '读取分享与集合来源' }));
+    await userEvent.click(await screen.findByLabelText('选择分享'));
+    await userEvent.click(await screen.findByRole('option', { name: '交付一批 · 修订 3' }));
+    await userEvent.click(screen.getByLabelText('交付来源集合')); await userEvent.click(await screen.findByRole('option', { name: 'Collection' }));
+    await userEvent.click(await screen.findByLabelText('交付固定快照')); await userEvent.click(await screen.findByRole('option', { name: /修订 1/ }));
+    await userEvent.click(screen.getByRole('button', { name: '准备清单' }));
     await waitFor(() => expect(screen.getByText(/交付缺 1 项/)).toBeTruthy());
     expect((screen.getByRole("button", { name: "发布完整清单" }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getAllByText(/不能发布不完整集合/).length).toBeGreaterThan(1);
@@ -285,16 +292,14 @@ describe("TestFPPlatformConsumers/page", () => {
     );
     renderFlows({ initialCenter: "organize" });
     await userEvent.type(await screen.findByLabelText("目录前缀"), "docs/");
-    await userEvent.click(screen.getByRole("button", { name: "物化快照" }));
-    await waitFor(() => expect(screen.getByText(/快照已固定/)).toBeTruthy());
+    await userEvent.click(screen.getByRole("button", { name: "固定所选文件" }));
+    await waitFor(() => expect(screen.getByText(/已固定 1 个文件版本/)).toBeTruthy());
     await userEvent.click(screen.getByRole("button", { name: "生成移动计划" }));
     await waitFor(() => expect(screen.getByText(/PLAN_ID/)).toBeTruthy());
     await userEvent.click(screen.getByRole("button", { name: "确认并执行" }));
     await waitFor(() => expect(screen.getByText(/计划在预览后已发生变化/)).toBeTruthy());
-    await userEvent.click(screen.getByRole("button", { name: "重新预览" }));
-    await waitFor(() => expect(planPosts.length).toBe(2));
-    // The re-previewed plan carries the SAME action kind the user chose.
-    expect((planPosts[1].actions as { kind: string }[])[0].kind).toBe("move");
+    await userEvent.click(screen.getByRole("button", { name: "查询原整理请求" }));
+    expect(planPosts).toHaveLength(1);
     expect((planPosts[0].actions as { kind: string }[])[0].kind).toBe("move");
   });
 
@@ -358,10 +363,51 @@ describe("TestFPPlatformConsumers/page", () => {
     );
     const { container } = renderFlows({ initialCenter: "organize" });
     await userEvent.type(await screen.findByLabelText("目录前缀"), "docs/");
-    await userEvent.click(screen.getByRole("button", { name: "物化快照" }));
-    await waitFor(() => expect(screen.getByText(/快照已固定/)).toBeTruthy());
+    await userEvent.click(screen.getByRole("button", { name: "固定所选文件" }));
+    await waitFor(() => expect(screen.getByText(/已固定 1 个文件版本/)).toBeTruthy());
     // Guidance, no error banner.
-    await waitFor(() => expect(screen.getByText(/整理策略未配置/)).toBeTruthy());
     expect(container.querySelector(".banner.error")).toBeNull();
   });
+});
+
+it('keeps an independent center usable when another capability check fails', async () => {
+  mockFetch(allAvailableHandler((url, init) => {
+    if (url.includes('/operations/lookup') && JSON.parse(String(init?.body)).action === 'delivery_prepare') return failure('invalid_request', 400);
+    return undefined;
+  }));
+  const actor = userEvent.setup(); renderFlows({ initialCenter: 'deliver' });
+  await screen.findByText('无法确认流程能力');
+  await actor.click(screen.getByRole('tab', { name: '整理中心' }));
+  await screen.findByRole('button', { name: '固定所选文件' });
+  expect(screen.queryByText('无法确认流程能力')).toBeNull();
+});
+
+it('manually rereads the exact directory prefix after reconnect and denies stale observations', async () => {
+  setDataContext('', 'sp-1'); let forbidden = false;
+  const fetch = mockFetch(allAvailableHandler(url => {
+    if (url.includes('/file-queries')) return forbidden ? failure('forbidden', 403) : envelope({ mode: 'exact', items: [{ file_id: 'f-1', version_id: 'v-1' }], coverage: 'complete', next_cursor: null });
+    if (url.includes('/organization-policy')) return failure('not_found', 404);
+    return undefined;
+  }));
+  renderFlows({ initialCenter: 'organize' });
+  await userEvent.type(await screen.findByLabelText('目录前缀'), 'docs/'); fireEvent(window, new Event('offline')); fireEvent(window, new Event('online'));
+  const before = fetch.mock.calls.length; expect(screen.getByRole('button', { name: '固定所选文件' })).toHaveProperty('disabled', true); expect(fetch).toHaveBeenCalledTimes(before);
+  await userEvent.click(screen.getByRole('button', { name: '联网后重新读取固定文件' }));
+  await screen.findByText(/已固定 1 个文件版本/);
+  const query = fetch.mock.calls.find(([url]) => String(url).includes('/file-queries'))!;
+  expect(JSON.parse(String(query[1]?.body)).filters).toEqual([{ field: 'path_prefix', op: 'prefix', value: 'docs/' }]);
+  expect(screen.getByRole('button', { name: '生成标签整理计划' })).toHaveProperty('disabled', false);
+  forbidden = true; await userEvent.click(screen.getByRole('button', { name: '固定所选文件' }));
+  await screen.findByText(/权限或范围已变化，整理信息已清除/);
+  expect(screen.queryByRole('button', { name: '生成标签整理计划' })).toBeNull();
+});
+it('retains only a deterministic rejected intent marker across a center remount', async () => {
+  const slot = 'drivebridge:organize:' + JSON.stringify([location.origin, user.id, '', '', 'sp-1']);
+  const key = 'organize-' + 'a'.repeat(48);
+  localStorage.setItem(slot, JSON.stringify({ key, action: 'organize_apply', plan: 'plan', revision: 2 })); localStorage.setItem(slot + ':rejected', key);
+  mockFetch(allAvailableHandler()); renderFlows({ initialCenter: 'organize' });
+  await userEvent.click(await screen.findByRole('button', { name: '释放已拒绝请求并重新预览' }));
+  await screen.findByText(/原请求已明确拒绝/);
+  expect(localStorage.getItem(slot)).toBeNull(); expect(localStorage.getItem(slot + ':rejected')).toBeNull();
+  expect(screen.getByRole('button', { name: '固定所选文件' })).toHaveProperty('disabled', false);
 });

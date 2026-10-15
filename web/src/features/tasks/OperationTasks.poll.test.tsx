@@ -1,3 +1,4 @@
+/// <reference lib="es2024.promise" />
 import { act,cleanup,fireEvent,render,screen } from '@testing-library/react';
 import { afterEach,beforeEach,expect,it,vi } from 'vitest';
 import fixtures from '../../../../contracts/personal-workspace/fixtures/responses.json';
@@ -44,4 +45,10 @@ it('pauses in background and rechecks identity on foreground',async()=>{
 });
 it('pauses polling while viewing detail or accumulating additional cursor pages',async()=>{
  const fetch=vi.spyOn(globalThis,'fetch').mockResolvedValueOnce(json({data:{...page.data,next_cursor:'page2'}})).mockResolvedValueOnce(json(fixtures.OperationTaskDetailEnvelope)).mockResolvedValueOnce(json({data:{...page.data,items:[]}}));render(<OperationTasks scope={scope}/>);await tick(0);fireEvent.click(screen.getByRole('button',{name:'查看原操作详情 operation-fixture'}));await tick(0);await tick(60000);expect(fetch).toHaveBeenCalledTimes(2);fireEvent.click(screen.getByRole('button',{name:'关闭操作详情'}));fireEvent.click(screen.getByRole('button',{name:'更多操作任务'}));await tick(0);await tick(60000);expect(fetch).toHaveBeenCalledTimes(3);expect(fetch.mock.calls[2][0]).toContain('cursor=page2');
+});
+it('does not repopulate a late poll after offline and requires manual refresh', async () => {
+  const gate = Promise.withResolvers<Response>();
+  const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(json(page)).mockResolvedValueOnce(json(me)).mockImplementationOnce(() => gate.promise).mockResolvedValueOnce(json(page));
+  render(<OperationTasks scope={scope}/>); await tick(0); await tick(2000); fireEvent(window, new Event('offline')); await tick(0); expect(screen.getByText(/当前离线，任务观察已清除/)).toBeTruthy(); gate.resolve(json(page)); await tick(0); expect(screen.queryByText('Synthetic upload')).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: '刷新操作投影' })); await tick(0); expect(fetch).toHaveBeenCalledTimes(4);
 });

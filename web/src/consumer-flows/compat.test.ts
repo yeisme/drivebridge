@@ -1,11 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  clearActorDraft,
-  clearDraft,
-  draftKeyFor,
-  DRAFT_KEY,
   memoryRecoveryStore,
-  migrateFlowDraft,
   migrateRecoveryRecord,
   normalizeContentQuery,
   normalizeDeliveryManifest,
@@ -14,11 +9,6 @@ import {
   normalizeOrganizationPlan,
   normalizeUploadBatch,
   normalizeUploadBatchItems,
-  readActorDraft,
-  readDraft,
-  validDraftBody,
-  writeActorDraft,
-  writeDraft,
 } from "./compat";
 import type { RecoveryIdentity, RecoveryRecord } from "./model";
 
@@ -41,6 +31,10 @@ const record = (over: Partial<RecoveryRecord> = {}): RecoveryRecord => ({
   batch_id: "batch-9",
   saved_at: "2026-09-25T00:00:00Z",
   ...over,
+});
+
+it('preserves organization plan lookup resource identity', () => {
+  expect(normalizeLookupResult({ found: true, resource_id: 'plan-original', resource_type: 'organization_plan', status: 'previewed' })).toMatchObject({ found: true, resource_id: 'plan-original', resource_type: 'organization_plan', status: 'previewed' });
 });
 
 describe("TestFPPlatformConsumers/compat", () => {
@@ -109,27 +103,6 @@ describe("TestFPPlatformConsumers/compat", () => {
     expect(migrateRecoveryRecord({ actor: "", action: "a", idempotency_key: "k" }, "i")).toBeNull();
   });
 
-  it("isolates actor-scoped drafts and carries the unsent reply's idempotency key", async () => {
-    const storage = new Map<string, string>();
-    const shim = {
-      getItem: (key: string) => storage.get(key) ?? null,
-      setItem: (key: string, value: string) => void storage.set(key, value),
-      removeItem: (key: string) => void storage.delete(key),
-    };
-    writeActorDraft(shim, "user-a", { version: 2, file_id: "f-1", version_id: "v-1", reply: "请确认这个版本的标题。", note: "n", saved_at: "t", thread_key: "key-1" });
-    // Another account on the same browser sees nothing of user-a's draft.
-    expect(readActorDraft(shim, "user-b")).toBeNull();
-    const mine = readActorDraft(shim, "user-a");
-    expect(mine?.reply).toBe("请确认这个版本的标题。");
-    expect(mine?.thread_key).toBe("key-1");
-    // The old global key stays untouched (migration source for older
-    // sessions) and clearing one actor leaves the other intact.
-    writeActorDraft(shim, "user-b", { version: 2, file_id: "f-2", version_id: "", reply: "b", note: "", saved_at: "t" });
-    clearActorDraft(shim, "user-a");
-    expect(readActorDraft(shim, "user-a")).toBeNull();
-    expect(readActorDraft(shim, "user-b")?.reply).toBe("b");
-    expect(draftKeyFor("user-a")).toBe(DRAFT_KEY + ":user-a");
-  });
 
   it("isolates the recovery store by identity scope and clears on identity switch", async () => {
     const store = memoryRecoveryStore();
@@ -154,29 +127,4 @@ describe("TestFPPlatformConsumers/compat", () => {
     expect(await store.list(identity())).toEqual([]);
   });
 
-  it("keeps flow drafts readable across the v1 migration and enforces the body cap", () => {
-    expect(migrateFlowDraft({ file_id: "f-1", reply: "请确认这个版本的标题。" })).toEqual({
-      version: 2,
-      file_id: "f-1",
-      version_id: "",
-      reply: "请确认这个版本的标题。",
-      note: "",
-      saved_at: "",
-    });
-    expect(migrateFlowDraft({ version: 7, file_id: "f" })).toBeNull();
-    expect(migrateFlowDraft({ version: 2, reply: "x" })).toBeNull();
-    expect(validDraftBody("a".repeat(10000))).toBe(true);
-    expect(validDraftBody("a".repeat(10001))).toBe(false);
-    const storage = new Map<string, string>();
-    const shim = {
-      getItem: (key: string) => storage.get(key) ?? null,
-      setItem: (key: string, value: string) => void storage.set(key, value),
-      removeItem: (key: string) => void storage.delete(key),
-    };
-    writeDraft(shim, { version: 2, file_id: "f-1", version_id: "v-1", reply: "r", note: "n", saved_at: "t" });
-    expect(readDraft(shim)).toEqual({ version: 2, file_id: "f-1", version_id: "v-1", reply: "r", note: "n", saved_at: "t" });
-    expect(storage.has(DRAFT_KEY)).toBe(true);
-    clearDraft(shim);
-    expect(readDraft(shim)).toBeNull();
-  });
 });

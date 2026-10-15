@@ -7,6 +7,8 @@ import { invocationDateBounds, type InvocationDateZone } from './invocation-date
 import { SelectAdapter } from '../../components/SelectAdapter';
 import type { components } from '../../generated/personal-workspace';
 import { AgentInvocationDetail } from './AgentInvocationDetail';
+import { poll } from '../../app/poll';
+import { verifySessionIdentity } from '../../app/session';
 
 type Page = components['schemas']['InvocationPageEnvelope']['data'];
 const results = { unknown: '结果未知', denied: '请求被拒绝', succeeded: '成功', partial: '部分完成', failed: '失败' };
@@ -15,12 +17,19 @@ const date = (value: unknown): value is string => typeof value === 'string' && v
 function valid(page: Page, agent: string, filter: string, cursor: string) {
   return page && page.coverage === 'best_effort' && page.total === null && page.total_kind === 'unknown' && date(page.observed_at) && typeof page.next_cursor === 'string' && page.next_cursor.length <= 16384 && (!cursor || page.next_cursor !== cursor) && Array.isArray(page.items) && page.items.length <= 50 && new Set(page.items.map(row => row?.invocation_id)).size === page.items.length && page.items.every(row => row && text(row.invocation_id) && row.agent_id === agent && text(row.grant_id) && ['http', 'mcp'].includes(row.protocol) && text(row.action) && text(row.request_id) && Object.hasOwn(results, row.result) && (filter === 'all' || row.result === filter) && date(row.started_at) && (row.finished_at === null || date(row.finished_at) && Date.parse(row.finished_at) >= Date.parse(row.started_at)) && Array.isArray(row.resource_refs) && row.resource_refs.length === 0 && !row.operation_ref && (row.error_code === undefined || typeof row.error_code === 'string' && row.error_code.length <= 128));
 }
+function sessionIdentity(scope: string): { instance: string; user: string } | null {
+  try {
+    const value: unknown = JSON.parse(scope);
+    if (Array.isArray(value) && value.length === 4 && typeof value[0] === 'string' && typeof value[1] === 'string' && value[0] && value[1]) return { instance: value[0], user: value[1] };
+  } catch { /* malformed scopes remain manual-only */ }
+  return null;
+}
 
 export function AgentInvocations({ agent, scope, onDenied }: { agent: string; scope: string; onDenied: () => void }) {
   // A changed trusted identity remounts the entire view, including pending pages.
-  return <InvocationList key={JSON.stringify([scope, agent])} agent={agent} onDenied={onDenied}/>;
+  return <InvocationList key={JSON.stringify([scope, agent])} agent={agent} scope={scope} onDenied={onDenied}/>;
 }
-function InvocationList({ agent, onDenied }: { agent: string; onDenied: () => void }) {
+function InvocationList({ agent, scope, onDenied }: { agent: string; scope: string; onDenied: () => void }) {
   const [items, setItems] = useState<Page['items']>([]);
   const [observedAt, setObservedAt] = useState('');
   const [cursor, setCursor] = useState(''), [next, setNext] = useState('');
@@ -33,10 +42,11 @@ function InvocationList({ agent, onDenied }: { agent: string; onDenied: () => vo
   const localZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const [state, setState] = useState<'loading' | 'ready' | 'error' | 'stale' | 'denied' | 'offline' | 'unsupported'>('loading');
   const denied = useRef(onDenied); denied.current = onDenied;
+  const itemsRef = useRef<Page['items']>([]);
   useEffect(() => {
     const controller = new AbortController();
     setState('loading');
-    const clear = (reason: 'denied' | 'offline') => { controller.abort(); setItems([]); setNext(''); setState(reason); };
+    const clear = (reason: 'denied' | 'offline') => { controller.abort(); itemsRef.current = []; setItems([]); setNext(''); setState(reason); };
     const invalidate = () => clear('denied'), offline = () => clear('offline');
     window.addEventListener('drivebridge-context', invalidate); window.addEventListener('offline', offline);
     if (navigator.onLine === false) offline();
@@ -49,7 +59,9 @@ function InvocationList({ agent, onDenied }: { agent: string; onDenied: () => vo
     if (!controller.signal.aborted) api<Page>(`/agent-invocations?${query}`, 'GET', undefined, {}, controller.signal).then(page => {
       if (controller.signal.aborted) return;
       if (!valid(page, agent, filter, cursor)) throw new Error('invalid_contract');
-      setItems(previous => cursor ? [...new Map([...previous, ...page.items].map(row => [row.invocation_id, row])).values()] : page.items);
+      const nextItems = cursor ? [...new Map([...itemsRef.current, ...page.items].map(row => [row.invocation_id, row])).values()] : page.items;
+      itemsRef.current = nextItems;
+      setItems(nextItems);
       setObservedAt(page.observed_at); setNext(page.next_cursor); setState('ready');
     }).catch((error: { status?: number }) => {
       if (controller.signal.aborted) return;
@@ -59,7 +71,28 @@ function InvocationList({ agent, onDenied }: { agent: string; onDenied: () => vo
     });
     return () => { controller.abort(); window.removeEventListener('drivebridge-context', invalidate); window.removeEventListener('offline', offline); };
   }, [agent, cursor, filter, attempt, bounds, order]);
-  const refresh = () => { setItems([]); setCursor(''); setNext(''); setAttempt(value => value + 1); };
+  useEffect(() => {
+    if (state !== 'ready' || cursor) return;
+    const identity = sessionIdentity(scope);
+    if (!identity) return;
+    return poll(
+      async signal => {
+        const query = new URLSearchParams({ agent_id: agent, limit: '50' });
+        if (filter !== 'all') query.set('result', filter);
+        if (order === 'started_desc') query.set('order', order);
+        if (bounds.after) query.set(bounds.inclusive ? 'started_at_or_after' : 'started_after', bounds.after);
+        if (bounds.before) query.set('started_before', bounds.before);
+        const page = await api<Page>(`/agent-invocations?${query}`, 'GET', undefined, {}, signal);
+        if (!valid(page, agent, filter, '')) throw new Error('invalid_contract');
+        return page;
+      },
+      page => { itemsRef.current = page.items; setItems(page.items); setObservedAt(page.observed_at); },
+      () => itemsRef.current.some(row => row.finished_at === null) ? 2000 : 30000,
+      () => { itemsRef.current = []; setItems([]); setNext(''); setState('denied'); denied.current(); },
+      signal => verifySessionIdentity(identity.user, identity.instance, signal),
+    );
+  }, [agent, scope, cursor, filter, bounds, order, state]);
+  const refresh = () => { itemsRef.current = []; setItems([]); setCursor(''); setNext(''); setAttempt(value => value + 1); };
   function applyTime() {
     if (state === 'denied') return;
     try { const value = invocationBounds(after, before); setBounds({ ...value, inclusive: false, zone: '' }); setTimeError(''); setDateError(''); refresh(); }

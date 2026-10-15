@@ -12,6 +12,7 @@ export function LabelSuggestionEntry(props:{file:string;version:string;scope:str
 const isOffline=()=>navigator.onLine===false;
 type Phase='loading'|'ready'|'confirm'|'busy'|'unknown'|'done'|'conflict'|'denied'|'offline'|'error';
 export function LabelSuggestions({file,version,scope,readOnly=false}:{file:string;version:string;scope:string;readOnly?:boolean}){
+ const sectionRef=useRef<HTMLElement>(null);
  const slot=suggestionSlot(scope,file,version);
  const [phase,setPhase]=useState<Phase>('loading'),[items,setItems]=useState<Suggestion[]>([]),[next,setNext]=useState('');
  const [choices,setChoices]=useState<Record<string,string[]>>({}),[intent,setIntent]=useState<SuggestionIntent|null>(null),[observed,setObserved]=useState(false);
@@ -34,6 +35,9 @@ export function LabelSuggestions({file,version,scope,readOnly=false}:{file:strin
   async function load(){try{const saved=readSuggestionIntent(slot);if(saved&&saved.body.base_version_id!==version)throw new Error('invalid_recovery');setIntent(saved);await page('',abort.signal);if(active.current&&!abort.signal.aborted)setPhase(saved?'unknown':'ready');}catch(error){if(active.current&&!abort.signal.aborted){setItems([]);setPhase([401,403].includes((error as {status:number}).status)?'denied':'error');}}}
   if(isOffline())offline();else void load();return()=>{invalidate();window.removeEventListener('drivebridge-context',invalidate);window.removeEventListener('storage',storage);window.removeEventListener('offline',offline);};
  },[slot]);
+ useEffect(()=>{
+  if(['offline','denied','error','conflict'].includes(phase)&&document.activeElement===document.body) sectionRef.current?.focus();
+ },[phase]);
  function propose(suggestion:Suggestion,decision:'accept'|'reject'){
   const labels=decision==='accept'?(choices[suggestion.suggestion_id]||[]):[];
   if(readOnly||suggestion.state!=='pending'||(decision==='accept'&&!labels.length))return;
@@ -70,7 +74,7 @@ export function LabelSuggestions({file,version,scope,readOnly=false}:{file:strin
   }finally{running.current=false;}
  }
  async function acknowledge(){if(!intent||!active.current||running.current)return;running.current=true;try{await clearSuggestionIntent(slot,intent);if(active.current){setIntent(null);setDraft(null);setChoices({});setPhase('ready');setMessage('原决定已确认。采纳只追加所选人工标签，不删除已有人工标签。');}}catch{if(active.current)setMessage('恢复记录未清除，请稍后确认。');}finally{running.current=false;}}
- return <section aria-label="固定版本标签建议" className="space-y-3 border-t border-border pt-4">
+ return <section ref={sectionRef} tabIndex={-1} aria-label="固定版本标签建议" className="space-y-3 border-t border-border pt-4 focus-visible:outline-2 focus-visible:outline-ring">
   <h3 className="text-sm font-semibold">Agent 标签建议</h3>
   <p className="break-all text-xs text-muted-foreground">版本 {version}。建议不等于人工标签；采纳仅追加所选子集，保留已有人工标签。</p>
   {message&&<p role="alert" className="text-sm">{message}</p>}

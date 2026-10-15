@@ -494,7 +494,7 @@ function App() {
   }
   async function uploadFiles(list: File[], target: { resume?: Operation; version?: DriveFile } = {}) {
     if (readOnly) { setError("当前为只读访问，请在管理与授权中心申请修改。"); return; }
-    if (!currentSpace?.connection_id) {
+    if (currentSpace && !currentSpace.connection_id) {
       setError("请先在存储连接页为个人空间绑定存储");
       return;
     }
@@ -581,12 +581,12 @@ function App() {
   />;
   return (
     <WorkspaceShell mobile={mobile} collapsed={sidebarCollapsed} focused={driveFocused}>
-      {!mobile && <aside className="sidebar shrink-0 overflow-hidden border-0 p-0 group-data-[collapsed=true]/shell:p-0">
-        <a href="#" className="brand flex h-16 shrink-0 items-center gap-2 px-3 text-[15px] tracking-normal group-data-[collapsed=true]/shell:justify-center group-data-[collapsed=true]/shell:px-0" onClick={driveHome} aria-label="DriveBridge">
+      {!mobile && <aside className="sidebar db-pine-nav db-docked-navigation shrink-0 overflow-hidden border-0 p-0 group-data-[collapsed=true]/shell:p-0">
+        <a href="#" className="brand db-nav-brand flex h-16 shrink-0 items-center gap-2 px-3 text-[15px] tracking-normal group-data-[collapsed=true]/shell:justify-center group-data-[collapsed=true]/shell:px-0" onClick={driveHome} aria-label="DriveBridge">
           <span className="brandmark">
             <BrandMark size={32} />
           </span>
-          <span className="brand-name">DriveBridge</span>
+          <span className="db-nav-identity"><strong className="brand-name">DriveBridge</strong><span className="brand-subtitle">个人空间</span></span>
         </a>
         <DesktopNavigation groups={navGroups} items={navigation} page={page} title={title}
           pendingCount={pendingTaskCount} inviteCount={inviteCount}
@@ -619,7 +619,7 @@ function App() {
           <Button variant="ghost" type="submit" className="transfer-dock" onClick={() => navigateLegacyPage("transfers")} aria-label="打开交付中心"><ArrowUpDown size={17} /><span>{ops.filter(o => !["completed", "cancelled"].includes(o.status)).length} 项传输</span></Button>
         </header>
 
-        <section className={`content ${teamDetail ? "team-detail-content" : ""} ${page === "knowledge" ? "p-0 overflow-hidden" : ""} ${page === "files" && driveOpen && currentSpace ? "drive-content max-md:p-3" : ""}`}>
+        <section className={`content ${page !== "knowledge" && !(page === "files" && driveOpen) && !teamDetail ? "workspace-page-content" : ""} ${teamDetail ? "team-detail-content" : ""} ${page === "knowledge" ? "p-0 overflow-hidden" : ""} ${page === "files" && driveOpen && currentSpace ? "drive-content max-md:p-3" : ""}`}>
           <h1 className="sr-only">{title}</h1>
           {error && (
             <div className="banner error app-toast" role="alert">
@@ -1433,7 +1433,7 @@ function App() {
                 e.preventDefault();
                 const f = new FormData(e.currentTarget);
                 void act(async () => {
-                  if (!currentSpace?.connection_id) {
+                  if (currentSpace && !currentSpace.connection_id) {
                     await api("/spaces/" + space + "/bind", "POST", {
                       connection_id: driveConnection,
                     });
@@ -1450,11 +1450,11 @@ function App() {
               }}
             >
               <p>
-                {currentSpace?.connection_id
+                {!currentSpace ? "为此存储创建一个文件空间。" : currentSpace.connection_id
                   ? "当前空间的存储绑定不可变，可创建一个新空间。"
                   : "将此存储绑定到你的个人空间。"}
               </p>
-              {currentSpace?.connection_id && (
+              {(!currentSpace || currentSpace.connection_id) && (
                 <label>
                   新空间名称
                   <Input name="name" required />

@@ -55,31 +55,21 @@ export function ConsumerFlows({
   const [center, setCenter] = useState<CenterId>(initialCenter);
   useEffect(() => { setCenter(initialCenter); }, [initialCenter]);
   const [capabilities, setCapabilities] = useState<Capabilities>(PROBING);
-  const [probeError, setProbeError] = useState<unknown>(null);
+  const [probeErrors, setProbeErrors] = useState<Partial<Record<CenterId, unknown>>>({});
   const [probeEpoch, setProbeEpoch] = useState(0);
   const space = getDataContext().space || spaces[0]?.id || "";
   useEffect(() => {
     const controller = new AbortController();
     setCapabilities(PROBING);
-    setProbeError(null);
-    void (async () => {
+    setProbeErrors({});
+    void Promise.all(CENTERS.map(async entry => {
       try {
-        const entries = await Promise.all(
-          CENTERS.map(async (entry) => {
-            try {
-              return [entry.id, await probeFlowCapability(entry.action, controller.signal)] as const;
-            } catch (error) {
-              if (controller.signal.aborted) return [entry.id, "checking"] as const;
-              throw error;
-            }
-          }),
-        );
-        if (controller.signal.aborted) return;
-        setCapabilities(Object.fromEntries(entries) as Capabilities);
+        const capability = await probeFlowCapability(entry.action, controller.signal);
+        if (!controller.signal.aborted) setCapabilities(value => ({ ...value, [entry.id]: capability }));
       } catch (error) {
-        if (!controller.signal.aborted) setProbeError(error);
+        if (!controller.signal.aborted) setProbeErrors(value => ({ ...value, [entry.id]: error }));
       }
-    })();
+    }));
     // A tenant/space switch voids every in-flight probe (the shared api()
     // helper aborts them): re-probe under the new context instead of
     // showing a stale or half-loaded gate.
@@ -107,6 +97,7 @@ export function ConsumerFlows({
     onCenterChange?.(next);
   };
 
+  const probeError = probeErrors[center];
   return (
     <div className="cf-page" data-center={center}>
       <div className="cf-tabs" role="tablist" aria-label="文件流程视图">
@@ -151,7 +142,7 @@ export function ConsumerFlows({
           {center === "upload" && (
             <UploadCenter user={user} space={space} capability={capabilities.upload} store={activeStore} />
           )}
-          {center === "organize" && <OrganizeCenter space={space} capability={capabilities.organize} />}
+          {center === "organize" && <OrganizeCenter space={space} capability={capabilities.organize} actor={user.id} />}
           {center === "deliver" && <DeliverCenter spaces={spaces} capability={capabilities.deliver} actor={user.id} />}
         </div>
       )}

@@ -62,6 +62,7 @@ func newRootCommand(c *cli) *cobra.Command {
 		newPlatformConnectCommand(c),
 		newUsersCommand(c),
 		newGovernanceCommand(c),
+		newSpacesCommand(c),
 		newBlobCommand(c),
 		newHandoffBindingCommand(c),
 		newHandoffCommand(c),

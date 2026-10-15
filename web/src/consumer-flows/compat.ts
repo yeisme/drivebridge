@@ -88,6 +88,9 @@ export function normalizeLookupResult(raw: unknown): OperationLookupResult {
     found: asBoolean(raw.found) ?? false,
     batch_id: asString(raw.batch_id),
     operation_id: asString(raw.operation_id),
+    ...(asString(raw.resource_id) ? { resource_id: asString(raw.resource_id) } : {}),
+    ...(asString(raw.resource_type) ? { resource_type: asString(raw.resource_type) } : {}),
+    ...(asString(raw.status) ? { status: asString(raw.status) } : {}),
     result_certainty: asString(raw.result_certainty) ?? "unknown",
     recovery_action: asString(raw.recovery_action),
   };
@@ -367,114 +370,6 @@ function withStore<T>(
   });
 }
 
-// ---------------------------------------------------------------------------
-// Flow drafts: UI-only unsent bodies (discussion reply, private note). Same
-// versioning discipline as the information workspace draft.
-// ---------------------------------------------------------------------------
-
-export interface FlowDraft {
-  version: 2;
-  file_id: string;
-  version_id: string;
-  reply: string;
-  note: string;
-  saved_at: string;
-  // Idempotency key minted for the CURRENT unsent reply. It travels with the
-  // draft so a retry after a lost response replays the same key and the
-  // server dedupes by key+fingerprint instead of creating a second thread.
-  thread_key?: string;
-}
-
-export const DRAFT_KEY = "drivebridge:consumer-flows:draft";
-const BODY_MAX = 10000; // Thread body contract cap.
-
-export function validDraftBody(body: string): boolean {
-  return body.length <= BODY_MAX;
-}
-
-// v1 drafts ({file_id, reply} without version anchor) keep their reference;
-// drafts from an unknown future version are discarded rather than guessed at.
-export function migrateFlowDraft(raw: unknown): FlowDraft | null {
-  if (!isRecord(raw)) return null;
-  if (raw.version === 2) {
-    const fileId = asString(raw.file_id);
-    if (!fileId) return null;
-    return {
-      version: 2,
-      file_id: fileId,
-      version_id: asString(raw.version_id) ?? "",
-      reply: typeof raw.reply === "string" ? raw.reply : "",
-      note: typeof raw.note === "string" ? raw.note : "",
-      saved_at: asString(raw.saved_at) ?? "",
-      thread_key: asString(raw.thread_key),
-    };
-  }
-  if (raw.version !== undefined) return null;
-  const fileId = asString(raw.file_id);
-  if (!fileId) return null;
-  return {
-    version: 2,
-    file_id: fileId,
-    version_id: asString(raw.version_id) ?? "",
-    reply: typeof raw.reply === "string" ? raw.reply : "",
-    note: "",
-    saved_at: "",
-  };
-}
-
-export function readDraft(storage: Pick<Storage, "getItem">): FlowDraft | null {
-  try {
-    return migrateFlowDraft(JSON.parse(storage.getItem(DRAFT_KEY) || ""));
-  } catch {
-    return null;
-  }
-}
-
-export function writeDraft(storage: Pick<Storage, "setItem">, draft: FlowDraft): void {
-  try {
-    storage.setItem(DRAFT_KEY, JSON.stringify(draft));
-  } catch {
-    /* Drafts are best-effort; a full quota must not block the flow. */
-  }
-}
-export function clearDraft(storage: Pick<Storage, "removeItem">): void {
-  try {
-    storage.removeItem(DRAFT_KEY);
-  } catch {
-    /* Drafts are best-effort; a full quota must not block the flow. */
-  }
-}
-
-// Drafts are scoped per actor: switching accounts on a shared browser must
-// not expose another user's unsent bodies. The actor suffix keeps every
-// identity's draft under its own key.
-export function draftKeyFor(actor: string): string {
-  return DRAFT_KEY + ":" + actor;
-}
-
-export function readActorDraft(storage: Pick<Storage, "getItem">, actor: string): FlowDraft | null {
-  try {
-    return migrateFlowDraft(JSON.parse(storage.getItem(draftKeyFor(actor)) || ""));
-  } catch {
-    return null;
-  }
-}
-
-export function writeActorDraft(storage: Pick<Storage, "setItem">, actor: string, draft: FlowDraft): void {
-  try {
-    storage.setItem(draftKeyFor(actor), JSON.stringify(draft));
-  } catch {
-    /* Drafts are best-effort; a full quota must not block the flow. */
-  }
-}
-
-export function clearActorDraft(storage: Pick<Storage, "removeItem">, actor: string): void {
-  try {
-    storage.removeItem(draftKeyFor(actor));
-  } catch {
-    /* Same as above. */
-  }
-}
 
 // Called on the logout success path, BEFORE the page reloads: the recovery
 // records and drafts scoped to the current identity are removed so the next
@@ -484,7 +379,6 @@ export async function purgeLocalFlowState(actor: string): Promise<void> {
   try {
     const store = openRecoveryStore(location.origin);
     await store.clearIdentity({ instance: location.origin, actor, space: getDataContext().space });
-    localStorage.removeItem(draftKeyFor(actor));
   } catch {
     /* Logout proceeds even if local cleanup fails. */
   }

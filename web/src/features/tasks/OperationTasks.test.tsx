@@ -1,3 +1,4 @@
+/// <reference lib="es2024.promise" />
 import { cleanup,fireEvent,render,screen,waitFor } from '@testing-library/react';
 import { afterEach,expect,it,vi } from 'vitest';
 import fixtures from '../../../../contracts/personal-workspace/fixtures/responses.json';
@@ -58,4 +59,15 @@ it.each([403,429,503,404])('distinguishes unavailable status %s from an empty li
 });
 it('rejects missing progress fields rather than rendering undefined as a known value',async()=>{
  vi.spyOn(globalThis,'fetch').mockResolvedValueOnce(json({data:{...page.data,items:[{...task,progress:{}}]}}));render(<OperationTasks scope="alice"/>);await screen.findByText(/操作投影不可用/);
+});
+it('clears the task projection and reports offline without treating it as empty',async()=>{
+ const gate=Promise.withResolvers<Response>();
+ const fetch=vi.spyOn(globalThis,'fetch').mockImplementationOnce(()=>gate.promise);
+ render(<OperationTasks scope="alice"/>);
+ await waitFor(()=>expect(fetch).toHaveBeenCalled());
+ fireEvent(window,new Event('offline'));
+ await screen.findByText(/当前离线，任务观察已清除/);
+ expect(screen.queryByText('当前没有匹配的任务')).toBeNull();
+ gate.resolve(json(page));
+ await waitFor(()=>expect(screen.queryByText('Synthetic upload')).toBeNull());
 });

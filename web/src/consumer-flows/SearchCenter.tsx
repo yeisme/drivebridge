@@ -8,6 +8,7 @@
 // observation time are shown as returned — never coerced. Late responses
 // from a switched tenant/space context are dropped by revision guard.
 
+import { Search, Files } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { latestRequest } from "../app/latest-request";
 import { getDataContext, type Space } from "../api";
@@ -180,8 +181,8 @@ export function SearchCenter({
             {error}
           </div>
         )}
-        <div className="flex min-w-0 flex-col gap-3 rounded-lg border border-border bg-card p-4" data-region="query">
-          <div className="inline-flex max-w-full flex-wrap rounded-md border border-border" role="radiogroup" aria-label="检索口径">
+        <form onSubmit={event => { event.preventDefault(); if (state !== "loading") void run(); }} className="flex min-w-0 flex-col gap-5 rounded-xl border border-border bg-card p-5 sm:p-6" data-region="query">
+          <div className="inline-flex w-fit max-w-full flex-wrap gap-1 rounded-lg bg-muted p-1" role="radiogroup" aria-label="检索口径">
             <Button variant="ghost" type="button" role="radio" aria-checked={mode === "exact"} className="aria-checked:bg-accent aria-checked:font-semibold" onClick={() => { invalidateQuery(); setMode("exact"); }}>
               精确元数据
             </Button>
@@ -190,14 +191,16 @@ export function SearchCenter({
             </Button>
           </div>
           {mode === "discovery" && <CapabilityGate capability={capability} action="content_query">{null}</CapabilityGate>}
-          <Input
+          <label className="flex flex-col gap-2 text-sm font-medium">{mode === "exact" ? "文件名或路径" : "想查找的内容"}
+          <div className="relative"><Search aria-hidden="true" className="pointer-events-none absolute left-3 top-3.5 size-5 text-muted-foreground"/><Input
+            className="h-12 pl-11 text-base"
             ref={searchInput}
             type="search"
             value={text}
             onChange={(event) => { invalidateQuery(); setText(event.target.value); }}
             placeholder={mode === "exact" ? "按文件路径中的字面文本检索" : "按内容语义检索，例如：雨天街道的镜头"}
             aria-label="检索条件"
-          />
+          /></div></label>
           {mode === "discovery" && (
             <fieldset className="cf-modalities">
               <legend>模态</legend>
@@ -224,9 +227,9 @@ export function SearchCenter({
             <Button variant="outline" type="button" disabled={saving || mode !== "exact" || blocked === "denied"} onClick={() => void save()}>
               {saving ? "正在保存…" : "保存条件"}
             </Button>
-            <Button variant="ghost" className="min-h-11 md:min-h-8" disabled={blocked === "denied"} aria-expanded={showSaved} onClick={() => setShowSaved(value => !value)}>{showSaved ? '关闭已保存条件' : '查看已保存条件'}</Button>
+            <Button type="button" variant="ghost" className="min-h-11 md:min-h-8" disabled={blocked === "denied"} aria-expanded={showSaved} onClick={() => setShowSaved(value => !value)}>{showSaved ? '关闭已保存条件' : '查看已保存条件'}</Button>
           </div>
-          {savedSpaces && <p className="m-0 text-xs leading-5 text-muted-foreground">当前使用已保存的 {savedSpaces.length} 个空间；修改文本仍保留此范围。<Button variant="ghost" className="min-h-11" onClick={() => { invalidateQuery(); setSavedSpaces(null); }}>改用当前空间范围</Button></p>}
+          {savedSpaces && <p className="m-0 text-xs leading-5 text-muted-foreground">当前使用已保存的 {savedSpaces.length} 个空间；修改文本仍保留此范围。<Button type="button" variant="ghost" className="min-h-11" onClick={() => { invalidateQuery(); setSavedSpaces(null); }}>改用当前空间范围</Button></p>}
           {mode === "discovery" && <p className="m-0 text-xs leading-5 text-muted-foreground">内容发现条件尚不支持保存；不会降级保存为元数据查询。</p>}
           {mode === "exact" && <p className="m-0 text-xs leading-5 text-muted-foreground">查询整个文件路径的字面子串，不查询正文或标签。保存条件只记录查询，不授予文件权限。</p>}
           {saved && (
@@ -234,11 +237,11 @@ export function SearchCenter({
               {saved}
             </p>
           )}
-        </div>
+        </form>
 
         {showSaved && <SavedSearches onSelect={query => { invalidateQuery(); setMode("exact"); setText(query.text); setModalities([]); setSavedSpaces(query.spaces); setShowSaved(false); searchInput.current?.focus(); }} onDenied={() => { requests.current.cancel(); clearResults(); setState("error"); setBlocked("denied"); }}/>}
         {selected && <SearchFileReference key={selected.file + ":" + selected.version} file={selected.file} version={selected.version} close={() => { setSelected(null); resultTrigger.current?.focus(); }} onDenied={() => { requests.current.cancel(); clearResults(); setState("error"); setBlocked("denied"); }}/>}
-        {state === "idle" && <p role="status">输入检索条件后开始查询，尚未读取搜索结果。</p>}
+        {state === "idle" && <div role="status" className="flex min-h-56 flex-col items-center justify-center gap-3 px-5 py-10 text-center"><Files aria-hidden="true" className="size-8 text-muted-foreground"/><h3 className="m-0 text-base font-medium">从一个文件名开始</h3><p className="m-0 max-w-md text-sm leading-6 text-muted-foreground">输入检索条件后开始查询，尚未读取搜索结果。</p><p className="m-0 text-xs text-muted-foreground">只显示你有权访问的文件；打开时会再次核对权限。</p></div>}
         {state === "loading" && <p role="status">正在检索，请等待结果；发送请求不代表已找到文件。</p>}
         {state === "ready" && groups && (
           <div className="cf-results">

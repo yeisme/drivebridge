@@ -25,7 +25,7 @@ export function FlowPage({ page, tab, tenant, user, spaces, onNavigate }: {
     history.replaceState(null, "", location.pathname + location.search + route.hash);
     onNavigate(route.page, next);
   };
-  if (page === "search") return <div className="min-w-0 space-y-4">
+  if (page === "search") return <div className="min-w-0 space-y-6">
     <WorkspacePageHeader title="搜索" description="查找授权范围内的固定版本文件。元数据与内容发现分别展示。" actions={<Button type="button" variant="ghost" className="min-h-11 md:min-h-8" onClick={() => navigate("upload")}>打开文件流程</Button>}/>
     <SearchWorkspace spaces={spaces}/>
   </div>;

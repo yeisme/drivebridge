@@ -47,7 +47,6 @@ it('keeps the original space and issues no request when the shared dirty guard r
   const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
   function ActiveDraft() { useRouteLeaveGuard(true, 'draft'); return null; }
   render(<><ActiveDraft/><CollectionsPage {...props} spaces={[...props.spaces, { ...props.spaces[0], id: 'other', name: 'Other space' }]}/></>);
-  await screen.findByText('当前授权空间没有集合。');
   await user.click(screen.getByRole('combobox', { name: '集合空间' }));
   await user.click(screen.getByRole('option', { name: 'Other space' }));
   expect(confirm).toHaveBeenCalledTimes(1); expect(fetch).toHaveBeenCalledTimes(1);
@@ -84,5 +83,5 @@ it('member revocation clears list and blocks refresh', async () => {
 });
 it('scope remount does not retain earlier collections', async () => {
   const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(json([row])).mockResolvedValueOnce(json([])); const view = render(<CollectionsPage {...props}/>); await screen.findByRole('listitem');
-  view.rerender(<CollectionsPage {...props} scope="bob"/>); await waitFor(() => expect(screen.queryByRole('listitem')).toBeNull()); await screen.findByText('当前授权空间没有集合。'); expect(fetch).toHaveBeenCalledTimes(2);
+  view.rerender(<CollectionsPage {...props} scope="bob"/>); await waitFor(() => expect(screen.queryByRole('listitem')).toBeNull()); expect(fetch).toHaveBeenCalledTimes(2);
 });

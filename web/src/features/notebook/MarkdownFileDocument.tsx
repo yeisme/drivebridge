@@ -25,6 +25,12 @@ export function MarkdownFileDocument(props: Props) {
 }
 function FileDocumentSession({ identity, actor, draft, onDraft, onSaved, onRevoked, editablePane = false }: Props) {
   const [attempt, setAttempt] = useState(0);
+  const [online, setOnline] = useState(navigator.onLine);
+  useEffect(() => {
+    const offline = () => { setOnline(false); controller.current?.abort(); submitted.current = false; setStatus("unknown"); setPreview(undefined); setMessage("当前离线，草稿保留在内存，保存已暂停；联网后请重新读取并鉴权。"); };
+    window.addEventListener("offline", offline);
+    return () => window.removeEventListener("offline", offline);
+  }, []);
   const [result, setResult] = useState<{ body: string } | { error: NotebookReadError }>();
   const [capability, setCapability] = useState<DocumentCapability>();
   const [preview, setPreview] = useState<SaveIntent>();
@@ -56,6 +62,8 @@ function FileDocumentSession({ identity, actor, draft, onDraft, onSaved, onRevok
   useEffect(() => {
     const request = new AbortController(); controller.current = request;
     setResult(undefined); setCapability(undefined);
+    setOnline(navigator.onLine);
+    if (!navigator.onLine) return () => request.abort();
     let recoveryAvailable = true;
     if (recoveryKey && editablePane) {
       try {
@@ -195,16 +203,31 @@ function FileDocumentSession({ identity, actor, draft, onDraft, onSaved, onRevok
       else { setStatus("error"); setMessage("无法读取可编辑的当前固定版本，草稿保留；请重试，不会发送新的保存。"); }
     } finally { submitted.current = false; }
   };
-  if (!result) return <p role="status" className="p-4">正在读取固定版本…</p>;
+  const reauthenticate = async () => {
+    if (!navigator.onLine || submitted.current) return;
+    const request = new AbortController(); controller.current = request; submitted.current = true;
+    try {
+      const next = await documentCapability(identity, request.signal);
+      if (request.signal.aborted) return;
+      if (next.file_id !== identity.objectId || next.reason === "forbidden") { revoke(); return; }
+      await readMarkdownFile(identity, request.signal);
+      if (request.signal.aborted) return;
+      setCapability(next); setOnline(true); setStatus(pendingKey ? "unknown" : "idle"); setMessage(pendingKey ? "已重新鉴权，草稿和原保存身份保留；请查询原保存结果。" : "已重新鉴权，内存草稿保留，请预览后保存。");
+    } catch (error) { if (!request.signal.aborted) handleFailure(error); } finally { submitted.current = false; }
+  };
+  if (!result) return online
+    ? <p role="status" className="p-4">正在读取固定版本…</p>
+    : <div role="alert" className="p-4"><p>当前离线，固定版本读取已暂停；联网后请手动重新读取。</p><Button type="button" variant="outline" className="min-h-11" onClick={() => { if (navigator.onLine) setAttempt(value => value + 1); }}>重新读取固定版本</Button></div>;
   if ("error" in result) {
     const messages = { forbidden: "访问权限已失效，正文已清除。", stale: "此固定版本不可用，请返回文件列表重新选择。", unsupported: "当前来源或正文大小不支持在线阅读。", error: "无法读取正文，请重试。" };
     return <div role="alert" className="p-4"><p>{messages[result.error.state]}</p>{result.error.state === "error" && <Button type="button" variant="outline" onClick={() => setAttempt(value => value + 1)}>重试</Button>}</div>;
   }
   const value = localDraft ?? draft;
   const historical = Boolean(capability && capability.version_id !== identity.revision);
-  const editable = Boolean(editablePane && capability?.editable && !historical && onDraft && onSaved && !pendingKey && !canRebase && status !== "saving");
+  const editable = Boolean(online && editablePane && capability?.editable && !historical && onDraft && onSaved && !pendingKey && !canRebase && status !== "saving");
   const dirty = value !== undefined && value !== result.body;
   return <>
+    {!online && <Button type="button" variant="outline" className="min-h-11" onClick={() => void reauthenticate()}>保留草稿并重新鉴权</Button>}
     {pendingKey && <div role="status" className="flex flex-wrap items-center gap-2 border-b p-2 text-sm"><span>{message || "有一个待确认的保存请求。"}</span><Button type="button" variant="outline" disabled={status === "saving"} onClick={() => void recover()}>查询原保存结果</Button>{canResend && <Button type="button" variant="outline" onClick={() => void submit()}>继续原保存</Button>}</div>}
     {message && !pendingKey && <p role="alert" className="p-2 text-sm">{message}</p>}
     {canRebase && !pendingKey && <div className="border-b p-2"><Button type="button" variant="outline" disabled={status === "saving"} onClick={() => void loadMerge()}>读取当前版本并人工合并</Button></div>}

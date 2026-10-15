@@ -1,3 +1,4 @@
+import { EmptyState } from "../../components/EmptyState";
 import { useEffect, useRef, useState } from 'react';
 import { api, type Space } from '../../api';
 import { Button } from '../../components/ui/button';
@@ -62,7 +63,7 @@ function ResourceList({ spaces, scope }: { spaces: Space[]; scope: string }) {
       <Button ref={refreshTrigger} variant="outline" className="min-h-11 self-end" disabled={state === 'loading'} onClick={refresh}>刷新资源库</Button>
     </div>}
     {state === 'loading' && <p role="status">读取资源描述…</p>}
-    {state === 'ready' && !items.length && <p role="status">当前范围与筛选下没有可见资源描述；原文件和集合不会自动变成已登记资源。</p>}
+    {state === 'ready' && !items.length && <div role="status"><EmptyState title="还没有匹配的资源" description="当前范围与筛选下没有可见资源描述；原文件和集合不会自动变成已登记资源。"/></div>}
     {state === 'stale' && <p role="alert">资源分页已过期，旧结果已清除，请刷新重读。</p>}
     {state === 'error' && <p role="alert">资源描述不可用、超预算或合同不匹配，不代表没有资源。</p>}
     {state === 'unsupported' && <p role="status">当前服务尚未开放资源描述列表。</p>}

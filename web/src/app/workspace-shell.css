@@ -4,3 +4,71 @@
 @import "../finder.css";
 @import "../workspace-layout.css";
 @import "../finder-browser.css";
+
+/* OpenDesign current-product baseline: Pine navigation + inset workspace. */
+@layer components {
+  .db-pine-workspace {
+    --nav-canvas: oklch(0.305 0.048 165);
+    --nav-canvas-top: oklch(0.318 0.049 165);
+    --nav-canvas-bottom: oklch(0.290 0.046 165);
+    --nav-fg: oklch(0.900 0.020 150);
+    --nav-strong: oklch(0.965 0.010 131.4);
+    --nav-muted: oklch(0.760 0.035 158);
+    --nav-icon: oklch(0.820 0.030 158);
+    --nav-accent: oklch(0.812 0.095 161.2);
+    --nav-selected: oklch(0.38 0.048 165);
+    --nav-hover: oklch(1 0 0 / .06);
+    --nav-press: oklch(1 0 0 / .09);
+    --nav-edge: oklch(1 0 0 / .06);
+    --nav-ring: oklch(0.812 0.095 161.2);
+    background: var(--nav-canvas);
+  }
+  .db-pine-workspace .db-workspace-content {
+    margin: 8px 8px 8px 0;
+    border-radius: 12px;
+    background: var(--surface-page, var(--ui-background));
+    box-shadow: 0 1px 2px rgb(23 54 39 / 30%), 0 16px 40px rgb(23 54 39 / 30%);
+  }
+  .db-pine-workspace .db-pine-nav {
+    width: 184px;
+    background: var(--nav-canvas);
+    color: var(--nav-fg);
+    --text-default: var(--nav-fg);
+    --text-strong: var(--nav-strong);
+    --text-muted: var(--nav-muted);
+    --ui-ring: var(--nav-ring);
+    --navigation-muted: var(--nav-muted);
+    --navigation-hover: var(--nav-hover);
+    --navigation-selected: var(--nav-selected);
+  }
+  .db-pine-workspace.sidebar-collapsed .db-pine-nav {
+    flex-basis: 56px;
+    width: 56px;
+  }
+  .db-pine-workspace .db-nav-brand { height: 64px; padding: 0 12px; }
+  .db-pine-workspace .db-nav-brand .brandmark { flex: 0 0 32px; }
+  .db-pine-workspace .db-nav-identity { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
+  .db-pine-workspace .db-nav-identity > strong { color: var(--nav-strong); font: 650 15px/20px var(--font-display, inherit); }
+  .db-pine-workspace .db-nav-identity > span { color: var(--nav-muted); font-size: 11px; line-height: 16px; }
+  .db-pine-workspace .db-pine-nav-menu { padding-inline: 14px; }
+  .db-pine-workspace.sidebar-collapsed .db-nav-brand { justify-content: center; padding-inline: 0; }
+  .db-pine-workspace.sidebar-collapsed .db-nav-identity { display: none; }
+  .db-pine-workspace.sidebar-collapsed .db-pine-nav-menu { padding-inline: 6px; }
+  .db-pine-workspace .db-nav-group { margin-bottom: 12px; }
+  .db-pine-workspace .db-nav-group-toggle { min-height: 44px; padding-inline: 11px; border-radius: 8px; color: var(--nav-muted); }
+  .db-pine-workspace .db-nav-group-toggle:hover { background: var(--nav-hover); color: var(--nav-strong); }
+  .db-pine-workspace .db-nav-item { min-height: 36px; height: 36px; margin-bottom: 2px; padding-inline: 11px 8px; border-radius: 6px; color: var(--nav-fg); }
+  .db-pine-workspace .db-nav-item > svg { color: var(--nav-icon); }
+  .db-pine-workspace .db-nav-item[aria-current="page"] { background: var(--nav-selected); color: var(--nav-strong); font-weight: 600; }
+  .db-pine-workspace .db-nav-item[aria-current="page"] > svg { color: var(--nav-strong); }
+  .db-pine-workspace .brand-subtitle { display: block; }
+  .db-pine-workspace .storage-meter { min-height: 44px; border-top: 1px solid var(--nav-edge); border-radius: 9px; }
+  .db-pine-workspace .profile { min-height: 44px; border-radius: 9px; }
+  .db-pine-workspace .sidebar-toggle { color: var(--nav-fg); }
+  @media (max-width: 767px) {
+    .db-pine-workspace .db-workspace-content { margin: 0; border-radius: 0; box-shadow: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .db-pine-workspace *, .db-pine-workspace *::before, .db-pine-workspace *::after { transition: none !important; animation: none !important; }
+  }
+}

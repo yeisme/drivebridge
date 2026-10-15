@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "tsc --noEmit && vite build",
-    "test": "python3 scripts/check.py -- pnpm exec vitest run",
+    "test": "python3 scripts/check.py -- pnpm exec vitest run --no-file-parallelism",
     "test:e2e": "python3 scripts/check.py -- pnpm exec playwright test",
     "typecheck": "node scripts/check-ui.mjs && tsc --noEmit",
     "check:ui": "node scripts/check-ui.mjs",

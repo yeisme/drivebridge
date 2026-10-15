@@ -1,3 +1,4 @@
+import { EmptyState } from "../../components/EmptyState";
 import { useEffect, useRef, useState } from 'react';
 import { api, type Space } from '../../api';
 import { confirmRouteLeave } from '../../app/route-leave';
@@ -22,7 +23,7 @@ function ScopedCollections({ scope, spaces }: { scope: string; spaces: Space[] }
   const space = spaces.some(item => item.id === chosen) ? chosen : spaces[0]?.id || '';
   return <section aria-label="项目集合" className="min-w-0 space-y-4">
     <WorkspacePageHeader title="项目集合" description="引用原文件组织项目，不移动或复制原目录。当前成员与固定快照分别查看。"/>
-    {!space ? <p role="status">当前范围没有可用空间。</p> : <><label className="grid max-w-sm gap-2 text-[13px] text-muted-foreground">集合空间<SelectAdapter aria-label="集合空间" className="min-h-11 md:min-h-8" value={space} onChange={event => { const next = event.target.value; if (next !== space && confirmRouteLeave()) setChosen(next); }}>{spaces.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</SelectAdapter></label><CollectionList key={space} scope={scope} space={space} spaces={spaces} spaceName={spaces.find(item => item.id === space)!.name}/></>}
+    {!space ? <div role="status"><EmptyState title="先选择可用的文件空间" description="当前范围没有可用空间。"/></div> : <><label className="grid max-w-sm gap-2 text-[13px] text-muted-foreground">集合空间<SelectAdapter aria-label="集合空间" className="min-h-11 md:min-h-8" value={space} onChange={event => { const next = event.target.value; if (next !== space && confirmRouteLeave()) setChosen(next); }}>{spaces.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</SelectAdapter></label><CollectionList key={space} scope={scope} space={space} spaces={spaces} spaceName={spaces.find(item => item.id === space)!.name}/></>}
   </section>;
 }
 function CollectionList({ scope, space, spaceName, spaces }: { scope: string; space: string; spaceName: string; spaces: Space[] }) {
@@ -59,7 +60,7 @@ function CollectionList({ scope, space, spaceName, spaces }: { scope: string; sp
     {history && <SnapshotHistory key={history} id={history} denied={deny} close={() => { setHistory(null); historyTrigger.current?.focus(); }}/ >}
     {snapshotting && <CreateSnapshotDialog key={snapshotting} scope={JSON.stringify([scope, space])} id={snapshotting} denied={deny} close={() => { setSnapshotting(null); snapshotTrigger.current?.focus(); }}/ >}
     {state === 'loading' && <p role="status">读取授权集合…</p>}
-    {state === 'ready' && !rows.length && <p role="status">当前授权空间没有集合。</p>}
+    {state === 'ready' && !rows.length && <div role="status"><EmptyState title="把相关文件组织成集合" description="当前授权空间没有集合。使用上方入口创建集合，原文件仍保留在原目录。"/></div>}
     {state === 'error' && <p role="alert">集合列表不可用、超预算或合同不匹配，不代表空列表。</p>}
     {state === 'unsupported' && <p role="alert">当前服务未提供此集合列表或目标不可见。</p>}
     {state === 'denied' && <p role="alert">权限或范围变化，集合及正文已清除，请重新进入。</p>}

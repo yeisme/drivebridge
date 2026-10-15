@@ -20,7 +20,7 @@ export function SearchWorkspace({ spaces }: { spaces: Space[] }) {
     return () => controller.abort();
   }, [attempt]);
   return <>
-    {failed && <div role="alert" className="space-y-2 text-sm"><p>无法读取内容发现能力，请重试；元数据查询仍会独立鉴权。</p><Button type="button" variant="outline" className="max-md:min-h-11" onClick={() => setAttempt(value => value + 1)}>重试</Button></div>}
+    {failed && <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground"><p>无法读取内容发现能力，请重试；元数据查询仍会独立鉴权。</p><Button type="button" variant="outline" className="max-md:min-h-11" onClick={() => setAttempt(value => value + 1)}>重试</Button></div>}
     <SearchCenter spaces={spaces} capability={capability}/>
   </>;
 }

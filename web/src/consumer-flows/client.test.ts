@@ -216,6 +216,22 @@ describe("TestFPPlatformConsumers/client", () => {
     await expect(probeFlowCapability("content_query")).rejects.toThrow("internal_error");
   });
 
+  it.each([
+    ['upload_batch_create', { space_id: '', conflict_policy: 'fail' }],
+    ['content_query', { mode: 'exact', space_ids: [] }],
+    ['organize_plan', { refs: [], actions: [], source_snapshot_id: '', policy_id: '' }],
+    ['delivery_prepare', { share_id: '', snapshot_id: '', expected_share_revision: 0 }],
+  ])('uses the exact read-only lookup shape for %s', async (action, original) => {
+    const fetcher = mockFetch(() => envelope({ found: false }));
+    await expect(probeFlowCapability(action as string)).resolves.toBe('available');
+    expect(JSON.parse(String(fetcher.mock.calls[0][1]?.body))).toEqual({ action, idempotency_key: expect.stringMatching(/^drivebridge-web-readonly-probe-/), original_request: original });
+    expect(fetcher.mock.calls[0][0]).toContain('/operations/lookup');
+  });
+  it('reports an invalid lookup contract instead of declaring the surface unsupported', async () => {
+    mockFetch(() => failure('invalid_request', 400));
+    await expect(probeFlowCapability('organize_plan')).rejects.toThrow('invalid_request');
+  });
+
   it("reads the organization policy by its revision field and treats an absent policy as null", async () => {
     // Drift D8: the contract view carries `revision` (the client used to read
     // policy_revision and render 0), and a space without a policy answers

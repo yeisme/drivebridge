@@ -1,3 +1,4 @@
+/// <reference lib="es2024.promise" />
 import { afterEach, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { KnowledgePage } from "./KnowledgePage";
@@ -45,6 +46,8 @@ it("unmounts all private panes when a document reports access revocation", async
   await screen.findByText("访问权限已失效，笔记内容已清除。请重新登录或切换来源。");
   expect(screen.queryByLabelText("笔记工作台")).toBeNull();
   expect(screen.queryByText("固定正文 a")).toBeNull();
+  expect(screen.queryByText('页面树与新建父页面')).toBeNull();
+  expect(screen.queryByRole('dialog', { name: '新建笔记' })).toBeNull();
   expect(readKnowledgeFiles).toHaveBeenCalledTimes(1);
 });
 it("does not treat a cursor expiry as an empty library", async () => {
@@ -56,4 +59,15 @@ it("does not treat a cursor expiry as an empty library", async () => {
   fireEvent.click(screen.getByRole("button", { name: "重新查询" }));
   await waitFor(() => expect(readKnowledgeFiles).toHaveBeenLastCalledWith("s", null, expect.any(AbortSignal)));
   await screen.findByText("当前来源没有可阅读的 Markdown 文件。");
+});
+it('keeps offline distinct from an empty library and discards late directory results', async () => {
+  const gate = Promise.withResolvers<{ entries: typeof entry[]; nextCursor: null; scanned: number; unavailable: number; stale: number }>();
+  vi.mocked(readKnowledgeFiles).mockReturnValueOnce(gate.promise);
+  render(<KnowledgePage actor="a" spaces={spaces}/>);
+  await waitFor(() => expect(readKnowledgeFiles).toHaveBeenCalled());
+  fireEvent(window, new Event('offline'));
+  await screen.findByText(/当前离线，目录仅为上次观察/);
+  gate.resolve({ entries: [entry], nextCursor: null, scanned: 1, unavailable: 0, stale: 0 });
+  await waitFor(() => expect(screen.queryByText('当前来源没有可阅读的 Markdown 文件。')).toBeNull());
+  expect(screen.queryByLabelText('笔记工作台')).toBeNull();
 });

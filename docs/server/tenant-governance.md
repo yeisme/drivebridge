@@ -1,5 +1,22 @@
 # 多租户、团队与管理授权
 
+## 自托管管理员直接读写（2026-10-12）
+
+部署者可显式使用 `drivebridge-server serve --enabled --admin-direct-write`，让人类管理员直接读写其已有管理范围。平台管理员覆盖平台可管理租户，租户和团队管理员仍限于各自范围；停用用户、停权角色、停用租户和归档团队仍受原有校验。此开关不把 Agent 令牌升级为管理员，也不授予第三方服务身份额外权限。默认不开启时，下文的管理只读与审批流程保持原样。
+
+开启后，平台管理员即使没有租户成员记录，也能进入所选有效租户的工作区。管理员自己创建的个人空间按本人空间处理；管理他人空间的连接凭据、身份和 Agent 签发仍使用各自的权限边界。Web 从服务端的 `admin_direct_write` 读取状态，不通过隐藏按钮替代服务端授权。
+
+## 移除历史空间
+
+停止 HTTP 服务及 worker 并备份后，使用精确空间 ID：
+
+```bash
+drivebridge-server --state /absolute/private-state backup --output /absolute/new-backup
+drivebridge-server --state /absolute/private-state spaces retire --id SPACE_ID --offline --json
+```
+
+命令在事务中移除正常查询可见的空间，取消 `awaiting_upload`、释放预约、撤销该空间的 Agent 授权和分享。未知执行中的操作会拒绝整批移除，必须先对账。重复执行不会创建第二次移除事件。历史版本字节、元数据和审计保留用于恢复，不执行云端物理清除。使用包含本能力的服务版本继续运行；旧二进制不理解移除标记，不能直接降级打开新状态。
+
 DriveBridge 可在单个部署内管理多个隔离租户。平台最高管理员读取全平台，租户管理员读取本租户，team 管理员读取本团队空间；个人空间不会因为加入 team 而暴露给 team 管理员。凭据明文始终不属于管理读取内容。
 
 ## 启用与迁移

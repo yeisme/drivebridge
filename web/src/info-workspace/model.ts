@@ -120,7 +120,7 @@ export interface AnalyticsQueryResult {
 export interface FileQueryRequest {
   mode: "exact";
   space_ids?: string[];
-  filters?: QueryFilter[];
+  filters?: (QueryFilter | { field: "path_prefix"; op: "prefix"; value: string })[];
   sort?: { field: string; direction: "asc" | "desc" }[];
   limit?: number;
   cursor?: string | null;

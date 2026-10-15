@@ -119,11 +119,11 @@ export function FinderMenu({
     >
       {items.map((item, index) =>
         isMenuAction(item) ? (
-          <Button variant="ghost" type="submit"
+          <Button variant="ghost" type="button"
             role="menuitem"
             key={item.label}
             disabled={item.disabled}
-            className={item.danger ? "danger" : ""}
+            className={`w-full justify-between gap-4 text-left ${item.danger ? "danger" : ""}`}
             aria-keyshortcuts={item.shortcut}
             onClick={() => {
               close();

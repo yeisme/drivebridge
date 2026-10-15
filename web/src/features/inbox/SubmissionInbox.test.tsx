@@ -1,3 +1,4 @@
+/// <reference lib="es2024.promise" />
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { SubmissionInbox } from './SubmissionInbox';
@@ -75,4 +76,15 @@ it('new deep link discards previous cursor and late page',async()=>{
 });
 it('does not offer fixed preview when older servers omit version_id',async()=>{
  vi.spyOn(globalThis,'fetch').mockResolvedValue(json({data:{...page.data,items:[{...sub,version_id:undefined}]}}));render(<SubmissionInbox/>);await screen.findByText(/不使用最新版本替代/);expect(screen.queryByRole('button',{name:'查看原提交文件 sub-one'})).toBeNull();
+});
+it('clears inbox observations on disconnect and drops a late response',async()=>{
+ const gate=Promise.withResolvers<Response>();
+ const fetch=vi.spyOn(globalThis,'fetch').mockImplementationOnce(()=>gate.promise);
+ render(<SubmissionInbox/>);
+ await waitFor(()=>expect(fetch).toHaveBeenCalled());
+ fireEvent(window,new Event('offline'));
+ await screen.findByText(/当前离线，收件列表与预览已清除/);
+ expect(screen.queryByText('当前范围没有匹配的提交收件。')).toBeNull();
+ gate.resolve(json(page));
+ await waitFor(()=>expect(screen.queryByText('收件 sub-one')).toBeNull());
 });

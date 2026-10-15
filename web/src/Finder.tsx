@@ -172,8 +172,10 @@ function TreeNode({
         className={`tree-row ${selected === path ? "selected" : ""} ${over ? "drop-target" : ""}`}
         onContextMenu={(e) => onContext?.(e, path)}
         onDragOver={(e) => {
-          if (e.dataTransfer.types.includes("application/x-drivebridge-files")) {
+          if (onDropFiles && e.dataTransfer.types.includes("application/x-drivebridge-files")) {
             e.preventDefault();
+            e.stopPropagation();
+            e.dataTransfer.dropEffect = "move";
             setOver(true);
           }
         }}
@@ -904,24 +906,38 @@ export function Finder({
   const fileDragType = "application/x-drivebridge-files";
   const internalFileDrag = (event: React.DragEvent) => event.dataTransfer.types.includes(fileDragType);
   const startFileDrag = (event: React.DragEvent, id: string) => {
+    if (readOnly || busy) { event.preventDefault(); return; }
     const ids = selection.includes(id) ? selection : [id];
+    setMenu(undefined);
     event.dataTransfer.effectAllowed = "move";
-    event.dataTransfer.setData(fileDragType, JSON.stringify(ids));
+    event.dataTransfer.setData(fileDragType, JSON.stringify({ space, ids }));
+    const preview = document.createElement("div");
+    preview.className = "finder-drag-preview";
+    preview.textContent = ids.length > 1 ? `移动 ${ids.length} 个文件` : files.find(file => file.id === id)?.path.split("/").pop() || "移动文件";
+    document.body.appendChild(preview);
+    event.dataTransfer.setDragImage(preview, 16, 16);
+    // Native drag captures this compact surface before the next frame.
+    requestAnimationFrame(() => preview.remove());
   };
   const acceptFileMove = (event: React.DragEvent) => {
     if (!internalFileDrag(event)) return;
     event.preventDefault();
     event.stopPropagation();
-    event.dataTransfer.dropEffect = readOnly ? "none" : "move";
+    event.dataTransfer.dropEffect = readOnly || busy ? "none" : "move";
   };
   const dropMovedFiles = (event: React.DragEvent, target: string) => {
     if (!internalFileDrag(event)) return;
     event.preventDefault();
     event.stopPropagation();
-    if (readOnly) return;
+    if (readOnly || busy) return;
     try {
       const payload = JSON.parse(event.dataTransfer.getData(fileDragType));
-      if (Array.isArray(payload)) void act(() => moveFiles(target, files.filter(file => payload.includes(file.id))));
+      if (payload.space !== space || !Array.isArray(payload.ids) || !payload.ids.every((id: unknown) => typeof id === "string")) {
+        setError("请在同一网盘中拖拽移动文件。"); return;
+      }
+      const chosen = files.filter(file => payload.ids.includes(file.id));
+      if (!chosen.length) { setError("拖拽文件已不在当前列表，请刷新后重试。"); return; }
+      void act(() => moveFiles(target, chosen));
     } catch { setError("无法读取拖拽项目。"); }
   };
   const acceptOsFiles = (e: React.DragEvent) => {
@@ -1225,7 +1241,7 @@ export function Finder({
                 onContext={(e, path) =>
                   contextMenu(e, { kind: "directory", path })
                 }
-                onDropFiles={(e, path) => dropMovedFiles(e, path)}
+                onDropFiles={readOnly || busy ? undefined : (e, path) => dropMovedFiles(e, path)}
               />
             )}
           </ul>
@@ -1585,7 +1601,7 @@ export function Finder({
                 onClick={() => {setFocusIndex(index);setAnchorIndex(index);if(row.file){select(row.file,false);setFolderSelection([]);}else{selectFolder(row.path,false);setSelection([]);}}}
                 onDoubleClick={() => row.file ? onPreview(row.file,files) : navigate(row.path)}
                 onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();e.stopPropagation();if(row.file) onPreview(row.file,files); else navigate(row.path);}}}
-                draggable={!!row.file} onDragStart={event => { if (row.file) startFileDrag(event, row.file.id); }} onDragOver={event => { if (!row.file) acceptFileMove(event); }} onDrop={event => { if (!row.file) dropMovedFiles(event, row.path); }}>
+                draggable={!!row.file && !readOnly && !busy} onDragStart={event => { if (row.file) startFileDrag(event, row.file.id); }} onDragOver={event => { if (!row.file) acceptFileMove(event); }} onDrop={event => { if (!row.file) dropMovedFiles(event, row.path); }}>
                 {row.file ? <MediaThumbnail file={row.file}/> : <Folder size={24}/>}
                 <span className="finder-readable-name"><span>{row.file ? row.path.split("/").pop()?.replace(/\.[^.]+$/,"") : row.path.split("/").pop()}</span>{row.file && <small>{row.path.includes(".") ? "."+row.path.split(".").pop() : row.file.mime_type}</small>}</span>
               </Button>)}
@@ -1605,7 +1621,7 @@ export function Finder({
               {files.map(f=><Button layout="surface" type="button" key={f.id} title={f.path} aria-label={`选择 ${f.path.split("/").pop()}`} aria-pressed={selection.includes(f.id)} className={selection.includes(f.id) ? "selected" : ""}
                 onClick={()=>{select(f,false);setFolderSelection([]);setFocusIndex(listed.findIndex(row=>row.file?.id===f.id));}}
                 onDoubleClick={()=>onPreview(f,files)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();e.stopPropagation();onPreview(f,files);}}}
-                draggable onDragStart={event => startFileDrag(event, f.id)}>
+                draggable={!readOnly && !busy} onDragStart={event => startFileDrag(event, f.id)}>
                 <MediaThumbnail file={f}/><span>{f.path.split("/").pop()}</span>
               </Button>)}
             </div>
@@ -1626,7 +1642,7 @@ export function Finder({
                   tabIndex={listed[focusIndex]?.path === row.path ? 0 : -1}
                   data-directory-path={row.path}
                   onContextMenu={(e) => contextMenu(e, row)}
-                  onDragOver={(e) => { acceptFileMove(e); if (internalFileDrag(e)) e.currentTarget.classList.add("drop-target"); }}
+                  onDragOver={(e) => { acceptFileMove(e); if (internalFileDrag(e) && !readOnly && !busy) e.currentTarget.classList.add("drop-target"); }}
                   onDragLeave={(e) => {
                     e.currentTarget.classList.remove("drop-target");
                   }}
@@ -1682,7 +1698,7 @@ export function Finder({
               onContextMenu={(e) =>
                 contextMenu(e, { kind: "file", path: f.path, file: f })
               }
-              draggable
+              draggable={!readOnly && !busy}
               onDragStart={(e) => startFileDrag(e, f.id)}
             >
               <Checkbox
@@ -1860,7 +1876,7 @@ export function Finder({
           </div>
         )}
         <footer className="finder-status">
-          {readOnly && <span>当前网盘仅供浏览</span>}
+          {readOnly && <span>当前网盘仅供浏览 · 移动文件需要编辑权限，请在「管理与授权」中申请</span>}
           <span>
             {busy
               ? "正在读取…"

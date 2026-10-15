@@ -146,7 +146,8 @@ export async function controlUploadBatch(
 // ---------------------------------------------------------------------------
 
 export interface OrganizationPlanInput {
-  source_snapshot_id: string;
+  source_snapshot_id?: string;
+  refs?: string[];
   actions: { kind: string; namespace?: string; value?: string; target_prefix?: string }[];
   policy_id: string;
 }
@@ -496,15 +497,20 @@ export async function previewNotePublication(fileId: string, signal?: AbortSigna
 
 export type FlowCapability = "checking" | "available" | "unsupported";
 
-// Each center probes with the read-only operation lookup for its own action:
-// a deployment that implements the surface answers found:false (a probe key
-// never matches a real intent), while an older server answers unknown routes
-// with a plain-text 404/405 body that the shared envelope helper reports as
-// request_failed. Both of those close the gate; any other error (network,
-// auth, budget) is a real error surfaced by the caller.
+// These read-only requests use LookupOperation's exact action-specific
+// normalization (uploadbatch.go). A miss proves route support only, never
+// authorization to create, confirm, or execute a user's actual intent.
 export async function probeFlowCapability(action: string, signal?: AbortSignal): Promise<FlowCapability> {
+  const originalRequests: Record<string, Record<string, unknown>> = {
+    upload_batch_create: { space_id: "", conflict_policy: "fail" },
+    content_query: { mode: "exact", space_ids: [] },
+    organize_plan: { refs: [], actions: [], source_snapshot_id: "", policy_id: "" },
+    delivery_prepare: { share_id: "", snapshot_id: "", expected_share_revision: 0 },
+  };
+  const original = originalRequests[action];
+  if (!original) throw new Error("invalid_request");
   try {
-    const lookup = await lookupOperation(action, "capability-probe", { probe: true }, signal);
+    const lookup = await lookupOperation(action, "drivebridge-web-readonly-probe-" + crypto.randomUUID(), original, signal);
     return lookup.found === false || lookup.found === true ? "available" : "unsupported";
   } catch (error) {
     // A context-switch abort means the observation is void, not a verdict:
@@ -514,10 +520,8 @@ export async function probeFlowCapability(action: string, signal?: AbortSignal):
     const status = error instanceof Error ? (error as Error & { status?: number }).status : undefined;
     // Authentication and infrastructure failures cannot prove absent capability.
     if (status === 401 || status === 403 || (status !== undefined && status >= 500)) throw error;
-    // invalid_request / unsupported_action on a well-formed probe can only
-    // mean this deployment does not accept the action: the surface is
-    // absent, not broken.
-    if (code === "not_found" || (code === "request_failed" && (status === 404 || status === 405)) || code === "unsupported" || code === "unsupported_action" || code === "invalid_request")
+    // Invalid request is a client/server contract error, not absent capability.
+    if (code === "not_found" || (code === "request_failed" && (status === 404 || status === 405)) || code === "unsupported" || code === "unsupported_action")
       return "unsupported";
     throw error;
   }

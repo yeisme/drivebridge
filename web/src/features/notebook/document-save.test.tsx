@@ -1,3 +1,4 @@
+/// <reference lib="es2024.promise" />
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { MarkdownFileDocument } from "./MarkdownFileDocument";
@@ -120,4 +121,43 @@ it("keeps conflict drafts and requires original-result lookup", async () => {
   await screen.findByText(/文件版本已变化，草稿保留/);
   expect(screen.getByText("my draft", { selector: "p" })).toBeTruthy();
   expect(saveDocument).toHaveBeenCalledTimes(1);
+});
+it("preserves the in-memory draft but blocks saving after disconnect", async () => {
+  ready(); render(<MarkdownFileDocument actor="actor" identity={identity} editablePane draft="unsaved offline draft" onDraft={vi.fn()} onSaved={vi.fn()}/>);
+  await waitFor(() => expect(screen.getByRole("button", { name: "预览保存" }).hasAttribute("disabled")).toBe(false));
+  fireEvent(window, new Event("offline"));
+  await screen.findByText(/当前离线，草稿保留在内存/);
+  expect(screen.getByText("unsaved offline draft", { selector: "p" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "预览保存" }).hasAttribute("disabled")).toBe(true);
+  fireEvent(window, new Event("online"));
+  expect(saveDocument).not.toHaveBeenCalled();
+});
+it('reauthenticates explicitly after disconnect without discarding the draft or automatically saving', async () => {
+  ready(); render(<MarkdownFileDocument actor="actor" identity={identity} editablePane draft="kept draft" onDraft={vi.fn()} onSaved={vi.fn()}/>);
+  await waitFor(() => expect(screen.getByRole('button', { name: '预览保存' }).hasAttribute('disabled')).toBe(false)); fireEvent(window, new Event('offline')); fireEvent(window, new Event('online'));
+  expect(saveDocument).not.toHaveBeenCalled(); fireEvent.click(screen.getByRole('button', { name: '保留草稿并重新鉴权' }));
+  await screen.findByText(/已重新鉴权，内存草稿保留/); expect(screen.getByText('kept draft', { selector: 'p' })).toBeTruthy(); expect(screen.getByRole('button', { name: '预览保存' }).hasAttribute('disabled')).toBe(false);
+});
+it('rechecks the original document explicitly after an in-flight offline transition', async () => {
+  ready(); const gate = Promise.withResolvers<string>(); vi.mocked(readMarkdownFile).mockReset().mockResolvedValueOnce('before').mockImplementationOnce(() => gate.promise); render(<MarkdownFileDocument actor="actor" identity={identity} editablePane draft="keep me" onDraft={vi.fn()} onSaved={vi.fn()}/>); await waitFor(() => expect(screen.getByRole('button', { name: '预览保存' }).hasAttribute('disabled')).toBe(false)); fireEvent(window, new Event('offline')); fireEvent.click(screen.getByRole('button', { name: '保留草稿并重新鉴权' })); gate.resolve('before'); await screen.findByText(/已重新鉴权/); expect(screen.getByText('keep me', { selector: 'p' })).toBeTruthy(); expect(saveDocument).not.toHaveBeenCalled();
+});
+it('recovers an interrupted initial read only after an explicit fresh request', async () => {
+  ready();
+  const gate = Promise.withResolvers<string>();
+  vi.mocked(readMarkdownFile).mockReturnValueOnce(gate.promise);
+  render(<MarkdownFileDocument actor="actor" identity={identity} editablePane onDraft={vi.fn()} onSaved={vi.fn()}/>);
+  const originalSignal = vi.mocked(readMarkdownFile).mock.calls[0][1];
+  fireEvent(window, new Event('offline'));
+  expect(originalSignal.aborted).toBe(true);
+  expect(screen.getByText(/固定版本读取已暂停/)).toBeTruthy();
+  fireEvent(window, new Event('online'));
+  await act(async () => { gate.resolve('late stale body'); await gate.promise; });
+  expect(readMarkdownFile).toHaveBeenCalledTimes(1);
+  expect(screen.queryByText('late stale body')).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: '重新读取固定版本' }));
+  await screen.findByText('before', { selector: 'p' });
+  expect(readMarkdownFile).toHaveBeenCalledTimes(2);
+  const freshSignal = vi.mocked(readMarkdownFile).mock.calls[1][1];
+  expect(freshSignal).not.toBe(originalSignal); expect(freshSignal.aborted).toBe(false);
+  expect(saveDocument).not.toHaveBeenCalled();
 });

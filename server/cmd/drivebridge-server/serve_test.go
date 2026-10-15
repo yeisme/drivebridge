@@ -9,6 +9,19 @@ import (
 	"time"
 )
 
+func TestDeploymentCapabilityFlagsDefaultOff(t *testing.T) {
+	cmd := newServeCommand(&cli{})
+	for _, name := range []string{"admin-direct-write", "cloud-connectors", "transfer-plans"} {
+		flag := cmd.Flags().Lookup(name)
+		if flag == nil || flag.DefValue != "false" {
+			t.Fatalf("%s must be explicit", name)
+		}
+		if err := cmd.Flags().Set(name, "true"); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 func TestAutomationManagementFlagDefaultsOff(t *testing.T) {
 	cmd := newServeCommand(&cli{})
 	flag := cmd.Flags().Lookup("automation-management")

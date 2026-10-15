@@ -53,6 +53,9 @@ export interface OperationLookupResult {
   found: boolean;
   batch_id?: string;
   operation_id?: string;
+  resource_id?: string;
+  resource_type?: string;
+  status?: string;
   result_certainty?: string;
   recovery_action?: string;
 }

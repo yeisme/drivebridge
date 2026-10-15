@@ -11,8 +11,11 @@ import (
 	"time"
 	"unicode"
 
-	_ "github.com/glebarez/sqlite"
+	"github.com/glebarez/sqlite"
 	"github.com/spf13/cobra"
+	"github.com/yeisme/drivebridge-server/internal/service"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 // openSnapshotDB opens the state database read-only for projections that
@@ -103,8 +106,27 @@ func localStatus(c *cli) error {
 				KeysTotal int    `json:"keys_total"`
 				KeysLive  int    `json:"keys_live"`
 			}
-			row := db.QueryRow("SELECT (SELECT COUNT(*) FROM spaces), (SELECT COALESCE(SUM(max_bytes),0) FROM spaces), (SELECT COALESCE(SUM(used),0) FROM spaces), (SELECT COALESCE(SUM(reserved),0) FROM spaces), (SELECT COALESCE(MAX(CASE WHEN id='platform' THEN status END),'') FROM connections), (SELECT COUNT(*) FROM user_keys), (SELECT COUNT(*) FROM user_keys WHERE revoked = 0 AND archived = 0 AND disabled = 0)")
-			if e := row.Scan(&spaces.Count, &spaces.Max, &spaces.Used, &spaces.Reserved, &spaces.Platform, &spaces.KeysTotal, &spaces.KeysLive); e != nil {
+			projection, err := gorm.Open(sqlite.Dialector{Conn: db}, &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+			if err != nil {
+				return fail("state_unavailable", "The state database could not be projected.")
+			}
+			spaceQuery := projection.Model(&service.Space{})
+			// Older snapshots predate recoverable retirement; never migrate a read-only snapshot.
+			if !projection.Migrator().HasColumn(&service.Space{}, "deleted_at") {
+				spaceQuery = spaceQuery.Unscoped()
+			}
+			var activeSpaces []service.Space
+			if err := spaceQuery.Select("id", "max_bytes", "used", "reserved").Find(&activeSpaces).Error; err != nil {
+				return fail("state_unavailable", "The spaces could not be projected.")
+			}
+			spaces.Count = len(activeSpaces)
+			for _, sp := range activeSpaces {
+				spaces.Max += sp.MaxBytes
+				spaces.Used += sp.Used
+				spaces.Reserved += sp.Reserved
+			}
+			row := db.QueryRow("SELECT (SELECT COALESCE(MAX(CASE WHEN id='platform' THEN status END),'') FROM connections), (SELECT COUNT(*) FROM user_keys), (SELECT COUNT(*) FROM user_keys WHERE revoked = 0 AND archived = 0 AND disabled = 0)")
+			if e := row.Scan(&spaces.Platform, &spaces.KeysTotal, &spaces.KeysLive); e != nil {
 				return fail("state_unavailable", "The state database could not be projected.")
 			}
 			data["spaces"] = spaces.Count

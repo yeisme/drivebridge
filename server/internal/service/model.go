@@ -30,6 +30,7 @@ import (
 )
 
 type Config struct {
+	AdminDirectWrite           bool   `json:"admin_direct_write,omitempty"`
 	RequireExplicitAdminRead   bool   `json:"require_explicit_admin_read,omitempty"`
 	ServiceIdentityIssuer      string `json:"service_identity_issuer,omitempty"`
 	ServiceIdentityEndpoint    string `json:"service_identity_endpoint,omitempty"`
@@ -52,8 +53,8 @@ type Config struct {
 	PropertyEditing            bool   `json:"property_editing,omitempty"`
 	AutomationManagement       bool   `json:"automation_management,omitempty"`
 	ShareReceivers             bool   `json:"share_receivers,omitempty"`
-	HoldManagement bool `json:"hold_management,omitempty"`
-	LabelManagement bool `json:"label_management,omitempty"`
+	HoldManagement             bool   `json:"hold_management,omitempty"`
+	LabelManagement            bool   `json:"label_management,omitempty"`
 	// TeamDSN points the metadata database at the team PostgreSQL
 	// deployment. It is never serialized, logged, or echoed back.
 	TeamDSN string `json:"-"`
@@ -79,18 +80,19 @@ type User struct {
 	AvatarRef   string `json:"avatar_ref,omitempty"`
 }
 type Space struct {
-	TenantID           string `json:"tenant_id,omitempty" gorm:"index"`
-	TeamID             string `json:"team_id,omitempty" gorm:"index"`
-	ID                 string `json:"id" gorm:"primaryKey"`
-	Owner              string `json:"-" gorm:"index"`
-	Name               string `json:"name"`
-	ConnectionID       string `json:"connection_id"`
-	MaxBytes           int64  `json:"max_bytes"`
-	Used               int64  `json:"used_bytes"`
-	Reserved           int64  `json:"reserved_bytes"`
-	Encrypted          bool   `json:"encrypted"`
-	TrashRetentionDays int    `json:"trash_retention_days"`
-	WrappedDEK         []byte `json:"-"`
+	DeletedAt          gorm.DeletedAt `json:"-" gorm:"index"`
+	TenantID           string         `json:"tenant_id,omitempty" gorm:"index"`
+	TeamID             string         `json:"team_id,omitempty" gorm:"index"`
+	ID                 string         `json:"id" gorm:"primaryKey"`
+	Owner              string         `json:"-" gorm:"index"`
+	Name               string         `json:"name"`
+	ConnectionID       string         `json:"connection_id"`
+	MaxBytes           int64          `json:"max_bytes"`
+	Used               int64          `json:"used_bytes"`
+	Reserved           int64          `json:"reserved_bytes"`
+	Encrypted          bool           `json:"encrypted"`
+	TrashRetentionDays int            `json:"trash_retention_days"`
+	WrappedDEK         []byte         `json:"-"`
 }
 type Connection struct {
 	ID       string `json:"id" gorm:"primaryKey"`

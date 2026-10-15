@@ -1,9 +1,10 @@
 import { api } from "../../api";
 import type { NoteIdentity } from "./notebook-state";
+import type { components } from "../../generated/personal-workspace";
 
-export interface NotebookCreation { found: boolean; status: string; operation_id?: string; page?: { file_id: string; version_id: string; path: string; parent_file_id?: string; icon?: string } }
+export type NotebookCreation = components["schemas"]["NotebookCreationEnvelope"]["data"];
 export const createNotebookPage = (spaceId: string, title: string, parentFileId: string, icon: string, key: string, signal: AbortSignal) =>
-  api<NotebookCreation>("/notebook/pages", "POST", { space_id: spaceId, title, parent_file_id: parentFileId, icon }, { "Idempotency-Key": key }, signal);
+  api<NotebookCreation>("/notebook/pages", "POST", { space_id: spaceId, title, parent_file_id: parentFileId, icon, daily_date: "" }, { "Idempotency-Key": key }, signal);
 export const createNotebookDaily = (spaceId: string, date: string, key: string, signal: AbortSignal) =>
   api<NotebookCreation>("/notebook/pages", "POST", { space_id: spaceId, title: date, daily_date: date, parent_file_id: "", icon: "calendar" }, { "Idempotency-Key": key }, signal);
 export const lookupNotebookCreation = (spaceId: string, key: string, dailyDate: string, signal: AbortSignal) =>

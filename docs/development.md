@@ -68,6 +68,20 @@ CGO_ENABLED=0 GOFLAGS= DRIVEBRIDGE_TEST_AUTOMATION_MANAGEMENT=1 DRIVEBRIDGE_TEST
 
 页面打开只读；“配置与运行”取得能力后，新规则默认禁用。先确认保存，再明确启用/预览/确认一次运行。预览漂移拒绝；丢响应保留原恢复键，只查询原回执，不重建任务。现有规则只支持添加标签；不运行备份、删除、外发或模型。字节预算与有效期来自已绑定策略，不虚构默认值。
 
+### 整理补偿的原请求恢复
+
+`POST /api/v1/organization-plans/{id}/compensations` 使用原幂等键恢复原子绑定父计划的补偿回执；后续合法文件版本更新不会把已有回执变成新请求。恢复仍逐文件复查当前租户、空间、读取权限和当前路径；跨 owner 的全局键冲突返回 `idempotency_conflict`。查询依赖故障不能冒充回执不存在。
+
+补偿只反向父计划实际成功的 `(file, action, result_version)`，不会把成功动作并集广播到所有文件。异质部分成功的标签计划执行补偿后保留原有标签；补偿执行继续检查冻结结果版本，不覆盖后续修改。
+
+```bash
+go -C server test ./internal/service -run 'TestFPAgentOrganizationCompensation' -count=1
+go -C server test ./...
+go -C server vet ./internal/service
+```
+
+当前本地证据：全 Server 模块 `20261012T151737Z-6d96abe0`；补偿原键/合法版本漂移真实 HTTP `151345Z-6f09bf0b`；异质部分成功执行补偿 `151724Z-bd9243c9`；当前 Agent 空间/读取 scope/路径准入 `151630Z-b093e999`；回执与文件读取依赖故障 `152158Z-eae212e6`、vet `152158Z-093f4ead`。独立审查关闭 F1–F4。没有新增 API、迁移、生产写入或跨 Service 并发验收。
+
 两条核心真实本地链：
 
 ```bash
@@ -97,6 +111,21 @@ CGO_ENABLED=0 GOFLAGS= DRIVEBRIDGE_TEST_PORT=33989 python3 scripts/check.py -- p
 团队回归另启`DRIVEBRIDGE_TEST_TEAM_DEMO=1`，不得与个人Key测试混跑；账号生命周期测试需要干净fixture，其他测试给成员分配数据负责人会合法触发接管确认。属性/跨存储回归使用`DRIVEBRIDGE_TEST_PROPERTY_EDITING=1 DRIVEBRIDGE_TEST_TRANSFER_PLANS=1`。这些变量只控制本地fixture，不改变生产配置。
 
 当前Web155文件1120测试（`20261008T140400Z-4ce0dd4a`）、type/UI（`140335Z-a30ed9d2`）、build（`140246Z-6c6cef92`）通过；Server普通测试全模块（`124821Z-ee3e4959`）及vet/build通过。6条当前真实本地浏览器场景（`140404Z-b6b40e0d`）覆盖文件/笔记原键恢复、Agent实际受限调用/验收归档、PNG/PDF/二进制原字节及撤权、普通笔记导航。基线必须独立空fixture运行，不能与写入测试共享服务后仍断言空态（混跑失败`134558Z-f15cfbc2`已归因并独立重验）。构建仍有>500kB chunk警告。9路径LSP检查6确认clean、3未确认，不能据此说全树LSP clean。未提交、推送、部署、执行race或接触真实云。后端隔离工作区`temp/automation-safety-worktree`留存本轮未提交成果；完成本地验证不授权强制移除该工作区。
+
+## 2026-10-13 当前交付复核
+
+本次复核重新读取当前源码、OpenSpec 任务、前后端交接文档并执行：
+
+- Web 全量 Vitest：176 个文件、1287 个测试通过，证据 `temp/integration-test-runs/20261012T160640Z-31dc65d5`。
+- Web UI 检查、TypeScript、生产构建通过，证据 `temp/integration-test-runs/20261012T160708Z-f3e73e79`。
+- Server `go test ./...` 通过，证据 `temp/integration-test-runs/20261012T160640Z-be283eb0`；`go vet ./...` 与两项 OpenSpec strict 校验通过，证据 `temp/integration-test-runs/20261012T160641Z-cd33ffd0`。
+- 生成合同与 110 个 schema 正反例通过：`node web/scripts/generate-contract-types.mjs --check --profile all`、`node web/scripts/check-contract-schemas.mjs`。
+- 全新 fixture 上文件、Agent/收件、知识库真实链路通过：`temp/integration-test-runs/20261012T161436Z-31929cb3`。
+- 认证本地 fixture 上 22 个入口、6 个 viewport、浅深主题共 264 个观察通过：`temp/integration-test-runs/20261012T162655Z-b1a4d8d9`。
+
+整理中心的规范 `path_prefix/prefix` 请求在独立 fixture 上已直接返回 200：`temp/integration-test-runs/20261012T155854Z-e190dc88`。此前较长的整理/交付回放曾复用旧 fixture 进程并得到 `/file-queries` 400；该失败不作为业务通过或代码失败，未替换为语义不同的 `contains`。
+
+仍未宣称：真实云账户/S3/OneDrive、Pinax 私有 vault、原生设备、付费模型、race、跨 Service 实例并发、三平台发布。视觉矩阵只证明可见状态和布局；真实业务闭环以对应 fixture/HTTP 证据为准。
 
 ## 目录和职责
 

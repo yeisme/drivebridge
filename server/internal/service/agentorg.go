@@ -3,6 +3,7 @@ package service
 import (
 	"encoding/json"
 	"errors"
+	"sort"
 	"strings"
 	"time"
 
@@ -183,6 +184,14 @@ func organizationPolicyCovers(policy OrganizationPolicy, actions []OrganizationA
 // source is an exact fixed collection: a snapshot or explicit refs;
 // semantic Top-K is never executable as a whole.
 func (s *Service) CreateOrganizationPlan(p Principal, q CreateOrganizationPlanRequest, key string) (OrganizationPlanView, error) {
+	return s.createOrganizationPlan(p, q, key, "", nil)
+}
+
+// createOrganizationPlan carries compensationOf so a compensation receipt
+// is bound to its parent plan in the same transaction as the plan header:
+// a lost response can never leave a receipt whose parent same-key
+// recovery cannot attribute from persisted lineage.
+func (s *Service) createOrganizationPlan(p Principal, q CreateOrganizationPlanRequest, key, compensationOf string, exactItems []organizationPlanItemSpec) (OrganizationPlanView, error) {
 	if key == "" || len(key) > 200 || len(q.Actions) == 0 || len(q.Actions) > 16 {
 		return OrganizationPlanView{}, code("invalid_request")
 	}
@@ -203,7 +212,24 @@ func (s *Service) CreateOrganizationPlan(p Principal, q CreateOrganizationPlanRe
 		spaceID                 string
 	}
 	var members []member
-	if q.SourceSnapshotID != "" {
+	if exactItems != nil {
+		// Exact derivation keeps the per-file action association: every
+		// distinct file still passes the same current read admission as an
+		// explicit ref, but the frozen version is the parent's recorded
+		// result version.
+		seenFiles := map[string]bool{}
+		for _, spec := range exactItems {
+			if seenFiles[spec.fileID] {
+				continue
+			}
+			seenFiles[spec.fileID] = true
+			f, e := s.file(p, spec.fileID, "read")
+			if e != nil {
+				return OrganizationPlanView{}, e
+			}
+			members = append(members, member{fileID: f.ID, versionID: spec.versionID, path: f.Path, size: f.Size, spaceID: f.SpaceID})
+		}
+	} else if q.SourceSnapshotID != "" {
 		var snapshot CollectionSnapshot
 		if s.DB.First(&snapshot, "id = ? AND owner = ?", q.SourceSnapshotID, p.dataOwner()).Error != nil {
 			return OrganizationPlanView{}, code("not_found")
@@ -268,37 +294,60 @@ func (s *Service) CreateOrganizationPlan(p Principal, q CreateOrganizationPlanRe
 	defer s.mu.Unlock()
 	var plan OrganizationPlan
 	e := s.DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.First(&plan, "owner = ? AND key = ?", p.dataOwner(), key).Error; err == nil {
+		// Plan keys are enforced globally unique (organization_plan_key):
+		// a key already held by another owner is a typed conflict — never
+		// a raw index failure, and never a read of the other owner's plan.
+		if err := tx.First(&plan, "key = ?", key).Error; err == nil {
+			if plan.Owner != p.dataOwner() {
+				return code("idempotency_conflict")
+			}
+			// The existing plan under this key must hold the same receipt
+			// lineage: a compensation key never replays onto a plain plan
+			// or another parent's compensation.
+			if compensationOf != plan.CompensationOf {
+				return code("idempotency_conflict")
+			}
 			return nil
 		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
 			return code("database_unavailable")
 		}
 		now := time.Now().UTC()
-		plan = OrganizationPlan{ID: ID(), Owner: p.dataOwner(), TenantID: p.TenantID, SpaceID: spaceID, SourceSnapshotID: q.SourceSnapshotID, Actions: string(actionsBody), PolicyID: policyID, PolicyRevision: policyRevision, Revision: 1, Phase: "previewed", Risk: risk, ImpactDigest: Hash(string(impact)), ItemsTotal: int64(len(members)), Key: key, Fingerprint: fingerprint, CreatedAt: now, UpdatedAt: now}
+		plan = OrganizationPlan{ID: ID(), Owner: p.dataOwner(), TenantID: p.TenantID, SpaceID: spaceID, SourceSnapshotID: q.SourceSnapshotID, Actions: string(actionsBody), PolicyID: policyID, PolicyRevision: policyRevision, Revision: 1, Phase: "previewed", Risk: risk, ImpactDigest: Hash(string(impact)), ItemsTotal: int64(len(members)), Key: key, Fingerprint: fingerprint, CompensationOf: compensationOf, CreatedAt: now, UpdatedAt: now}
 		if err := tx.Create(&plan).Error; err != nil {
 			return code("database_unavailable")
 		}
-		for _, m := range members {
-			for _, action := range q.Actions {
-				detail := ""
-				before, after := "", ""
-				switch action.Kind {
-				case "add_label":
-					detail = action.Namespace + ":" + action.Value
-				case "move":
-					base := m.path
-					if idx := strings.LastIndex(base, "/"); idx >= 0 {
-						base = base[idx+1:]
-					}
-					detail = action.TargetPrefix
-					before = m.path
-					after = action.TargetPrefix + "/" + base
-				case "trash":
-					before = m.path
+		// Item identity is the (member, action) pair: remove_label carries
+		// the same namespace:value detail as add_label, and identical
+		// duplicate pairs collapse to one item. Exact specs freeze their
+		// own per-file (action, result version) association instead of the
+		// members×actions product, so a compensation only ever reverses
+		// what its parent actually completed on that file.
+		seenItems := map[string]bool{}
+		createItem := func(fileID, versionID, path string, action OrganizationAction) error {
+			detail, before, after := organizationItemDisplay(path, action)
+			itemKey := fileID + "\x00" + action.Kind + "\x00" + detail
+			if seenItems[itemKey] {
+				return nil
+			}
+			seenItems[itemKey] = true
+			item := OrganizationPlanItem{ID: ID(), PlanID: plan.ID, ItemKey: itemKey, Owner: p.dataOwner(), FileID: fileID, VersionID: versionID, Path: path, ActionKind: action.Kind, ActionDetail: detail, BeforeValue: before, AfterValue: after, Status: "pending", CreatedAt: now, UpdatedAt: now}
+			if err := tx.Create(&item).Error; err != nil {
+				return code("database_unavailable")
+			}
+			return nil
+		}
+		if exactItems != nil {
+			for _, spec := range exactItems {
+				if err := createItem(spec.fileID, spec.versionID, spec.path, spec.action); err != nil {
+					return err
 				}
-				item := OrganizationPlanItem{ID: ID(), PlanID: plan.ID, ItemKey: m.fileID + "\x00" + action.Kind + "\x00" + detail, Owner: p.dataOwner(), FileID: m.fileID, VersionID: m.versionID, Path: m.path, ActionKind: action.Kind, ActionDetail: detail, BeforeValue: before, AfterValue: after, Status: "pending", CreatedAt: now, UpdatedAt: now}
-				if err := tx.Create(&item).Error; err != nil {
-					return code("database_unavailable")
+			}
+		} else {
+			for _, m := range members {
+				for _, action := range q.Actions {
+					if err := createItem(m.fileID, m.versionID, m.path, action); err != nil {
+						return err
+					}
 				}
 			}
 		}
@@ -311,6 +360,36 @@ func (s *Service) CreateOrganizationPlan(p Principal, q CreateOrganizationPlanRe
 		return OrganizationPlanView{}, code("idempotency_conflict")
 	}
 	return s.OrganizationPlanViewFor(p, plan, "", 0)
+}
+
+// organizationItemDisplay derives one item's action detail and before/
+// after facts. Both plan-creation paths share it so a remove_label item
+// keeps the same namespace:value identity it had as add_label.
+func organizationItemDisplay(path string, action OrganizationAction) (detail, before, after string) {
+	switch action.Kind {
+	case "add_label", "remove_label":
+		detail = action.Namespace + ":" + action.Value
+	case "move":
+		base := path
+		if idx := strings.LastIndex(base, "/"); idx >= 0 {
+			base = base[idx+1:]
+		}
+		detail = action.TargetPrefix
+		before = path
+		after = action.TargetPrefix + "/" + base
+	case "trash":
+		before = path
+	}
+	return detail, before, after
+}
+
+// organizationPlanItemSpec pins one exact (file, frozen version, action)
+// pair. Derived plans whose per-file action association must survive — a
+// compensation reverses precisely the items its parent completed — pass
+// specs instead of the members×actions product.
+type organizationPlanItemSpec struct {
+	fileID, versionID, path string
+	action                  OrganizationAction
 }
 
 // organizationPlanFingerprint is the canonical normalization of one plan
@@ -607,7 +686,10 @@ func planItemPaths(s *Service, planID string) []string {
 // CreateCompensationPlan derives the reverse intent from a completed
 // plan's recorded results. It never executes immediately and only covers
 // metadata that still matches this run's results; later modifications
-// surface as compensation_conflict at execution time.
+// surface as compensation_conflict at execution time. A same-key retry
+// first returns the persisted receipt whose creation-transaction lineage
+// names this exact parent, so a lost response recovers even after later
+// legitimate file drift; any other holder of the key is a conflict.
 func (s *Service) CreateCompensationPlan(p Principal, planID string, key string) (OrganizationPlanView, error) {
 	if key == "" || len(key) > 200 {
 		return OrganizationPlanView{}, code("invalid_request")
@@ -617,11 +699,34 @@ func (s *Service) CreateCompensationPlan(p Principal, planID string, key string)
 		return OrganizationPlanView{}, resourceReadError(err)
 	}
 	if IsPropertyMigrationPlan(plan) || isLabelMergePlan(plan) { return OrganizationPlanView{}, code("unsupported_action") }
+	// Same-key recovery reads persisted lineage only: the stored receipt
+	// must already name this parent, bound in its creation transaction.
+	// A key held by another parent or by an unrelated plan conflicts; the
+	// parent is never guessed from derived content.
+	var stored OrganizationPlan
+	if err := s.DB.First(&stored, "owner = ? AND key = ?", p.dataOwner(), key).Error; err == nil {
+		if stored.CompensationOf != plan.ID {
+			return OrganizationPlanView{}, code("idempotency_conflict")
+		}
+		// Recovery re-checks current admission — actual tenant/space,
+		// current credential scope and the live file paths — before the
+		// recorded receipt is returned. Version drift is deliberately not
+		// re-judged: the receipt is a recorded fact, not a new intent.
+		if e := s.compensationReceiptAdmission(p, stored); e != nil {
+			return OrganizationPlanView{}, e
+		}
+		return s.GetOrganizationPlan(p, stored.ID, "", 0)
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		// A dependency failure is never a miss: falling through would
+		// disguise an unknown lookup outcome as a fresh-intent decision.
+		return OrganizationPlanView{}, code("database_unavailable")
+	}
 	// Compensation only covers results that still match this run: a source
 	// whose current version differs from the recorded result version is a
 	// conflict for manual resolution, never an overwritten later edit.
 	var done []OrganizationPlanItem
-	s.DB.Where("plan_id = ? AND status = ?", plan.ID, "done").Find(&done)
+	s.DB.Where("plan_id = ? AND status = ?", plan.ID, "done").Order("created_at, id").Find(&done)
+	currentPaths := map[string]string{}
 	for _, item := range done {
 		var f File
 		if s.DB.First(&f, "id = ?", item.FileID).Error != nil || f.VersionID != item.VersionID {
@@ -629,25 +734,47 @@ func (s *Service) CreateCompensationPlan(p Principal, planID string, key string)
 			// later edit is a conflict for manual resolution.
 			return OrganizationPlanView{}, code("compensation_conflict")
 		}
+		currentPaths[item.FileID] = f.Path
 	}
 	if len(done) == 0 {
 		return OrganizationPlanView{}, code("invalid_request")
 	}
-	reverse := map[string]OrganizationAction{}
+	// The reverse derivation keeps the exact per-file association of the
+	// parent's completed items: a heterogeneous partial run (A+y and B+x
+	// done, A+x and B+y failed on pre-existing labels) reverses only
+	// those assignments, never broadcasting the action union over every
+	// file. specs are ordered by the done item order; the frozen version
+	// is the parent's recorded result version.
+	specs := make([]organizationPlanItemSpec, 0, len(done))
+	uniqueActions := map[string]OrganizationAction{}
 	for _, item := range done {
+		path := currentPaths[item.FileID]
 		switch item.ActionKind {
 		case "add_label":
-			reverse["remove:"+item.ActionDetail] = OrganizationAction{Kind: "remove_label", Namespace: strings.SplitN(item.ActionDetail, ":", 2)[0], Value: strings.SplitN(item.ActionDetail, ":", 2)[1]}
+			ns, value := strings.SplitN(item.ActionDetail, ":", 2)[0], strings.SplitN(item.ActionDetail, ":", 2)[1]
+			action := OrganizationAction{Kind: "remove_label", Namespace: ns, Value: value}
+			specs = append(specs, organizationPlanItemSpec{fileID: item.FileID, versionID: item.ResultVersion, path: path, action: action})
+			uniqueActions["remove_label:"+item.ActionDetail] = action
 		case "trash":
-			reverse["restore:"+item.FileID] = OrganizationAction{Kind: "restore"}
+			action := OrganizationAction{Kind: "restore"}
+			specs = append(specs, organizationPlanItemSpec{fileID: item.FileID, versionID: item.ResultVersion, path: path, action: action})
+			uniqueActions["restore"] = action
 		case "move":
 			// Reverse moves stay manual: path reversals depend on current
 			// tree state and are not derivable as a blanket rule.
 		}
 	}
-	actions := make([]OrganizationAction, 0, len(reverse))
-	for _, a := range reverse {
-		actions = append(actions, a)
+	// The derivation must be byte-stable across retries: sorted action
+	// keys and the explicit done-item order keep the fingerprint
+	// identical, so a lost response replays onto the same plan identity.
+	actionKeys := make([]string, 0, len(uniqueActions))
+	for k := range uniqueActions {
+		actionKeys = append(actionKeys, k)
+	}
+	sort.Strings(actionKeys)
+	actions := make([]OrganizationAction, 0, len(actionKeys))
+	for _, k := range actionKeys {
+		actions = append(actions, uniqueActions[k])
 	}
 	if len(actions) == 0 {
 		return OrganizationPlanView{}, code("invalid_request")
@@ -660,11 +787,39 @@ func (s *Service) CreateCompensationPlan(p Principal, planID string, key string)
 			refs = append(refs, "drivebridge://"+s.Instance+"/file/"+item.FileID+"/version/"+item.ResultVersion)
 		}
 	}
-	view, e := s.CreateOrganizationPlan(p, CreateOrganizationPlanRequest{Refs: refs, Actions: actions}, key)
-	if e != nil {
-		return OrganizationPlanView{}, e
+	// compensation_of joins the plan header in the same transaction, so
+	// the receipt is never left parentless by a lost response.
+	return s.createOrganizationPlan(p, CreateOrganizationPlanRequest{Refs: refs, Actions: actions}, key, plan.ID, specs)
+}
+
+// compensationReceiptAdmission re-checks the current read admission for
+// every file a stored compensation receipt touches: the caller's actual
+// tenant, the current credential scope against the live space and the
+// file's current path. It never re-judges version drift — recovery
+// returns a recorded fact, not a fresh intent.
+func (s *Service) compensationReceiptAdmission(p Principal, plan OrganizationPlan) error {
+	if plan.TenantID != p.TenantID {
+		return code("forbidden")
 	}
-	s.DB.Model(&OrganizationPlan{}).Where("id = ?", view.PlanID).Update("compensation_of", plan.ID)
-	view.CompensationOf = plan.ID
-	return view, nil
+	var items []OrganizationPlanItem
+	if err := s.DB.Where("plan_id = ?", plan.ID).Order("created_at, id").Find(&items).Error; err != nil {
+		return code("database_unavailable")
+	}
+	seen := map[string]bool{}
+	for _, item := range items {
+		if seen[item.FileID] {
+			continue
+		}
+		seen[item.FileID] = true
+		var f File
+		if err := s.DB.First(&f, "id = ? AND owner = ?", item.FileID, p.dataOwner()).Error; err != nil {
+			// Only a genuinely absent row is not_found; a dependency
+			// failure must never disguise an existing receipt as missing.
+			return resourceReadError(err)
+		}
+		if e := s.allow(p, f.SpaceID, f.Path, "read"); e != nil {
+			return e
+		}
+	}
+	return nil
 }

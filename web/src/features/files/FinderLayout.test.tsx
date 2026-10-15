@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { useState } from 'react';
 import { Finder, type FinderAdapter } from '../../Finder';
+import type { DriveFile } from '../../api';
 
 const viewport = vi.hoisted(() => ({ mobile: false }));
 vi.mock('../../app/useMobileViewport', () => ({ useMobileViewport: () => viewport.mobile }));
@@ -36,6 +37,23 @@ it('keeps layout and view usable when optional localStorage is unavailable', asy
   expect(screen.getByRole('button', { name: '网格视图' }).getAttribute('aria-pressed')).toBe('true');
   fireEvent.click(screen.getByRole('button', { name: '展开目录树' }));
   expect(screen.getByRole('complementary', { name: '目录树' })).toBeTruthy();
+});
+
+it('prevents native dragging and movement in a read-only space', async () => {
+  const file: DriveFile = { id: 'read-only-file', space_id: space.id, path: 'reference.txt', version_id: 'v1', size_bytes: 10, mime_type: 'text/plain', trashed: false, updated_at: '2026-10-11T00:00:00Z' };
+  const move = vi.fn();
+  const view = render(<Finder spaces={[space]} space={space.id} setSpace={() => {}} prefix="" setPrefix={() => {}} revision={revision}
+    reload={async () => {}} upload={() => {}} onPreview={() => {}} onShare={() => {}} backendLabel="Fixture" readOnly
+    adapter={{ ...adapter, move, directory: async () => [{ kind: 'file', path: file.path, file }] }} />);
+  await screen.findByRole('checkbox', { name: '选择 reference.txt' });
+  const row = view.container.querySelector('.finder-file')!;
+  expect(row.getAttribute('draggable')).toBe('false');
+  const dataTransfer = { types: ['application/x-drivebridge-files'], getData: () => JSON.stringify({ space: space.id, ids: [file.id] }), setData: vi.fn() };
+  expect(fireEvent.dragStart(row, { dataTransfer })).toBe(false);
+  fireEvent.drop(screen.getByRole('region', { name: '文件浏览' }), { dataTransfer });
+  expect(dataTransfer.setData).not.toHaveBeenCalled();
+  expect(move).not.toHaveBeenCalled();
+  expect(screen.getByText(/移动文件需要编辑权限/)).toBeTruthy();
 });
 
 it('uses a mobile drawer without changing the desktop directory preference', async () => {

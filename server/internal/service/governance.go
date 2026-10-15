@@ -212,7 +212,7 @@ func (s *Service) governanceOverview(w http.ResponseWriter, r *http.Request, p P
 		s.DB.Order("created DESC").Limit(100).Find(&recoveries)
 		s.DB.Find(&platformRoles)
 	}
-	respond(w, map[string]any{"enabled": true, "actor_id": p.UserID, "tenant_id": p.TenantID, "platform_admin": s.platformAdmin(p.UserID), "tenant_admin": s.tenantAdmin(p.UserID, p.TenantID), "tenants": tenants, "memberships": memberships, "members": members, "users": users, "teams": teams, "team_members": teamMembers, "spaces": spaces, "space_roles": roles, "permissions": permissions, "requests": requests, "approvable": approvable, "notifications": notifications, "events": events, "recoveries": recoveries, "platform_roles": platformRoles})
+	respond(w, map[string]any{"enabled": true, "admin_direct_write": s.Config.AdminDirectWrite, "actor_id": p.UserID, "tenant_id": p.TenantID, "platform_admin": s.platformAdmin(p.UserID), "tenant_admin": s.tenantAdmin(p.UserID, p.TenantID), "tenants": tenants, "memberships": memberships, "members": members, "users": users, "teams": teams, "team_members": teamMembers, "spaces": spaces, "space_roles": roles, "permissions": permissions, "requests": requests, "approvable": approvable, "notifications": notifications, "events": events, "recoveries": recoveries, "platform_roles": platformRoles})
 	return nil
 }
 func (s *Service) governanceChange(w http.ResponseWriter, r *http.Request, p Principal) error {

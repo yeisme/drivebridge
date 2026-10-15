@@ -527,3 +527,13 @@
 @media(max-width:760px){.insights .insight-tabs {overflow-x:auto;white-space:nowrap;}}
 
 }
+
+@layer components {
+  .content.workspace-page-content {
+    max-width: 1480px;
+    padding: 28px 32px 48px;
+  }
+  @media (max-width: 767px) {
+    .content.workspace-page-content { padding: 20px 16px 32px; }
+  }
+}

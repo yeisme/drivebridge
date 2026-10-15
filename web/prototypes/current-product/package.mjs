@@ -1,0 +1,11 @@
+import fs from 'node:fs';
+import path from 'node:path';
+const root=path.resolve(import.meta.dirname,'../../..');
+const output=path.join(root,'temp/opendesign-replica/bundle');
+fs.copyFileSync(path.join(root,'temp/opendesign-replica/seed.js'),path.join(output,'prototype-seed.js'));
+fs.copyFileSync(path.join(import.meta.dirname,'bridge.js'),path.join(output,'prototype-bridge.js'));
+let html=fs.readFileSync(path.join(output,'index.html'),'utf8');
+html=html.replace(/<script src="\.\/prototype-(?:seed|bridge)\.js"><\/script>\s*/g,'');
+html=html.replace(/<title>.*?<\/title>/,'<title>DriveBridge · 当前产品交互原型</title>').replace('<script type="module"','<script src="./prototype-seed.js"></script>\n    <script src="./prototype-bridge.js"></script>\n    <script type="module"');
+fs.writeFileSync(path.join(output,'index.html'),html);
+console.log('Packaged current frontend with isolated prototype contracts:',output);

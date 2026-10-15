@@ -9,7 +9,8 @@ import { NotebookWorkspace } from "./NotebookWorkspace";
 import { readKnowledgeFiles } from "./knowledge-files";
 import { noteKey } from "./notebook-state";
 import type { NotebookEntry } from "./notebook-navigation";
-import { createNotebookDaily, createNotebookPage } from "./notebook-client";
+import { NotebookPageTree } from "./NotebookPageTree";
+import { CreateNotebookPageDialog } from "./CreateNotebookPageDialog";
 
 export function KnowledgePage({ actor, spaces, onDirtyChange }: { actor: string; spaces: Space[]; onDirtyChange?: (dirty: boolean) => void }) {
   const managedSpace = getDataContext().space;
@@ -38,20 +39,25 @@ function KnowledgeSource({ actor, space, onDirtyChange }: { actor: string; space
   const [cursor, setCursor] = useState<string | null>(null);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
-  const [state, setState] = useState<"loading" | "ready" | "error" | "forbidden" | "stale" | "unsupported">("loading");
+  const [state, setState] = useState<"loading" | "ready" | "error" | "forbidden" | "stale" | "unsupported" | "offline">("loading");
   const [coverage, setCoverage] = useState({ scanned: 0, unavailable: 0, stale: 0 });
   const [query, setQuery] = useState("");
+  const [parentFileId, setParentFileId] = useState<string | undefined>();
+  const [creating, setCreating] = useState<"page" | "daily" | null>(null);
   const [dirty, setDirty] = useState(false);
   const [accessEpoch, setAccessEpoch] = useState(0);
-  const revoke = () => { setEntries([]); setNextCursor(null); setState("forbidden"); setAccessEpoch(value => value + 1); };
+  const revoke = () => { setCreating(null); setParentFileId(undefined); setEntries([]); setNextCursor(null); setState("forbidden"); setAccessEpoch(value => value + 1); };
   useEffect(() => { onDirtyChange(dirty); }, [dirty, onDirtyChange]);
   useEffect(() => {
     if (accessEpoch > 0) return;
     const controller = new AbortController();
     setState("loading");
-    const invalidate = () => { controller.abort(); setEntries([]); setNextCursor(null); setState("forbidden"); };
+    const invalidate = () => { controller.abort(); setEntries([]); setNextCursor(null); setCreating(null); setState("forbidden"); };
+    const offline = () => { controller.abort(); setNextCursor(null); setCreating(null); setState("offline"); };
     window.addEventListener("drivebridge-context", invalidate);
-    readKnowledgeFiles(space, cursor, controller.signal).then(page => {
+    window.addEventListener("offline", offline);
+    if (!navigator.onLine) offline();
+    else readKnowledgeFiles(space, cursor, controller.signal).then(page => {
       if (controller.signal.aborted) return;
       setEntries(previous => [...new Map([...(cursor ? previous : []), ...page.entries].map(entry => [noteKey(entry.ref), entry])).values()]);
       setCoverage(previous => ({ scanned: (cursor ? previous.scanned : 0) + page.scanned,
@@ -65,31 +71,35 @@ function KnowledgeSource({ actor, space, onDirtyChange }: { actor: string; space
       else if (error.status === 404 || error.status === 405 || error.message === "unsupported_action") setState("unsupported");
       else setState("error");
     });
-    return () => { controller.abort(); window.removeEventListener("drivebridge-context", invalidate); };
+    return () => { controller.abort(); window.removeEventListener("drivebridge-context", invalidate); window.removeEventListener("offline", offline); };
   }, [space, cursor, attempt, accessEpoch]);
-  const refresh = () => { if (dirty && !window.confirm("放弃未保存的笔记草稿并刷新目录？")) return; setCursor(null); setEntries([]); setNextCursor(null); setCoverage({ scanned: 0, unavailable: 0, stale: 0 }); setAttempt(value => value + 1); };
-  const create = async (daily = false) => {
-    const title = daily ? new Date().toISOString().slice(0, 10) : window.prompt("新建笔记标题", "未命名笔记")?.trim();
-    if (!title) return;
-    const key = `notebook-${Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, "0")).join("")}`;
-    const controller = new AbortController();
-    try { await (daily ? createNotebookDaily(space, title, key, controller.signal) : createNotebookPage(space, title, "", "file", key, controller.signal)); refresh(); }
-    catch (error) { if (!(error instanceof DOMException && error.name === "AbortError")) window.alert("笔记创建失败，请保留原请求后重试。"); }
-  };
+  const refresh = () => { if (dirty && !window.confirm("放弃未保存的笔记草稿并刷新目录？")) return; setParentFileId(undefined); setCursor(null); setEntries([]); setNextCursor(null); setCoverage({ scanned: 0, unavailable: 0, stale: 0 }); setAttempt(value => value + 1); };
+  const onCreated = () => { setCreating(null); refresh(); };
+  const onDenied = () => { setCreating(null); revoke(); };
+  const create = (daily = false) => { if (state === "ready") setCreating(daily ? "daily" : "page"); };
   return <>
     <details className="shrink-0 border-b bg-background">
     <summary className="flex min-h-11 cursor-pointer flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-[13px] focus-visible:outline-2 focus-visible:outline-ring"><span>目录与筛选</span><span className="text-xs text-muted-foreground" role="status">{state === "loading" ? "正在读取文件目录…" : `已检查 ${coverage.scanned} 个文件 · ${entries.length} 篇 Markdown`}</span></summary>
     <div className="flex flex-wrap items-center gap-2 px-3 pb-2">
       <Input aria-label="筛选已加载笔记" value={query} onChange={event => setQuery(event.target.value)} placeholder="筛选已加载笔记名称…" className="w-56 max-w-full max-md:min-h-11"/>
-      <Button type="button" variant="outline" onClick={() => void create(false)}>新建笔记</Button>
-      <Button type="button" variant="ghost" onClick={() => void create(true)}>日记</Button>
+      <Button type="button" variant="outline" disabled={state !== "ready"} onClick={() => create(false)}>新建笔记</Button>
+      <Button type="button" variant="ghost" disabled={state !== "ready"} onClick={() => create(true)}>日记</Button>
       <Button type="button" variant="ghost" size="icon" className="max-md:size-11" aria-label="刷新知识库" disabled={state === "loading"} onClick={refresh}><RefreshCw/></Button>
       {nextCursor && <Button type="button" variant="outline" disabled={state !== "ready"} onClick={() => setCursor(nextCursor)}>继续查找笔记</Button>}
     </div>
     <p className="m-0 px-3 pb-3 text-xs leading-5 text-muted-foreground">当前显示已加载的普通 Markdown；标题筛选不代表全文搜索。本机 Pinax 需通过桌面客户端连接。</p>
+    {state !== "forbidden" && <NotebookPageTree key={attempt} space={space} selected={parentFileId} onSelect={setParentFileId} onLoaded={pages => {
+      const metadata = new Map(pages.map(page => [page.file_id, page]));
+      setEntries(items => items.map(entry => {
+        const page = metadata.get(entry.ref.objectId);
+        return page ? { ...entry, title: page.path.split("/").pop()?.replace(/\.(?:md|markdown)$/i, "") || entry.title, path: page.path, parentFileId: page.parent_file_id, icon: page.icon } : entry;
+      }));
+    }}/>}
     </details>
+    {creating && <CreateNotebookPageDialog actor={actor} space={space} parent={parentFileId} daily={creating === "daily"} close={() => setCreating(null)} onCreated={onCreated} onDenied={onDenied}/>}
     {(coverage.unavailable > 0 || coverage.stale > 0) && <p role="status" className="px-3 text-sm">部分文件暂不可用或版本已变化；请刷新目录重新读取。</p>}
     {state === "forbidden" && <p role="alert" className="p-4">访问权限已失效，笔记内容已清除。请重新登录或切换来源。</p>}
+    {state === "offline" && <p role="alert" className="p-4">当前离线，目录仅为上次观察；已打开草稿保留在内存。联网后请手动刷新并重新鉴权，不会自动保存。</p>}
     {state === "unsupported" && <p role="status" className="p-4">当前服务尚未提供文件查询能力，不能读取知识库。</p>}
     {state === "stale" && <div role="alert" className="p-4"><p>文件目录已经变化，请重新查询，不能拼接不同版本的页面。</p><Button onClick={refresh}>重新查询</Button></div>}
     {state === "error" && <div role="alert" className="p-4"><p>无法读取笔记列表，已打开的固定版本保留。请检查连接后重试。</p><Button onClick={() => setAttempt(value => value + 1)}>重试</Button></div>}

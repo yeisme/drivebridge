@@ -1,3 +1,4 @@
+import { EmptyState } from "../../components/EmptyState";
 import { useEffect,useRef,useState } from 'react';
 import { poll } from '../../app/poll';
 import { taskPollDelay } from '../../app/task-poll-delay';
@@ -31,11 +32,14 @@ function ScopedOperationTasks({agent,instance,user}:{agent?:string;instance?:str
  const cadence=useRef(30000);
  const detailTrigger=useRef<HTMLButtonElement|null>(null);
  const listController=useRef<AbortController|null>(null);
- const [status,setStatus]=useState<'loading'|'ready'|'error'|'denied'|'stale'|'unsupported'>('loading');
+ const [status,setStatus]=useState<'loading'|'ready'|'error'|'denied'|'stale'|'unsupported'|'offline'>('loading');
  useEffect(()=>{
   const controller=new AbortController();listController.current=controller;setStatus('loading');
   const invalidate=()=>{controller.abort();setItems([]);setNext('');setSelected(null);setStatus('denied');};
+  const offline=()=>{controller.abort();setItems([]);setNext('');setSelected(null);setPollError(false);setStatus('offline');};
   window.addEventListener('drivebridge-context',invalidate);
+  window.addEventListener('offline',offline);
+  if(!navigator.onLine){offline();return()=>{controller.abort();window.removeEventListener('drivebridge-context',invalidate);window.removeEventListener('offline',offline);};}
   const query=new URLSearchParams({kind,limit:'50'});if(agent)query.set('agent_id',agent);if(filter)query.set('state',filter);if(cursor)query.set('cursor',cursor);
   api<TaskPage>('/workspace/tasks?'+query,'GET',undefined,{},controller.signal).then(page=>{
    if(controller.signal.aborted)return;
@@ -45,7 +49,7 @@ function ScopedOperationTasks({agent,instance,user}:{agent?:string;instance?:str
    if(controller.signal.aborted)return;setItems([]);setNext('');setSelected(null);
    setStatus(error.status===401||error.status===403?'denied':error.status===410?'stale':error.status===404||error.status===405||error.message==='unsupported'?'unsupported':'error');
   });
-  return()=>{controller.abort();window.removeEventListener('drivebridge-context',invalidate);};
+  return()=>{controller.abort();window.removeEventListener('drivebridge-context',invalidate);window.removeEventListener('offline',offline);};
  },[kind,agent,filter,cursor,attempt]);
  useEffect(()=>{
   const hide=()=>{if(document.hidden)setSelected(null);};
@@ -56,11 +60,12 @@ function ScopedOperationTasks({agent,instance,user}:{agent?:string;instance?:str
   const query=new URLSearchParams({kind,limit:'50'});if(agent)query.set('agent_id',agent);if(filter)query.set('state',filter);
   return poll(async signal=>{
    try{
+    if(!navigator.onLine) throw Object.assign(new Error('offline'),{status:0});
     await verifySessionIdentity(user,instance,signal);
     const page=await api<TaskPage>('/workspace/tasks?'+query,'GET',undefined,{},signal);
     if(!validPage(page,kind,agent))throw new Error('invalid_contract');
     return page;
-   }catch(error){if(!signal.aborted){if((error as Error).message==='unsupported'){listController.current?.abort();setItems([]);setNext('');setSelected(null);setPollError(false);setStatus('unsupported');}else setPollError(true);}throw error;}
+   }catch(error){if(!signal.aborted){if((error as Error).message==='unsupported'){listController.current?.abort();setItems([]);setNext('');setSelected(null);setPollError(false);setStatus('unsupported');}else if((error as Error).message==='offline'){setPollError(false);setStatus('offline');}else setPollError(true);}throw error;}
   },page=>{setItems(page.items);setNext(page.next_cursor);setPollError(false);cadence.current=taskPollDelay(page.items.map(item=>({status:item.ui_state})));},()=>cadence.current,()=>{listController.current?.abort();setItems([]);setNext('');setSelected(null);setPollError(false);setStatus('denied');});
  },[instance,user,kind,agent,filter,cursor,attempt,selected,status]);
  const closeDetail=()=>{setSelected(null);detailTrigger.current?.focus();};
@@ -69,6 +74,7 @@ function ScopedOperationTasks({agent,instance,user}:{agent?:string;instance?:str
  return <section aria-label="持久操作任务" className="min-w-0 space-y-4">
   <WorkspacePageHeader title="任务中心" actions={<Button variant="outline" className="min-h-11 text-[13px] md:min-h-8" disabled={status==='loading'||status==='denied'} onClick={refresh}><RefreshCw className="size-4"/>刷新操作投影</Button>}/>
   <p className="m-0 text-[13px] leading-5 text-muted-foreground">只读原 operation、upload_batch、organization_plan、transfer_plan 或 automation_intent。操作完成不等于收件已验收或已归档。此入口不执行或恢复任务。</p>
+  {status==='offline'&&<p role="alert">当前离线，任务观察已清除；联网后请手动刷新原操作，不会把断连当作任务失败。</p>}
   <div className="flex flex-wrap items-center gap-4">
   {status!=='denied'&&<label className="flex max-w-full items-center gap-2 text-[13px]"><span className="shrink-0 text-muted-foreground">任务类别</span><SelectAdapter aria-label="任务类别" className="min-h-11 md:min-h-8" value={kind} onChange={event=>{const value=event.target.value;if((value!=='operation'&&value!=='upload_batch'&&value!=='organization_plan'&&value!=='transfer_plan'&&value!=='automation_intent')||value===kind)return;listController.current?.abort();setSelected(null);setItems([]);setNext('');setCursor('');setFilter('');setKind(value);}}><option value="operation">单操作</option><option value="upload_batch">批量上传</option><option value="organization_plan">整理计划</option><option value="transfer_plan">传输计划</option><option value="automation_intent">自动化意图</option></SelectAdapter></label>}
   {status!=='denied'&&<label className="flex max-w-full items-center gap-2 text-[13px]"><span className="shrink-0 text-muted-foreground">任务显示状态</span><SelectAdapter aria-label="任务显示状态" className="min-h-11 md:min-h-8" value={filter} onChange={event=>{if(event.target.value===filter)return;setSelected(null);setItems([]);setNext('');setCursor('');setFilter(event.target.value);}}><option value="">全部操作状态</option>{Object.entries(states).map(([value,label])=><option key={value} value={value}>{label}</option>)}</SelectAdapter></label>}
@@ -85,7 +91,7 @@ function ScopedOperationTasks({agent,instance,user}:{agent?:string;instance?:str
   {kind==='automation_intent'&&<p className="text-sm text-muted-foreground">读取自动化意图不会运行规则或推进 checkpoint。当前规则不代表历史动作；原 completed 的效果尚未独立证明，创建者及进度未知。</p>}
   {kind==='automation_intent'&&agent&&<p role="status">当前不能证明此类意图属于此 Agent；空结果不表示该 Agent 没有自动化意图。</p>}
   {(kind==='organization_plan'||kind==='transfer_plan')&&agent&&<p role="status">当前不能证明此类计划属于此 Agent；空结果不表示该 Agent 没有计划。</p>}
-  {status==='ready'&&!items.length&&!((kind==='organization_plan'||kind==='transfer_plan'||kind==='automation_intent')&&agent)&&<p role="status">当前授权范围及筛选下没有操作任务。</p>}
+  {status==='ready'&&!items.length&&!((kind==='organization_plan'||kind==='transfer_plan'||kind==='automation_intent')&&agent)&&<div role="status"><EmptyState title="当前没有匹配的任务" description="当前授权范围及筛选下没有操作任务。"/></div>}
   {selected&&(selected.owner_kind==='operation'||selected.owner_kind==='upload_batch')&&<AppSheet title={selected.owner_kind==='operation'?'操作详情':'批量条目'} open onOpenChange={open=>{if(!open)closeDetail();}} detailWidth={440}>
    {selected.owner_kind==='operation'?<OperationTaskDetail key={selected.owner_id} task={selected} close={closeDetail} onDenied={denyDetail}/>:<BatchTaskItems key={selected.owner_id} batch={selected.owner_id} close={closeDetail} onDenied={denyDetail}/>}
   </AppSheet>}

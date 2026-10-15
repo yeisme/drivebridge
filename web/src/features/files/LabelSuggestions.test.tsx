@@ -43,6 +43,12 @@ it('bounds paging and rejects entries for a different file version',async()=>{
 it('clears choices on scope revocation and drops late responses',async()=>{
  let finish!:(response:Response)=>void;vi.spyOn(globalThis,'fetch').mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));render(<LabelSuggestions {...props}/>);await waitFor(()=>expect(finish).toBeDefined());fireEvent(window,new Event('drivebridge-context'));finish(json(page));await screen.findByText(/建议与选择已清除/);expect(screen.queryByRole('checkbox')).toBeNull();
 });
+it('returns focus to the fixed-version suggestion region when its state becomes unavailable',async()=>{
+ vi.spyOn(globalThis,'fetch').mockResolvedValue(json(page));render(<LabelSuggestionEntry {...props}/>);
+ fireEvent.click(screen.getByRole('button',{name:'审阅 Agent 标签建议'}));await screen.findByText(/认证 Agent/);
+ document.body.focus();fireEvent(window,new Event('drivebridge-context'));await screen.findByText(/建议与选择已清除/);
+ expect(document.activeElement).toBe(screen.getByRole('region',{name:'固定版本标签建议'}));
+});
 it('missing locks and malformed recovery never send a decision',async()=>{
  Object.defineProperty(navigator,'locks',{configurable:true,value:undefined});const fetch=vi.spyOn(globalThis,'fetch').mockResolvedValue(json(page));const view=render(<LabelSuggestions {...props}/>);fireEvent.click(await screen.findByRole('button',{name:'拒绝此建议'}));fireEvent.click(screen.getByRole('button',{name:'确认标签决定'}));await screen.findByText('建议暂不可用，不代表没有建议。');expect(fetch).toHaveBeenCalledTimes(1);view.unmount();
  localStorage.setItem(slot,JSON.stringify({key:'suggestion-'+'a'.repeat(48),suggestion:suggestion.suggestion_id,body:{expected_revision:1,base_version_id:props.version,decision:'reject',labels:[],secret:'forbidden'}}));expect(()=>readSuggestionIntent(slot)).toThrow();render(<LabelSuggestions {...props}/>);await screen.findByText('建议暂不可用，不代表没有建议。');expect(fetch).toHaveBeenCalledTimes(1);

@@ -1,3 +1,4 @@
+/// <reference lib="es2024.promise" />
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import fixtures from '../../../../contracts/personal-workspace/fixtures/responses.json';
@@ -79,4 +80,13 @@ it('distinguishes unsupported service, empty scope and forbidden access', async 
   fetch.mockResolvedValueOnce(json({ data: { ...page.data, items: [] } }));
   const empty=render(<GrantOverview/>);await screen.findByText(/当前范围没有新协议授权/);empty.unmount();
   fetch.mockResolvedValueOnce(json({},403));render(<GrantOverview/>);await screen.findByText(/访问权限已失效/);
+});
+it('clears authorization observations on disconnect and does not accept a late grant list', async () => {
+  const gate = Promise.withResolvers<Response>();
+  const fetch = vi.spyOn(globalThis, 'fetch').mockImplementationOnce(() => gate.promise);
+  render(<GrantOverview/>); await waitFor(() => expect(fetch).toHaveBeenCalled());
+  fireEvent(window, new Event('offline'));
+  await screen.findByText(/当前离线，授权与检查观察已清除/);
+  gate.resolve(json(page)); await waitFor(() => expect(screen.queryByText('Reader')).toBeNull());
+  expect(screen.queryByText('当前视图暂无 Agent')).toBeNull();
 });

@@ -10,12 +10,13 @@ import { useSidebarPreference } from '../../app/useSidebarPreference';
 import type { Page } from '../../app/navigation-state';
 import { visibleNavGroups } from '../../nav-groups';
 import { readDesktopCapabilities, type DesktopEntryBridge } from '../../app/desktop-entry';
+import { PinaxReaderWorkspace } from './PinaxReaderWorkspace';
 
 const navigation: readonly [Page, string, ReactNode][] = [['knowledge', '本机知识库', <BookOpen key="knowledge" />], ['settings', '桌面能力说明', <ShieldCheck key="settings" />]];
 
 // The same production Web shell, without inventing a cloud identity, spaces,
 // files or a fake source. Domain readers mount only after owner admission.
-export function DesktopWorkspace({ bridge }: { bridge?: DesktopEntryBridge }) {
+export function DesktopWorkspace({ bridge, boundSourceId }: { bridge?: DesktopEntryBridge; boundSourceId?: string }) {
   const mobile = useMobileViewport();
   // No instance identity exists yet. Layout preferences remain memory-only.
   const [collapsed, toggle, reset, explicit] = useSidebarPreference('', '');
@@ -55,6 +56,9 @@ export function DesktopWorkspace({ bridge }: { bridge?: DesktopEntryBridge }) {
     return () => { active = false; window.clearTimeout(deadline); };
   }, [bridge, attempt]);
   const title = page === 'knowledge' ? '本机知识库' : '桌面能力说明';
+  const reader = bridge?.listNotes && bridge.searchNotes && bridge.readDocument && bridge.readLinks
+    ? { listNotes: bridge.listNotes, searchNotes: bridge.searchNotes, readDocument: bridge.readDocument, readLinks: bridge.readLinks }
+    : undefined;
   return <WorkspaceShell mobile={mobile} collapsed={collapsed} focused={false}>
     {!mobile && <aside className="sidebar shrink-0 overflow-hidden border-0 p-0 group-data-[collapsed=true]/shell:p-0">
       <a href="#knowledge" aria-label="DriveBridge 本机工作区" className="brand flex h-16 shrink-0 items-center gap-2 px-3 text-[15px] group-data-[collapsed=true]/shell:justify-center group-data-[collapsed=true]/shell:px-0" onClick={() => setPage('knowledge')}><span className="brandmark"><BrandMark size={32}/></span><span className="brand-name">DriveBridge</span></a>
@@ -72,6 +76,7 @@ export function DesktopWorkspace({ bridge }: { bridge?: DesktopEntryBridge }) {
         {state === 'ready' && <p role="status" className="text-sm text-muted-foreground">{available.includes('chooseVault') && bridge?.chooseVault ? '可以选择已有 vault 进行只读预检。' : '桌面宿主已连接，尚未开放来源操作。'}</p>}
         {state === 'ready' && available.includes('chooseVault') && bridge?.chooseVault && <Button className="min-h-11 self-start" disabled={selecting} onClick={() => void chooseVault()}>{selecting ? '正在选择与检查…' : '选择本机 Pinax vault'}</Button>}
         {selectionStatus && <p role="status" className="text-sm text-muted-foreground">{selectionStatus}</p>}
+        {state === 'ready' && boundSourceId && reader && <PinaxReaderWorkspace bridge={reader} sourceId={boundSourceId}/>}
         <div className="rounded-md border border-border bg-muted/40 p-4 text-sm leading-7"><strong className="font-medium">尚未建立 Pinax 来源</strong><p className="m-0">预检不会建立绑定。受管范围保护通过验证之前，不开放正文阅读或编辑。</p></div>
         {page === 'settings' && <ul className="m-0 space-y-2 pl-5 text-sm leading-7"><li>此窗口复用正式 Web 的导航、主题和阅读工作区组件。</li><li>当前不连接云文件服务，不创建云用户、空间或虚构笔记。</li><li>桌面文件、全文阅读、编辑及三平台实机验收仍未完成；原浏览器功能保持独立可用。</li></ul>}
       </section>

@@ -59,6 +59,7 @@ interface Notice {
   created_at: string;
 }
 export interface GovernanceState {
+  admin_direct_write?: boolean;
   enabled: boolean;
   actor_id: string;
   tenant_id: string;
@@ -90,6 +91,7 @@ export interface GovernanceState {
 const roleLabels: Record<string, string> = {
   owner: "本人空间",
   admin: "管理只读",
+  admin_editor: "管理员 · 可读写",
   custodian: "数据负责人",
   editor: "已授权编辑",
   viewer: "只读协作",
@@ -123,6 +125,7 @@ export function governanceMode(data?: GovernanceState) {
   const space = getDataContext().space;
   if (!data?.enabled || !space) return "owner";
   const role = data.space_roles[space];
+  if (role === "admin" && data.admin_direct_write) return "admin_editor";
   if (["owner", "editor", "custodian"].includes(role)) return role;
   const grant = data.requests?.find(
     (r) =>

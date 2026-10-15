@@ -37,7 +37,7 @@ func (c *cli) openService(enabled, development bool) (*service.Service, error) {
 }
 
 func newServeCommand(c *cli) *cobra.Command {
-	var enabled, development, documentEditing, propertyEditing, automationManagement, shareReceivers, holdManagement, labelManagement bool
+	var enabled, development, documentEditing, propertyEditing, automationManagement, shareReceivers, holdManagement, labelManagement, adminDirectWrite, cloudConnectors, transferPlans bool
 	cmd := &cobra.Command{
 		Use:   "serve",
 		Short: "Run the HTTP server (application endpoints stay off without --enabled).",
@@ -74,6 +74,9 @@ func newServeCommand(c *cli) *cobra.Command {
 			}
 			defer s.Close()
 
+			s.Config.AdminDirectWrite = adminDirectWrite
+			s.Config.CloudConnectors = cloudConnectors
+			s.Config.TransferPlans = transferPlans
 			s.Config.DocumentEditing = documentEditing || s.Config.DocumentEditing
 			s.Config.PropertyEditing = propertyEditing || s.Config.PropertyEditing
 			s.Config.AutomationManagement = automationManagement || s.Config.AutomationManagement
@@ -138,6 +141,9 @@ func newServeCommand(c *cli) *cobra.Command {
 	f.StringVar(&webDir, "web-dir", "", "Built web client directory")
 	f.Int64Var(&maxBytes, "max-bytes", 0, "Per-user-space and file byte limit")
 	f.String("team-dsn", "", "Team PostgreSQL metadata DSN (alternative: DRIVEBRIDGE_TEAM_DSN); never logged or echoed")
+	f.BoolVar(&adminDirectWrite, "admin-direct-write", false, "Allow human administrators to write within their existing managed data scope")
+	f.BoolVar(&cloudConnectors, "cloud-connectors", false, "Enable configured cloud connector operations")
+	f.BoolVar(&transferPlans, "transfer-plans", false, "Enable human-confirmed cross-storage transfer plans")
 	f.BoolVar(&enabled, "enabled", false, "Enable application endpoints")
 	f.BoolVar(&development, "development", false, "Allow loopback HTTP for offline development only")
 	f.BoolVar(&documentEditing, "document-editing", false, "Enable human-confirmed text and Markdown version saves")
