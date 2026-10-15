@@ -36,7 +36,7 @@ jobs:
       - run: pnpm --dir web install --frozen-lockfile
       - run: pnpm --dir desktop install --frozen-lockfile
       - run: python3 scripts/check-version.py
-      - run: make contracts-check
+      - run: DRIVEBRIDGE_PINAX_READER_CONTRACT_SOURCE=fixture make contracts-check
       - run: GOWORK=off CGO_ENABLED=0 go test ./... -count=1 -timeout=15m
       - run: GOWORK=off CGO_ENABLED=0 go -C server test ./... -count=1 -timeout=20m
       - run: pnpm --dir web test

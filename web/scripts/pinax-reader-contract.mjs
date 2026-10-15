@@ -1,7 +1,7 @@
 // Build-time owner export only. Never used for runtime note operations.
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdtemp, readdir, rm } from 'node:fs/promises';
+import { access, mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -49,11 +49,22 @@ export function readerContract(projection) {
 
 export async function exportReaderContract(root) {
   if (/(?:^|[\s"'])-race(?:=|[\s"']|$)/.test(process.env.GOFLAGS || '')) throw new Error('Race detection is excluded from contract export');
+  if (process.env.DRIVEBRIDGE_PINAX_READER_CONTRACT_SOURCE === 'fixture') {
+    const fixture = JSON.parse(await readFile(join(root, 'contracts', 'desktop', 'pinax-reader.openapi.json'), 'utf8'));
+    if (fixture.openapi !== '3.1.0' || fixture['x-owner'] !== 'pinax' || fixture['x-drivebridge-integration-status'] !== 'pending') throw new Error('Invalid checked-in Pinax reader contract fixture');
+    return fixture;
+  }
   const vault = await mkdtemp(join(tmpdir(), 'drivebridge-pinax-contract-'));
   try {
     // Explicit empty disposable directory prevents default personal-vault selection.
-    const raw = execFileSync('go', ['run', './cmd/pinax', 'api', 'schema', 'export', '--format', 'openapi', '--vault', vault, '--json'], {
-      cwd: resolve(root, '../pinax'), encoding: 'utf8', maxBuffer: 16 * 1024 * 1024, timeout: 120000,
+    const packagedPinax = process.env.DRIVEBRIDGE_PINAX_BIN || join(root, 'desktop', 'host-bin', process.platform === 'win32' ? 'pinax.exe' : 'pinax');
+    const usePackagedPinax = await access(packagedPinax).then(() => true, () => false);
+    const command = usePackagedPinax ? packagedPinax : 'go';
+    const args = usePackagedPinax
+      ? ['api', 'schema', 'export', '--format', 'openapi', '--vault', vault, '--json']
+      : ['run', './cmd/pinax', 'api', 'schema', 'export', '--format', 'openapi', '--vault', vault, '--json'];
+    const raw = execFileSync(command, args, {
+      cwd: usePackagedPinax ? root : resolve(root, '../pinax'), encoding: 'utf8', maxBuffer: 16 * 1024 * 1024, timeout: 120000,
       env: { ...process.env, CGO_ENABLED: '0', GOWORK: 'off' }, stdio: ['ignore', 'pipe', 'pipe'],
     });
     if ((await readdir(vault)).length) throw new Error('Schema export mutated its disposable vault');

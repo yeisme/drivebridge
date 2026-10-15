@@ -94,7 +94,7 @@ jobs:
         pnpm run package
         pnpm run check:package out/drivebridge-desktop-linux-x64
     - name: Contract checks
-      run: make contracts-check
+      run: DRIVEBRIDGE_PINAX_READER_CONTRACT_SOURCE=fixture make contracts-check
   check-full:
     runs-on: ubuntu-latest
     steps:
@@ -140,7 +140,7 @@ jobs:
         pnpm run package
         pnpm run check:package out/drivebridge-desktop-linux-x64
     - name: Contract checks
-      run: make contracts-check
+      run: DRIVEBRIDGE_PINAX_READER_CONTRACT_SOURCE=fixture make contracts-check
     name: Full / check
     needs:
     - scope
