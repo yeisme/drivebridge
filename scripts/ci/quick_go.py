@@ -97,7 +97,9 @@ def main():
             raise ValueError("no non-integration Go packages selected")
         print(f"quick-go: module={directory.relative_to(root)} packages={len(selected)}", flush=True)
         run(["go", "vet", *selected], directory, env)
-        run(["go", "test", "-timeout=10m", *selected], directory, env)
+        test_args = ["go", "test", "-timeout=10m"]
+        if "--short" in sys.argv[1:]: test_args.append("-short")
+        run([*test_args, *selected], directory, env)
         run(["go", "build", *(["-o", os.devnull] if len(selected) == 1 else []), *selected], directory, env)
 
 

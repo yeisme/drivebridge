@@ -60,7 +60,7 @@ jobs:
         go-version-file: go.mod
         cache: true
     - name: Affected Go packages and consumers
-      run: python3 scripts/ci/quick_go.py
+      run: python3 scripts/ci/quick_go.py --short
     - uses: pnpm/action-setup@v4
       with:
         version: '11.24.0'
@@ -107,7 +107,7 @@ jobs:
         go-version-file: go.mod
         cache: true
     - name: Affected Go packages and consumers
-      run: python3 scripts/ci/quick_go.py --all
+      run: python3 scripts/ci/quick_go.py --all --short
     - uses: pnpm/action-setup@v4
       with:
         version: '11.24.0'
