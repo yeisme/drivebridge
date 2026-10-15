@@ -85,6 +85,11 @@ jobs:
         pnpm install --frozen-lockfile
         pnpm run typecheck
         pnpm test
+        curl -fsSL https://github.com/yeisme/pinax/releases/download/v0.3.0/pinax_0.3.0_linux_x86_64.tar.gz -o /tmp/pinax_0.3.0_linux_x86_64.tar.gz
+        echo "120e81e4d493da7c205c9526ad119a24331d5c2e5004e80cbb739b50e37d7a47  /tmp/pinax_0.3.0_linux_x86_64.tar.gz" | sha256sum -c -
+        mkdir -p /tmp/pinax-0.3.0
+        tar -xzf /tmp/pinax_0.3.0_linux_x86_64.tar.gz -C /tmp/pinax-0.3.0
+        DRIVEBRIDGE_PINAX_BIN=/tmp/pinax-0.3.0/pinax node scripts/prepare-host.mjs
         pnpm run package
         pnpm run check:package out/drivebridge-desktop-linux-x64
     - name: Contract checks
@@ -125,6 +130,11 @@ jobs:
         pnpm install --frozen-lockfile
         pnpm run typecheck
         pnpm test
+        curl -fsSL https://github.com/yeisme/pinax/releases/download/v0.3.0/pinax_0.3.0_linux_x86_64.tar.gz -o /tmp/pinax_0.3.0_linux_x86_64.tar.gz
+        echo "120e81e4d493da7c205c9526ad119a24331d5c2e5004e80cbb739b50e37d7a47  /tmp/pinax_0.3.0_linux_x86_64.tar.gz" | sha256sum -c -
+        mkdir -p /tmp/pinax-0.3.0
+        tar -xzf /tmp/pinax_0.3.0_linux_x86_64.tar.gz -C /tmp/pinax-0.3.0
+        DRIVEBRIDGE_PINAX_BIN=/tmp/pinax-0.3.0/pinax node scripts/prepare-host.mjs
         pnpm run package
         pnpm run check:package out/drivebridge-desktop-linux-x64
     - name: Contract checks

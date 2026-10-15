@@ -1,7 +1,7 @@
 // Development resources only. Release signing/trusted package assembly is D07.
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdir, chmod, readFile, writeFile } from 'node:fs/promises';
+import { access, chmod, copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 const root = fileURLToPath(new URL('../../', import.meta.url));
@@ -11,9 +11,21 @@ await mkdir(target, { recursive: true, mode: 0o700 });
 const env = { ...process.env, CGO_ENABLED: '0', GOWORK: 'off' };
 const suffix = process.platform === 'win32' ? '.exe' : '';
 const digests = {};
-for (const [name, cwd] of [['drivebridge', root], ['pinax', join(root, '../pinax')]]) {
+const pinaxCheckout = process.env.DRIVEBRIDGE_PINAX_DIR || join(root, '../pinax');
+const awaitExists = async (path) => access(path).then(() => true, () => false);
+const builds = [
+  ['drivebridge', root, './cmd/drivebridge'],
+  ['pinax', pinaxCheckout, './cmd/pinax'],
+];
+for (const [name, cwd, packagePath] of builds) {
   const file = join(target, name + suffix);
-  execFileSync('go', ['build', '-trimpath', '-o', file, `./cmd/${name}`], { cwd, env, timeout: 120000, stdio: ['ignore', 'ignore', 'pipe'] });
+  const supplied = name === 'pinax' && process.env.DRIVEBRIDGE_PINAX_BIN;
+  if (supplied) await copyFile(process.env.DRIVEBRIDGE_PINAX_BIN, file);
+  else {
+    const buildCwd = name === 'pinax' && !(await awaitExists(pinaxCheckout)) ? root : cwd;
+    const buildPackage = name === 'pinax' && !(await awaitExists(pinaxCheckout)) ? 'github.com/yeisme/pinax/cmd/pinax' : packagePath;
+    execFileSync('go', ['build', '-trimpath', '-o', file, buildPackage], { cwd: buildCwd, env, timeout: 120000, stdio: ['ignore', 'ignore', 'pipe'] });
+  }
   await chmod(file, 0o700);
   digests[name] = 'sha256:' + createHash('sha256').update(await readFile(file)).digest('hex');
 }
