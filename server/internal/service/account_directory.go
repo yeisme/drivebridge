@@ -357,17 +357,26 @@ func (s *Service) changeAccount(p Principal, id, action string, revision *uint64
 			if err := tx.Where("owner = ?", id).Delete(&Session{}).Error; err != nil {
 				return err
 			}
-			if err := s.invalidateRequests(tx, p, tx.Model(&AccessRequest{}).Where("(requester = ? OR approver = ?) AND status IN ?", id, id, []string{"pending", "approved", "executing"})); err != nil {
-				return err
-			}
-		}
-		if action == "archive" {
 			if err := tx.Model(&UserKey{}).Where("owner = ?", id).Updates(map[string]any{"revoked": true, "sealed_key": nil}).Error; err != nil {
 				return err
 			}
 			if err := tx.Model(&Agent{}).Where("owner = ?", id).Update("revoked", true).Error; err != nil {
 				return err
 			}
+			if err := tx.Where("owner = ? OR actor_id = ?", id, id).Delete(&AccessGrant{}).Error; err != nil {
+				return err
+			}
+			if err := tx.Model(&HandoffGrant{}).Where("owner = ? OR initiator = ?", id, id).Update("cancelled", true).Error; err != nil {
+				return err
+			}
+			if err := tx.Model(&ShareSession{}).Where("user_id = ?", id).Update("revoked", true).Error; err != nil {
+				return err
+			}
+			if err := s.invalidateRequests(tx, p, tx.Model(&AccessRequest{}).Where("(requester = ? OR approver = ?) AND status IN ?", id, id, []string{"pending", "approved", "executing"})); err != nil {
+				return err
+			}
+		}
+		if action == "archive" {
 			if err := tx.Model(&Share{}).Where("owner = ? OR actor_id = ? OR owner IN (?)", id, id, tx.Model(&Membership{}).Select("data_owner").Where("user_id = ?", id)).Updates(map[string]any{"revoked": true, "revision": gorm.Expr("revision + 1")}).Error; err != nil {
 				return err
 			}

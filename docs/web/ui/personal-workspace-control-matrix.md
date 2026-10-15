@@ -34,3 +34,16 @@
 3. `empty`、`unavailable`、`forbidden`、`unknown`、`stale` 和 `offline` 必须分开呈现，不能用空列表掩盖失败。
 4. 浏览器证据必须等待稳定文本或有效控件；仅挂载、networkidle、无溢出或静态截图不能关闭业务门。
 5. 本矩阵只冻结设计输入和验收口径；真实云、Pinax 私有 vault、三平台实机、签名/发布和付费 Provider 仍由各自门负责。
+
+## Capability release labels
+
+| Capability | Stable | Experimental | Fixture-only | Planned |
+| --- | --- | --- | --- | --- |
+| OneDrive local path | target |  | local auth fixture |  |
+| Generic rclone |  | transfer-only | provider fixture |  |
+| Scaena handoff |  | local relay | relay fixture | production handoff |
+| Remote multi-tenant |  | guarded | demo fixture | production tenancy |
+| Electron reader |  |  | host fixture | three-platform release |
+
+The UI must not present experimental or planned capabilities as production
+features. Unknown provider or deployment states remain explicit and recoverable.

@@ -1,7 +1,6 @@
 package service
 
 import (
-	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -92,8 +91,10 @@ func (s *Service) sealOrgCursor(payload orgCursorPayload) (string, error) {
 	if e != nil {
 		return "", code("invalid_request")
 	}
-	nonce := make([]byte, s.crypt.NonceSize())
-	rand.Read(nonce)
+	nonce, e := secureRandomBytes(s.crypt.NonceSize())
+	if e != nil {
+		return "", code("encryption_unavailable")
+	}
 	sealed := s.crypt.Seal(nonce, nonce, body, []byte("org-cursor"))
 	return base64.RawURLEncoding.EncodeToString(sealed), nil
 }
@@ -522,12 +523,22 @@ func (s *Service) SetFileLabels(p Principal, fileID string, q SetFileLabelsReque
 	}
 	txErr := s.DB.Transaction(func(tx *gorm.DB) error {
 		var file File
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ? AND owner = ?", fileID, p.dataOwner()).First(&file).Error; err != nil { return resourceReadError(err) }
-		if file.Trashed || file.PurgeStartedAt != nil { return code("not_found") }
-		if err := s.allowOn(tx, p, file.SpaceID, file.Path, "write"); err != nil { return err }
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ? AND owner = ?", fileID, p.dataOwner()).First(&file).Error; err != nil {
+			return resourceReadError(err)
+		}
+		if file.Trashed || file.PurgeStartedAt != nil {
+			return code("not_found")
+		}
+		if err := s.allowOn(tx, p, file.SpaceID, file.Path, "write"); err != nil {
+			return err
+		}
 		var existing []FileLabelAssignment
-		if err := tx.Where("owner = ? AND file_id = ?", p.dataOwner(), fileID).Find(&existing).Error; err != nil { return code("database_unavailable") }
-		if q.ExpectedRevision != "" && q.ExpectedRevision != revisionString(labelRevision(existing)) { return code("version_conflict") }
+		if err := tx.Where("owner = ? AND file_id = ?", p.dataOwner(), fileID).Find(&existing).Error; err != nil {
+			return code("database_unavailable")
+		}
+		if q.ExpectedRevision != "" && q.ExpectedRevision != revisionString(labelRevision(existing)) {
+			return code("version_conflict")
+		}
 		now := time.Now().UTC()
 		if err := tx.Where("owner = ? AND file_id = ? AND namespace = ?", p.dataOwner(), fileID, q.Namespace).Delete(&FileLabelAssignment{}).Error; err != nil {
 			return code("database_unavailable")

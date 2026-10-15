@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
 	"strings"
+	"time"
 
 	"github.com/yeisme/drivebridge-server/internal/fixtures"
 	"github.com/yeisme/drivebridge-server/internal/service"
-	"os"
 	"os/signal"
 )
 
@@ -45,7 +46,7 @@ func main() {
 			fmt.Fprintln(os.Stderr, "Fixture S3 listener must be a numeric loopback address.")
 			os.Exit(1)
 		}
-		s3srv := &http.Server{Addr: *s3listen, Handler: f.S3Handler()}
+		s3srv := &http.Server{Addr: *s3listen, Handler: f.S3Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Minute, WriteTimeout: 15 * time.Minute, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 1 << 20}
 		s3ln, e := net.Listen("tcp", *s3listen)
 		if e != nil {
 			fmt.Fprintln(os.Stderr, "Fixture S3 listener failed.")

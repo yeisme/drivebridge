@@ -1,4 +1,4 @@
-.PHONY: help dev build test e2e check specs contracts contracts-check
+.PHONY: help dev build test e2e check specs contracts contracts-check fresh-clone version-check
 
 help:
 	python3 scripts/workspace.py --help
@@ -28,3 +28,9 @@ contracts-check:
 	python3 scripts/check.py -- node web/scripts/generate-contract-types.mjs --check --profile all
 	python3 scripts/check.py -- node web/scripts/check-contract-schemas.mjs
 	python3 scripts/check.py -- node web/scripts/check-desktop-contract.mjs
+
+fresh-clone:
+	python3 scripts/ci/fresh_clone.py
+
+version-check:
+	python3 scripts/check-version.py

@@ -42,42 +42,26 @@ func (s *Service) accessHandler(w http.ResponseWriter, r *http.Request, p Princi
 	if s.DB.First(&v, "id = ? AND owner = ? AND file_id = ?", q.VersionID, p.dataOwner(), f.ID).Error != nil {
 		return code("not_found")
 	}
-	st, e := s.storageForSpace(p.dataOwner(), f.SpaceID, v.ConnectionID)
-	if e != nil {
-		return e
-	}
-	if sp, ok := s.spaceFor(p, f.SpaceID); ok && (sp.Encrypted || sp.TeamID != "") {
-		// Encrypted spaces never hand out object-store direct links: a holder
-		// of the short-lived capability can only reach the server-side
-		// decryption stream, under the same five-minute validity.
-		token := ID()
-		grant := AccessGrant{ActorID: p.UserID, TenantID: p.TenantID, Hash: Hash(token), Owner: p.dataOwner(), FileID: f.ID, VersionID: v.ID, Expires: time.Now().UTC().Add(accessTTL)}
-		s.DB.Delete(&AccessGrant{}, "expires < ?", time.Now().UTC())
-		if err := s.DB.Transaction(func(tx *gorm.DB) error {
-			if sp.TeamID != "" {
-				if e := teamWritable(tx, sp.ID); e != nil {
-					return e
-				}
+	sp, _ := s.spaceFor(p, f.SpaceID)
+	// All authenticated downloads use a revocable server-side capability. A
+	// storage-provider URL must never become an untracked bearer credential.
+	token := ID()
+	grant := AccessGrant{ActorID: p.UserID, TenantID: p.TenantID, Hash: Hash(token), Owner: p.dataOwner(), FileID: f.ID, VersionID: v.ID, Expires: time.Now().UTC().Add(accessTTL)}
+	s.DB.Delete(&AccessGrant{}, "expires < ?", time.Now().UTC())
+	if err := s.DB.Transaction(func(tx *gorm.DB) error {
+		if sp.TeamID != "" {
+			if e := teamWritable(tx, sp.ID); e != nil {
+				return e
 			}
-			return tx.Create(&grant).Error
-		}); err != nil {
-			if safeCode(err) == "team_archived" {
-				return err
-			}
-			return code("database_unavailable")
 		}
-		respond(w, map[string]any{"url": s.Config.Origin + "/api/v1/access/" + token, "expires_at": grant.Expires, "version_id": v.ID, "transport": "server_decryption_stream"})
-		return nil
+		return tx.Create(&grant).Error
+	}); err != nil {
+		if safeCode(err) == "team_archived" {
+			return err
+		}
+		return code("database_unavailable")
 	}
-	access, ok := st.(temporaryAccess)
-	if !ok {
-		return code("access_unavailable")
-	}
-	u, e := access.Access(r.Context(), v.ObjectKey, accessTTL)
-	if e != nil {
-		return e
-	}
-	respond(w, map[string]any{"url": u, "expires_at": time.Now().UTC().Add(accessTTL), "version_id": v.ID})
+	respond(w, map[string]any{"url": s.Config.Origin + "/api/v1/access/" + token, "expires_at": grant.Expires, "version_id": v.ID, "transport": "server_stream"})
 	return nil
 }
 
@@ -94,6 +78,8 @@ func (s *Service) accessStreamHandler(w http.ResponseWriter, r *http.Request) {
 		writeError(w, code("unauthorized"))
 		return
 	}
+	w.Header().Set("Cache-Control", "private, no-store")
+	w.Header().Set("Referrer-Policy", "no-referrer")
 	p := Principal{AccessGrantHash: grant.Hash, ExternalRead: true, UserID: defaultString(grant.ActorID, grant.Owner), DataOwner: grant.Owner, TenantID: grant.TenantID}
 	f, v, body, e := s.Download(r.Context(), p, grant.FileID, grant.VersionID)
 	if e != nil {

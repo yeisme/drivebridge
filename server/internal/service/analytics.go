@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	crand "crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"strings"
@@ -326,8 +325,10 @@ func analyticsCanonicalQuery(q AnalyticsQueryRequest) string {
 
 func (s *Service) sealAnalyticsCursor(payload analyticsCursorPayload) (string, error) {
 	body, _ := json.Marshal(payload)
-	nonce := make([]byte, s.crypt.NonceSize())
-	crand.Read(nonce)
+	nonce, e := secureRandomBytes(s.crypt.NonceSize())
+	if e != nil {
+		return "", code("encryption_unavailable")
+	}
 	sealed := s.crypt.Seal(nonce, nonce, body, []byte("analytics-cursor"))
 	return base64.RawURLEncoding.EncodeToString(sealed), nil
 }

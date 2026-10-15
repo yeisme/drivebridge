@@ -118,7 +118,20 @@ func Convert(ctx context.Context, input, dest, kind, mimeType string) (string, e
 		}
 		args = append(args, "-frames:v", "1", "-vf", "scale='min("+width+",iw)':-2", "-fs", "16777216", "-f", "image2", dest)
 	}
-	if exec.CommandContext(ctx, "ffmpeg", args...).Run() != nil {
+	if _, err = exec.LookPath("bwrap"); err != nil {
+		return "", errors.New("preview_sandbox_unavailable")
+	}
+	// ffmpeg receives only the private working directory through bwrap. The
+	// process has no network, no host filesystem and a bounded tempfs.
+	for i, arg := range args {
+		if arg == input {
+			args[i] = "/work/" + filepath.Base(input)
+		}
+		if arg == dest {
+			args[i] = "/work/" + filepath.Base(dest)
+		}
+	}
+	if sandbox(ctx, dir, executable, args...).Run() != nil {
 		return "", fail
 	}
 	return outMIME, nil

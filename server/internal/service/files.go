@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"crypto/cipher"
-	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -165,8 +164,11 @@ func (s *Service) createUpload(p Principal, q UploadRequest, key string, origin 
 		}
 		var nonce []byte
 		if sp.Encrypted {
-			nonce = make([]byte, 12)
-			rand.Read(nonce)
+			var nonceErr error
+			nonce, nonceErr = secureRandomBytes(12)
+			if nonceErr != nil {
+				return code("encryption_unavailable")
+			}
 		}
 		if origin == nil || !origin.AutoRename {
 			if err := pathAvailable(tx, p.dataOwner(), q.SpaceID, q.Path, q.FileID); err != nil {
@@ -649,7 +651,7 @@ func (s *Service) completeAuthorized(ctx context.Context, p Principal, id string
 	if e = s.DB.Model(&op).Updates(map[string]any{"status": "verifying", "error": ""}).Error; e != nil {
 		return op, code("database_unavailable")
 	}
-	objectKey := s.blobObjectKey(blobScope(sp), op.SHA256)
+	objectKey := s.blobObjectKey(p.dataOwner(), blobScope(sp), op.SHA256)
 	meter := &insights.ObservedReadSeeker{ReadSeeker: f}
 	e = storage.Put(ctx, objectKey, meter, objectSize)
 	s.observed(p, op, "server_to_storage", "transfer", meter.Bytes)
@@ -1105,7 +1107,7 @@ func (s *Service) publishUploadAuthorized(p Principal, op Operation, encrypted b
 	if s.DB.First(&sp, "id = ? AND owner = ?", op.SpaceID, p.dataOwner()).Error != nil {
 		return op, code("not_found")
 	}
-	objectKey := s.blobObjectKey(blobScope(sp), op.SHA256)
+	objectKey := s.blobObjectKey(p.dataOwner(), blobScope(sp), op.SHA256)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	e := s.DB.Transaction(func(tx *gorm.DB) error {
@@ -1285,7 +1287,7 @@ func (s *Service) streamUploadToObject(ctx context.Context, p Principal, op Oper
 	if _, e := reader.Seek(0, io.SeekStart); e != nil {
 		return "", 0, e
 	}
-	objectKey := s.blobObjectKey(blobScope(sp), op.SHA256)
+	objectKey := s.blobObjectKey(p.dataOwner(), blobScope(sp), op.SHA256)
 	meter := &seekableCountingReader{Reader: reader, src: reader}
 	if e := storage.Put(ctx, objectKey, meter, op.Size); e != nil {
 		s.DB.Model(&op).Updates(map[string]any{"status": "failed", "error": "storage_write_failed"})

@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.1.2] - Unreleased
+
+CI、fresh-clone 构建、版本一致性和安全边界修复进行中；本版本尚未发布。
+
 ## [0.1.0] - 2026-10-15
 
 DriveBridge 首个正式的 pre-1.0 版本，包含个人文件空间与 Agent 工作台的完整本地体验。

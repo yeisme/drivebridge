@@ -88,8 +88,8 @@ func TestBlobInstantUploadSharesOneObject(t *testing.T) {
 	if len(mem.data) != 1 {
 		t.Fatalf("expected exactly one object, got %d", len(mem.data))
 	}
-	if _, ok := mem.data[s.Instance+"/blobs/"+sha]; !ok {
-		t.Fatalf("plaintext blob key must be <instance>/blobs/<sha256>: %v", mem.data)
+	if _, ok := mem.data[s.Instance+"/blobs/"+Hash(p.UserID)+"/"+sha]; !ok {
+		t.Fatalf("plaintext blob key must be owner-scoped: %v", mem.data)
 	}
 	// Both versions read the same bytes through their original URIs.
 	for _, op := range []Operation{first, second} {
@@ -302,5 +302,43 @@ func TestBlobPurgeReleasesReferenceAndGCDryRun(t *testing.T) {
 	}
 	if len(mem.data) != 0 {
 		t.Fatal("confirmed gc must delete the unreferenced object")
+	}
+}
+
+func TestBlobPurgeDoesNotCrossOwnerDigestBoundary(t *testing.T) {
+	s, mem, alice := blobRig(t)
+	body := []byte("same bytes, separate owners")
+	var aliceSpace Space
+	if e := s.DB.First(&aliceSpace, "owner = ?", alice.UserID).Error; e != nil {
+		t.Fatal(e)
+	}
+	bobUser, e := s.ensureUser("fixture", "blob-bob", "Blob Bob")
+	if e != nil {
+		t.Fatal(e)
+	}
+	bobSpace := Space{ID: ID(), Owner: bobUser.ID, Name: "bob", ConnectionID: "platform", MaxBytes: 1 << 30}
+	if e = s.DB.Create(&bobSpace).Error; e != nil {
+		t.Fatal(e)
+	}
+	aliceOp := uploadBytes(t, s, alice, aliceSpace.ID, "same.txt", body)
+	bob := Principal{UserID: bobUser.ID}
+	bobOp := uploadBytes(t, s, bob, bobSpace.ID, "same.txt", body)
+	if len(mem.data) != 2 {
+		t.Fatalf("same digest must use owner-scoped objects, got %d", len(mem.data))
+	}
+	if e = s.Trash(alice, aliceOp.FileID, false); e != nil {
+		t.Fatal(e)
+	}
+	if e = s.Purge(context.Background(), alice, aliceOp.FileID); e != nil {
+		t.Fatal(e)
+	}
+	_, _, reader, e := s.Download(context.Background(), bob, bobOp.FileID, bobOp.VersionID)
+	if e != nil {
+		t.Fatal(e)
+	}
+	got, e := io.ReadAll(reader)
+	reader.Close()
+	if e != nil || !bytes.Equal(got, body) {
+		t.Fatalf("other owner content lost after purge: %v %q", e, got)
 	}
 }

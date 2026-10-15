@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/aes"
 	"crypto/cipher"
-	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -147,9 +146,8 @@ type Version struct {
 }
 
 // Blob is the content-addressed object record shared by versions of one data
-// owner. Plaintext blobs are keyed by digest alone (scope ""); encrypted blobs
-// add the space dimension. Refs is a logical reference count: reaching zero
-// never deletes the object by itself.
+// owner. Object keys include the owner and optional space scope; this prevents
+// one owner's purge from affecting another owner with the same digest.
 type Blob struct {
 	ID           string    `json:"-" gorm:"primaryKey"`
 	SHA256       string    `json:"sha256" gorm:"index"`
@@ -161,6 +159,7 @@ type Blob struct {
 	MIME         string    `json:"mime_type,omitempty"`
 	Refs         int64     `json:"ref_count"`
 	Encrypted    bool      `json:"encrypted"`
+	GCClaimed    bool      `json:"-" gorm:"not null;default:false;index"`
 	CreatedAt    time.Time `json:"created_at"`
 }
 type Operation struct {
@@ -245,7 +244,8 @@ type UserKey struct {
 }
 type Session struct {
 	AuthenticatedAt time.Time
-	Hash            string `gorm:"primaryKey"`
+	LastSeen        time.Time `gorm:"index"`
+	Hash            string    `gorm:"primaryKey"`
 	Owner           string
 	CSRF            string
 	Admin           bool
@@ -368,8 +368,8 @@ type Service struct {
 }
 
 func ID() string {
-	b := make([]byte, 24)
-	if _, e := rand.Read(b); e != nil {
+	b, e := secureRandomBytes(24)
+	if e != nil {
 		panic(e)
 	}
 	return hex.EncodeToString(b)
@@ -410,8 +410,10 @@ func Open(c Config) (*Service, error) {
 		if _, statErr := os.Stat(filepath.Join(c.State, "metadata.sqlite")); statErr == nil {
 			return nil, code("instance_key_missing_restore_required")
 		}
-		key = make([]byte, 32)
-		rand.Read(key)
+		key, e = secureRandomBytes(32)
+		if e != nil {
+			return nil, code("instance_key_unavailable")
+		}
 		e = os.WriteFile(keyPath, key, 0600)
 	}
 	if e != nil || len(key) != 32 {
@@ -421,7 +423,10 @@ func Open(c Config) (*Service, error) {
 	if e != nil {
 		return nil, e
 	}
-	aead, _ := cipher.NewGCM(block)
+	aead, e := cipher.NewGCM(block)
+	if e != nil {
+		return nil, code("instance_key_unavailable")
+	}
 	databaseExisted := false
 	var db *gorm.DB
 	if c.TeamDSN != "" {
@@ -588,8 +593,10 @@ func (s *Service) seal(owner string, v any) ([]byte, error) {
 	if e != nil {
 		return nil, e
 	}
-	nonce := make([]byte, s.crypt.NonceSize())
-	rand.Read(nonce)
+	nonce, e := secureRandomBytes(s.crypt.NonceSize())
+	if e != nil {
+		return nil, code("encryption_unavailable")
+	}
 	return s.crypt.Seal(nonce, nonce, b, []byte(owner)), nil
 }
 func (s *Service) unseal(owner string, b []byte, v any) error {

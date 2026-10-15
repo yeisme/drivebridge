@@ -5,7 +5,7 @@ const root = new URL('../', import.meta.url);
 const forgeVersion = '8.0.1';
 const files = {
   'package.json': {
-    name: 'drivebridge-desktop', version: '0.1.0', private: true,
+    name: 'drivebridge-desktop', version: '0.1.2', private: true,
     description: 'DriveBridge native host for the shared Web application',
     author: 'Yeisme', homepage: 'https://github.com/yeisme/drivebridge',
     engines: { node: '>=22.13.0' },

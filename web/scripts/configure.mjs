@@ -1,7 +1,7 @@
 import fs from "node:fs";
 const p = JSON.parse(fs.readFileSync("package.json", "utf8"));
 p.name = "drivebridge-client";
-p.version = "0.1.0";
+p.version = "0.1.2";
 p.private = true;
 p.type = "module";
 p.scripts = {

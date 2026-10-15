@@ -8,7 +8,6 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/hkdf"
-	"crypto/rand"
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
@@ -308,8 +307,8 @@ func (s *Service) RotateKEK() (map[string]any, error) {
 	if next > maxKeyVersion {
 		return nil, code("key_version_exhausted")
 	}
-	raw := make([]byte, 32)
-	if _, e := rand.Read(raw); e != nil {
+	raw, e := secureRandomBytes(32)
+	if e != nil {
 		return nil, code("encryption_unavailable")
 	}
 	root, e := deriveKey(s.key, kekInfo)
@@ -320,8 +319,10 @@ func (s *Service) RotateKEK() (map[string]any, error) {
 	if e != nil {
 		return nil, code("encryption_unavailable")
 	}
-	nonce := make([]byte, 12)
-	rand.Read(nonce)
+	nonce, e := secureRandomBytes(12)
+	if e != nil {
+		return nil, code("encryption_unavailable")
+	}
 	wrapped := append(append([]byte{}, nonce...), rootAEAD.Seal(nil, nonce, raw, []byte(fmt.Sprintf("key_rotation:%d", next)))...)
 	nextAEAD, e := contentAEAD(raw)
 	if e != nil {
@@ -355,8 +356,10 @@ func (s *Service) RotateKEK() (map[string]any, error) {
 }
 
 func wrapDEK(kek cipher.AEAD, version int, spaceID string, dek []byte) ([]byte, error) {
-	nonce := make([]byte, 12)
-	rand.Read(nonce)
+	nonce, e := secureRandomBytes(12)
+	if e != nil {
+		return nil, code("encryption_unavailable")
+	}
 	blob := append([]byte{byte(version)}, nonce...)
 	return append(blob, kek.Seal(nil, nonce, dek, []byte("space_dek:"+spaceID))...), nil
 }
@@ -369,7 +372,7 @@ func (s *Service) newSpaceDEK(spaceID string) ([]byte, error) {
 		return nil, e
 	}
 	dek := make([]byte, 32)
-	if _, e = rand.Read(dek); e != nil {
+	if dek, e = secureRandomBytes(32); e != nil {
 		return nil, code("encryption_unavailable")
 	}
 	return wrapDEK(kek, version, spaceID, dek)

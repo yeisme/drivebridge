@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/aes"
 	"crypto/cipher"
-	"crypto/rand"
 	"fmt"
 	"github.com/yeisme/drivebridge-server/sdk/mediapreview"
 	"io"
@@ -461,8 +460,8 @@ func (s *Service) encryptPreview(source, target string, out Preview) error {
 		return err
 	}
 	defer output.Close()
-	nonce := make([]byte, 12)
-	if _, err = rand.Read(nonce); err != nil {
+	nonce, err := secureRandomBytes(12)
+	if err != nil {
 		return err
 	}
 	header := append([]byte(contentMagic+"\x01"), nonce...)

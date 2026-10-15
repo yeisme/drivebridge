@@ -1,7 +1,6 @@
 package service
 
 import (
-	crand "crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"strings"
@@ -39,8 +38,10 @@ type changesCursorPayload struct {
 
 func (s *Service) sealChangesCursor(owner, spaceID string, sequence int64) (string, error) {
 	body, _ := json.Marshal(changesCursorPayload{Owner: owner, SpaceID: spaceID, Sequence: sequence})
-	nonce := make([]byte, s.crypt.NonceSize())
-	crand.Read(nonce)
+	nonce, e := secureRandomBytes(s.crypt.NonceSize())
+	if e != nil {
+		return "", code("encryption_unavailable")
+	}
 	sealed := s.crypt.Seal(nonce, nonce, body, []byte("changes-cursor"))
 	return base64.RawURLEncoding.EncodeToString(sealed), nil
 }

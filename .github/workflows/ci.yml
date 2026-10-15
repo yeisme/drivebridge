@@ -34,6 +34,17 @@ jobs:
       with:
         node-version: '22'
     - run: python3 scripts/ci/changed_scope.py docs
+  version-check:
+    needs: scope
+    if: needs.scope.outputs.level != ''
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        persist-credentials: false
+    - run: python3 scripts/check-version.py
+    - run: python3 scripts/ci/fresh_clone.py
   quick-check:
     needs: scope
     if: needs.scope.outputs.level == 'quick'
@@ -52,7 +63,7 @@ jobs:
       run: python3 scripts/ci/quick_go.py
     - uses: pnpm/action-setup@v4
       with:
-        version: '10'
+        version: '11.24.0'
     - uses: actions/setup-node@v4
       with:
         node-version: '22'
@@ -60,11 +71,24 @@ jobs:
         cache-dependency-path: web/pnpm-lock.yaml
     - name: Web checks
       working-directory: web
+      env:
+        NODE_OPTIONS: --no-experimental-webstorage
       run: |-
         pnpm install --frozen-lockfile
         pnpm run typecheck
         pnpm test
         pnpm run build
+        pnpm exec playwright test tests/workspace-home.spec.ts tests/file-drag.spec.ts
+    - name: Desktop checks
+      working-directory: desktop
+      run: |-
+        pnpm install --frozen-lockfile
+        pnpm run typecheck
+        pnpm test
+        pnpm run package
+        pnpm run check:package out/drivebridge-desktop-linux-x64
+    - name: Contract checks
+      run: make contracts-check
   check-full:
     runs-on: ubuntu-latest
     steps:
@@ -80,7 +104,7 @@ jobs:
       run: python3 scripts/ci/quick_go.py --all
     - uses: pnpm/action-setup@v4
       with:
-        version: '10'
+        version: '11.24.0'
     - uses: actions/setup-node@v4
       with:
         node-version: '22'
@@ -88,11 +112,23 @@ jobs:
         cache-dependency-path: web/pnpm-lock.yaml
     - name: Web checks
       working-directory: web
+      env:
+        NODE_OPTIONS: --no-experimental-webstorage
       run: |-
         pnpm install --frozen-lockfile
         pnpm run typecheck
         pnpm test
         pnpm run build
+    - name: Desktop checks
+      working-directory: desktop
+      run: |-
+        pnpm install --frozen-lockfile
+        pnpm run typecheck
+        pnpm test
+        pnpm run package
+        pnpm run check:package out/drivebridge-desktop-linux-x64
+    - name: Contract checks
+      run: make contracts-check
     name: Full / check
     needs:
     - scope
@@ -103,6 +139,7 @@ jobs:
     needs:
     - scope
     - docs-check
+    - version-check
     - quick-check
     - check-full
     runs-on: ubuntu-latest
@@ -122,7 +159,7 @@ jobs:
         for name, value in needs.items():
             if name == "scope":
                 continue
-            expected = (name == "docs-check" and (level == "docs" or needs["scope"]["outputs"].get("docs_changed") == "true" or needs["scope"]["outputs"].get("spec_changed") == "true")) or (name == "quick-check" and level == "quick") or (name not in ("docs-check", "quick-check") and level == "full")
+            expected = (name == "docs-check" and (level == "docs" or needs["scope"]["outputs"].get("docs_changed") == "true" or needs["scope"]["outputs"].get("spec_changed") == "true")) or (name == "quick-check" and level == "quick") or (name == "version-check") or (name not in ("docs-check", "quick-check", "version-check") and level == "full")
             wanted = "success" if expected else "skipped"
             if value["result"] != wanted:
                 sys.exit(f"{name}: expected {wanted}, got {value['result']}")

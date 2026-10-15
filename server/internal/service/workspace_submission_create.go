@@ -1,7 +1,6 @@
 package service
 
 import (
-	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"path"
@@ -70,8 +69,8 @@ func (s *Service) createWorkspaceSubmissionOn(tx *gorm.DB, p Principal, key stri
 	}
 	var nonce []byte
 	if sp.Encrypted {
-		nonce = make([]byte, 12)
-		if _, err := rand.Read(nonce); err != nil {
+		nonce, err = secureRandomBytes(12)
+		if err != nil {
 			return fail(code("encryption_unavailable"))
 		}
 	}

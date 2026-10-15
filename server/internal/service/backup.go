@@ -8,7 +8,6 @@ import (
 	"archive/tar"
 	"bytes"
 	"context"
-	"crypto/rand"
 	"database/sql"
 	"encoding/json"
 	"io"
@@ -325,8 +324,10 @@ func (s *Service) SealBundle(files map[string][]byte) ([]byte, error) {
 	if e = tw.Close(); e != nil {
 		return nil, code("encryption_unavailable")
 	}
-	nonce := make([]byte, 12)
-	rand.Read(nonce)
+	nonce, e := secureRandomBytes(12)
+	if e != nil {
+		return nil, code("encryption_unavailable")
+	}
 	out := append([]byte("DBB1"), nonce...)
 	return append(out, aead.Seal(nil, nonce, buf.Bytes(), []byte("backup_bundle"))...), nil
 }

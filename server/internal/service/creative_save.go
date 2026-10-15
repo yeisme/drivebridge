@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"io"
@@ -160,8 +159,8 @@ func (s *Service) saveCreativeArtifact(ctx context.Context, p Principal, receipt
 				return Operation{}, code("quota_exceeded")
 			}
 			hash.Write(buf[:n])
-			nonce := make([]byte, s.crypt.NonceSize())
-			if _, err = rand.Read(nonce); err != nil {
+			nonce, nonceErr := secureRandomBytes(s.crypt.NonceSize())
+			if nonceErr != nil {
 				return Operation{}, code("encryption_unavailable")
 			}
 			sealed := s.crypt.Seal(nonce, nonce, buf[:n], []byte(p.dataOwner()))

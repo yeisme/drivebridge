@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // blobScope is the dedupe dimension of a space: plaintext spaces share by
@@ -16,15 +17,14 @@ func blobScope(sp Space) string {
 	return ""
 }
 
-// blobObjectKey is deterministic: plaintext `<instance>/blobs/<sha256>`,
-// encrypted `<instance>/blobs/<space>/<sha256>`. Concurrent completions of the
-// same digest write the same bytes (or equivalent self-describing ciphertext)
-// to one key, so no duplicate object is ever produced.
-func (s *Service) blobObjectKey(scope, sha string) string {
+// blobObjectKey is deterministic and owner-scoped. Existing Version rows keep
+// their recorded ObjectKey; only newly published objects use this layout.
+func (s *Service) blobObjectKey(owner, scope, sha string) string {
+	ownerKey := Hash(owner)
 	if scope == "" {
-		return s.Instance + "/blobs/" + sha
+		return s.Instance + "/blobs/" + ownerKey + "/" + sha
 	}
-	return s.Instance + "/blobs/" + scope + "/" + sha
+	return s.Instance + "/blobs/" + ownerKey + "/" + scope + "/" + sha
 }
 
 func blobID(owner, scope, sha string) string {
@@ -48,6 +48,9 @@ func claimBlob(tx *gorm.DB, b Blob) (Blob, error) {
 	var existing Blob
 	err := tx.First(&existing, "id = ?", b.ID).Error
 	if err == nil {
+		if existing.GCClaimed {
+			return existing, code("blob_gc_in_progress")
+		}
 		if e := tx.Model(&existing).Update("refs", existing.Refs+1).Error; e != nil {
 			return existing, code("database_unavailable")
 		}
@@ -101,19 +104,37 @@ func (s *Service) BlobGC(ctx context.Context, dryRun bool) (map[string]any, erro
 	}
 	var bytes int64
 	removed := 0
-	for _, b := range blobs {
+	for _, candidate := range blobs {
+		var b Blob
+		claimed := false
+		err := s.DB.Transaction(func(tx *gorm.DB) error {
+			if e := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&b, "id = ? AND refs <= ? AND gc_claimed = ?", candidate.ID, 0, false).Error; e != nil {
+				return e
+			}
+			if e := tx.Model(&Blob{}).Where("id = ? AND refs <= ? AND gc_claimed = ?", b.ID, 0, false).Update("gc_claimed", true).Error; e != nil {
+				return e
+			}
+			claimed = true
+			return nil
+		})
+		if err != nil || !claimed {
+			continue
+		}
 		bytes += b.Size
 		if dryRun {
+			_ = s.DB.Model(&Blob{}).Where("id = ? AND gc_claimed = ?", b.ID, true).Update("gc_claimed", false).Error
 			continue
 		}
 		st, e := s.storageFor(b.Owner, b.ConnectionID)
 		if e != nil {
+			_ = s.DB.Model(&Blob{}).Where("id = ? AND gc_claimed = ?", b.ID, true).Update("gc_claimed", false).Error
 			return nil, e
 		}
 		if e = st.Delete(ctx, b.ObjectKey); e != nil {
+			_ = s.DB.Model(&Blob{}).Where("id = ? AND gc_claimed = ?", b.ID, true).Update("gc_claimed", false).Error
 			return nil, e
 		}
-		if e = s.DB.Delete(&b).Error; e != nil {
+		if e = s.DB.Where("id = ? AND refs <= ? AND gc_claimed = ?", b.ID, 0, true).Delete(&Blob{}).Error; e != nil {
 			return nil, code("database_unavailable")
 		}
 		removed++

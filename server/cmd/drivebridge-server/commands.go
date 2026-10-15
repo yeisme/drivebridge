@@ -91,7 +91,14 @@ func newServeCommand(c *cli) *cobra.Command {
 					return err
 				}
 			}
-			srv := &http.Server{Handler: s.Handler(), ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 60 * time.Second}
+			srv := &http.Server{
+				Handler:           s.Handler(),
+				ReadHeaderTimeout: 10 * time.Second,
+				ReadTimeout:       15 * time.Minute,
+				WriteTimeout:      15 * time.Minute,
+				IdleTimeout:       60 * time.Second,
+				MaxHeaderBytes:    1 << 20,
+			}
 			listener, err := net.Listen("tcp", c.effective.Values["listen"])
 			if err != nil {
 				emitEvent("error", map[string]any{"error": map[string]string{"code": "listener_unavailable", "message": err.Error()}})

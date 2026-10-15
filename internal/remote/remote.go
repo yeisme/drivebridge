@@ -253,7 +253,7 @@ func (a *Adapter) Call(ctx context.Context, name string, args map[string]any) (a
 	return out, e
 }
 func (a *Adapter) MCP() *server.MCPServer {
-	srv := server.NewMCPServer("drivebridge-remote-client", "0.1.0", server.WithToolCapabilities(false), server.WithResourceCapabilities(false, false))
+	srv := server.NewMCPServer("drivebridge-remote-client", "0.1.2", server.WithToolCapabilities(false), server.WithResourceCapabilities(false, false))
 	defs := []struct {
 		name   string
 		fields []string

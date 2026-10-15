@@ -1,7 +1,8 @@
 package fixtures
 
 import (
-	"encoding/base64"
+	"crypto/sha256"
+	"encoding/hex"
 	"io"
 	"net/http"
 	"os"
@@ -20,7 +21,8 @@ func DiskStore(dir string) (http.Handler, error) {
 			w.WriteHeader(200)
 			return
 		}
-		filename := filepath.Join(dir, base64.RawURLEncoding.EncodeToString([]byte(r.URL.Path)))
+		digest := sha256.Sum256([]byte(r.URL.Path))
+		filename := filepath.Join(dir, hex.EncodeToString(digest[:]))
 		switch r.Method {
 		case "PUT":
 			f, e := os.CreateTemp(dir, "pending-")

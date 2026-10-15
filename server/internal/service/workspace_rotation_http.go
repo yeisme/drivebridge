@@ -1,7 +1,6 @@
 package service
 
 import (
-	"crypto/rand"
 	"encoding/hex"
 	"net/http"
 	"time"
@@ -52,8 +51,8 @@ func (s *Service) workspaceGrantRotate(w http.ResponseWriter, r *http.Request, p
 		if grant.Protocol != "mcp" && grant.Protocol != "http" {
 			return code("forbidden")
 		}
-		material := make([]byte, 32)
-		if _, err := rand.Read(material); err != nil {
+		material, err := secureRandomBytes(32)
+		if err != nil {
 			return code("internal_error")
 		}
 		secret := "db_" + hex.EncodeToString(material)

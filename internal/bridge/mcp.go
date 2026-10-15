@@ -226,7 +226,7 @@ func (s *Service) Call(ctx context.Context, name string, args map[string]any) (a
 	return nil, errors.New("unknown_tool")
 }
 func (s *Service) MCP() *server.MCPServer {
-	srv := server.NewMCPServer("drivebridge", "0.1.0", server.WithToolCapabilities(false), server.WithResourceCapabilities(false, false))
+	srv := server.NewMCPServer("drivebridge", "0.1.2", server.WithToolCapabilities(false), server.WithResourceCapabilities(false, false))
 	for _, t := range s.Tools() {
 		name := t.Name
 		srv.AddTool(t, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {

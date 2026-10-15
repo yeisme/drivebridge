@@ -152,7 +152,7 @@ require (
 	github.com/unknwon/goconfig v1.0.0 // indirect
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
 	github.com/yeisme/drivebridge-server v0.0.0
-	github.com/yeisme/pinax v0.0.0
+	github.com/yeisme/pinax v0.3.0
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	golang.org/x/crypto v0.57.0 // indirect
@@ -173,5 +173,3 @@ require (
 )
 
 replace github.com/yeisme/drivebridge-server => ./server
-
-replace github.com/yeisme/pinax => ../pinax

@@ -15,6 +15,8 @@ import (
 	"gorm.io/gorm"
 )
 
+const sessionIdleTimeout = 30 * time.Minute
+
 type loginProvider struct {
 	oauth    oauth2.Config
 	verifier *oidc.IDTokenVerifier
@@ -124,7 +126,8 @@ func (s *Service) finishLogin(w http.ResponseWriter, r *http.Request) {
 	if claims.AuthTime > 0 && claims.AuthTime <= time.Now().Unix() {
 		authenticatedAt = time.Unix(claims.AuthTime, 0)
 	}
-	v := Session{AuthenticatedAt: authenticatedAt, Hash: Hash(session), Owner: user.ID, CSRF: ID(), Expires: time.Now().Add(12 * time.Hour)}
+	now := time.Now().UTC()
+	v := Session{AuthenticatedAt: authenticatedAt, LastSeen: now, Hash: Hash(session), Owner: user.ID, CSRF: ID(), Expires: now.Add(12 * time.Hour)}
 	if s.DB.Create(&v).Error != nil {
 		writeError(w, code("database_unavailable"))
 		return
@@ -195,7 +198,8 @@ func (s *Service) authenticate(r *http.Request) (Principal, error) {
 		return Principal{}, code("unauthorized")
 	}
 	var v Session
-	if s.DB.First(&v, "hash = ?", Hash(c.Value)).Error != nil || !time.Now().Before(v.Expires) {
+	now := time.Now().UTC()
+	if s.DB.First(&v, "hash = ?", Hash(c.Value)).Error != nil || !now.Before(v.Expires) || !v.LastSeen.IsZero() && now.Sub(v.LastSeen) > sessionIdleTimeout {
 		return Principal{}, code("unauthorized")
 	}
 	if v.OriginKey != "" {
@@ -317,7 +321,8 @@ func (s *Service) keyLogin(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	session := ID()
-	v := Session{AuthenticatedAt: time.Now().UTC(), Hash: Hash(session), Owner: k.Owner, CSRF: ID(), Admin: k.Admin, OriginKey: k.ID, Expires: time.Now().Add(12 * time.Hour)}
+	now := time.Now().UTC()
+	v := Session{AuthenticatedAt: now, LastSeen: now, Hash: Hash(session), Owner: k.Owner, CSRF: ID(), Admin: k.Admin, OriginKey: k.ID, Expires: now.Add(12 * time.Hour)}
 	if s.DB.Create(&v).Error != nil {
 		writeError(w, code("database_unavailable"))
 		return

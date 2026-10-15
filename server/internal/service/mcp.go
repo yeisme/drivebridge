@@ -16,7 +16,7 @@ import (
 type principalKey struct{}
 
 func (s *Service) MCP() http.Handler {
-	srv := server.NewMCPServer("drivebridge-service", "0.1.0", server.WithToolCapabilities(false), server.WithResourceCapabilities(false, false), server.WithToolFilter(s.workspaceToolFilter))
+	srv := server.NewMCPServer("drivebridge-service", "0.1.2", server.WithToolCapabilities(false), server.WithResourceCapabilities(false, false), server.WithToolFilter(s.workspaceToolFilter))
 	for _, tool := range ToolDefinitions() {
 		name := tool.Name
 		srv.AddTool(tool, func(ctx context.Context, q mcp.CallToolRequest) (*mcp.CallToolResult, error) {

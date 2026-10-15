@@ -20,7 +20,7 @@ func OpenAPIDocument() map[string]any {
 	}
 	return map[string]any{
 		"openapi":           "3.1.0",
-		"info":              map[string]string{"title": "DriveBridge personal workspace contracts", "version": "0.1.0"},
+		"info":              map[string]string{"title": "DriveBridge personal workspace contracts", "version": "0.1.2"},
 		"jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
 		"paths":             RegisteredPaths(),
 		"components": map[string]any{"schemas": schemas, "securitySchemes": map[string]any{

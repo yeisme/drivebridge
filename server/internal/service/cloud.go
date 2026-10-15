@@ -3,7 +3,6 @@ package service
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
@@ -72,8 +71,10 @@ func (s *Service) sealCloudCursor(payload cloudCursorPayload) (string, error) {
 	if e != nil {
 		return "", code("invalid_request")
 	}
-	nonce := make([]byte, s.crypt.NonceSize())
-	rand.Read(nonce)
+	nonce, e := secureRandomBytes(s.crypt.NonceSize())
+	if e != nil {
+		return "", code("encryption_unavailable")
+	}
 	sealed := s.crypt.Seal(nonce, nonce, body, []byte("cloud-cursor"))
 	return base64.RawURLEncoding.EncodeToString(sealed), nil
 }
