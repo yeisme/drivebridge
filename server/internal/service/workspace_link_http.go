@@ -13,7 +13,9 @@ func (s *Service) linkRoutes(mux *http.ServeMux) {
 	}{{"links", false}, {"backlinks", true}} {
 		mux.HandleFunc("GET /api/v1/files/{id}/"+route.path, s.wrapObserved("files."+route.path, func(w http.ResponseWriter, r *http.Request, p Principal) error {
 			query, page, err := workspaceMetadataQuery(r.URL.RawQuery, "version_id")
-			if err != nil || !propertyHexID(query.Get("version_id")) { return code("invalid_request") }
+			if err != nil || !propertyHexID(query.Get("version_id")) {
+				return code("invalid_request")
+			}
 			out, err := s.WorkspaceLinks(r.Context(), p, r.PathValue("id"), query.Get("version_id"), route.backlinks, page)
 			if err != nil {
 				return err

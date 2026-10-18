@@ -30,7 +30,7 @@ type FavoriteReceipt struct {
 }
 
 type FavoriteLookup struct {
-	SpaceID string `json:"space_id"`
+	SpaceID        string `json:"space_id"`
 	Action         string `json:"action" jsonschema:"enum=create,enum=delete"`
 	IdempotencyKey string `json:"idempotency_key"`
 }
@@ -49,15 +49,15 @@ type FileLinkView struct {
 }
 
 type FileLinkList struct {
-	FileID    string         `json:"file_id"`
-	VersionID string         `json:"version_id"`
-	Indexed   bool           `json:"indexed"`
-	Stale     bool           `json:"stale"`
-	Items     []FileLinkView `json:"items"`
-	NextCursor string `json:"next_cursor"`
-	ObservedAt time.Time `json:"observed_at"`
-	Total *uint64 `json:"total" jsonschema:"nullable"`
-	TotalKind string `json:"total_kind" jsonschema:"enum=exact,enum=unknown"`
+	FileID     string         `json:"file_id"`
+	VersionID  string         `json:"version_id"`
+	Indexed    bool           `json:"indexed"`
+	Stale      bool           `json:"stale"`
+	Items      []FileLinkView `json:"items"`
+	NextCursor string         `json:"next_cursor"`
+	ObservedAt time.Time      `json:"observed_at"`
+	Total      *uint64        `json:"total" jsonschema:"nullable"`
+	TotalKind  string         `json:"total_kind" jsonschema:"enum=exact,enum=unknown"`
 }
 
 type FileLinkReceipt struct {

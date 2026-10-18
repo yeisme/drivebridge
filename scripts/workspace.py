@@ -82,9 +82,9 @@ def dev(args):
         binary=Path(folder)/('fixture.exe' if os.name=='nt' else 'fixture')
         run(['go','-C','server','build','-o',str(binary),'./cmd/drivebridge-fixture'], evidence=False)
         env=environment()
-        env['DRIVEBRIDGE_DEV_API_ORIGIN']=f'http://127.0.0.1:{args.api_port}'
+        env['DRIVEBRIDGE_DEV_API_ORIGIN']=f'http://{args.host}:{args.api_port}'
         try:
-            processes.append(subprocess.Popen([str(binary),'--listen',f'127.0.0.1:{args.api_port}',
+            processes.append(subprocess.Popen([str(binary),'--listen',f'{args.host}:{args.api_port}',
                 '--public-origin',f'http://127.0.0.1:{args.port}','--demo'],cwd=ROOT/'server',env=env,start_new_session=os.name=='posix'))
             deadline=time.monotonic()+30
             while time.monotonic()<deadline:
@@ -98,8 +98,8 @@ def dev(args):
                     time.sleep(.1)
             else:
                 raise RuntimeError('Fixture readiness timed out.')
-            processes.append(subprocess.Popen(['pnpm','--dir','web','exec','vite','--host','127.0.0.1','--port',str(args.port),'--strictPort'],cwd=ROOT,env=env,start_new_session=os.name=='posix'))
-            print(f'DriveBridge development: http://127.0.0.1:{args.port} (disposable local fixtures)',flush=True)
+            processes.append(subprocess.Popen(['pnpm','--dir','web','exec','vite','--host',args.host,'--port',str(args.port),'--strictPort'],cwd=ROOT,env=env,start_new_session=os.name=='posix'))
+            print(f'DriveBridge development: http://{args.host}:{args.port} (disposable local fixtures)',flush=True)
             while all(p.poll() is None for p in processes):
                 time.sleep(.3)
             if any(p.returncode not in (None,0) for p in processes):
@@ -115,6 +115,7 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     sub=parser.add_subparsers(dest='command',required=True)
     dev_parser=sub.add_parser('dev',help='Start Vite and disposable Server fixtures; Ctrl+C stops both')
+    dev_parser.add_argument('--host',default='127.0.0.1')
     dev_parser.add_argument('--port',type=int,default=5173)
     dev_parser.add_argument('--api-port',type=int,default=8787)
     for name,help_text in [('build','Build CLI, Server and Web'),('test','Run ordinary CLI, Server and Web tests'),('e2e','Run local MCP/HTTP and browser user flows'),('check','Run tests, static checks and builds')]:

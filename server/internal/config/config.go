@@ -119,7 +119,9 @@ func Load(path string) (File, error) {
 		}
 	}
 	for _, key := range []string{"document_editing", "property_editing", "automation_management", "share_receivers", "hold_management", "label_management"} {
-		if values[key] != "" && values[key] != "true" && values[key] != "false" { return File{}, fmt.Errorf("config %q: %s must be true or false", path, key) }
+		if values[key] != "" && values[key] != "true" && values[key] != "false" {
+			return File{}, fmt.Errorf("config %q: %s must be true or false", path, key)
+		}
 	}
 	return File{Path: path, Values: values}, nil
 }

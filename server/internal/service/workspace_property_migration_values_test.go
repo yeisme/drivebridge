@@ -8,7 +8,7 @@ import (
 )
 
 func TestPropertyMigrationConversionPolicies(t *testing.T) {
-	for _, tc := range []struct { name, source, target, policy, raw, want string }{
+	for _, tc := range []struct{ name, source, target, policy, raw, want string }{
 		{"rename exact numeric", "number", "number", "preserve", `1.250`, `1.250`},
 		{"parse number exact", "text", "number", "parse_text", `"1.250"`, `1.250`},
 		{"parse bool", "text", "checkbox", "parse_text", `"false"`, `false`},
@@ -24,8 +24,15 @@ func TestPropertyMigrationConversionPolicies(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got, err := convertPropertyMigration(json.RawMessage(tc.raw), tc.source, contract.PropertyMigrationPreview{TargetType: tc.target, ConversionPolicy: tc.policy})
-			if tc.want == "" { if err == nil { t.Fatalf("unexpected conversion %s", got) }; return }
-			if err != nil || string(got) != tc.want { t.Fatalf("got %s, %v; want %s", got, err, tc.want) }
+			if tc.want == "" {
+				if err == nil {
+					t.Fatalf("unexpected conversion %s", got)
+				}
+				return
+			}
+			if err != nil || string(got) != tc.want {
+				t.Fatalf("got %s, %v; want %s", got, err, tc.want)
+			}
 		})
 	}
 }

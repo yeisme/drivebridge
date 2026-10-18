@@ -409,9 +409,13 @@ func organizationPlanFingerprint(q CreateOrganizationPlanRequest) string {
 
 // OrganizationPlanViewFor builds the paged read model with outcome facts.
 func (s *Service) OrganizationPlanViewFor(p Principal, plan OrganizationPlan, cursor string, limit int) (OrganizationPlanView, error) {
-	if IsPropertyMigrationPlan(plan) { return OrganizationPlanView{}, code("unsupported_action") }
+	if IsPropertyMigrationPlan(plan) {
+		return OrganizationPlanView{}, code("unsupported_action")
+	}
 	if isLabelMergePlan(plan) {
-		if err := s.DB.Transaction(func(tx *gorm.DB) error { return s.labelMergePlanAuthorizeOn(tx, p, plan, false) }); err != nil { return OrganizationPlanView{}, err }
+		if err := s.DB.Transaction(func(tx *gorm.DB) error { return s.labelMergePlanAuthorizeOn(tx, p, plan, false) }); err != nil {
+			return OrganizationPlanView{}, err
+		}
 	}
 	limit = orgPageLimit(limit)
 	var items []OrganizationPlanItem
@@ -419,7 +423,9 @@ func (s *Service) OrganizationPlanViewFor(p Principal, plan OrganizationPlan, cu
 	if cursor != "" {
 		if isLabelMergePlan(plan) {
 			page, err := s.openOrgCursor(cursor, p.UserID, "label-plan:"+p.TenantID+":"+plan.ID, revisionString(plan.Revision))
-			if err != nil { return OrganizationPlanView{}, err }
+			if err != nil {
+				return OrganizationPlanView{}, err
+			}
 			cursor = page.LastKey
 		}
 		tx = tx.Where("id > ?", cursor)
@@ -431,9 +437,15 @@ func (s *Service) OrganizationPlanViewFor(p Principal, plan OrganizationPlan, cu
 		return OrganizationPlanView{}, code("database_unavailable")
 	}
 	view := OrganizationPlanView{PlanID: plan.ID, SpaceID: plan.SpaceID, Revision: plan.Revision, Phase: plan.Phase, Risk: plan.Risk, ApprovalRequired: plan.Risk == "approval_required", PolicyID: plan.PolicyID, PolicyRevision: plan.PolicyRevision, ImpactDigest: plan.ImpactDigest, ItemsTotal: plan.ItemsTotal, CompensationOf: plan.CompensationOf, Items: []OrganizationPlanItemView{}}
-	if err := s.DB.Model(&OrganizationPlanItem{}).Where("plan_id = ? AND status = ?", plan.ID, "done").Count(&view.ItemsDone).Error; err != nil { return OrganizationPlanView{}, code("database_unavailable") }
-	if err := s.DB.Model(&OrganizationPlanItem{}).Where("plan_id = ? AND status = ?", plan.ID, "stale").Count(&view.ItemsStale).Error; err != nil { return OrganizationPlanView{}, code("database_unavailable") }
-	if err := s.DB.Model(&OrganizationPlanItem{}).Where("plan_id = ? AND status = ?", plan.ID, "failed").Count(&view.ItemsFailed).Error; err != nil { return OrganizationPlanView{}, code("database_unavailable") }
+	if err := s.DB.Model(&OrganizationPlanItem{}).Where("plan_id = ? AND status = ?", plan.ID, "done").Count(&view.ItemsDone).Error; err != nil {
+		return OrganizationPlanView{}, code("database_unavailable")
+	}
+	if err := s.DB.Model(&OrganizationPlanItem{}).Where("plan_id = ? AND status = ?", plan.ID, "stale").Count(&view.ItemsStale).Error; err != nil {
+		return OrganizationPlanView{}, code("database_unavailable")
+	}
+	if err := s.DB.Model(&OrganizationPlanItem{}).Where("plan_id = ? AND status = ?", plan.ID, "failed").Count(&view.ItemsFailed).Error; err != nil {
+		return OrganizationPlanView{}, code("database_unavailable")
+	}
 	more := limit > 0 && len(items) > limit
 	if more {
 		items = items[:limit]
@@ -445,8 +457,10 @@ func (s *Service) OrganizationPlanViewFor(p Principal, plan OrganizationPlan, cu
 		view.NextCursor = items[len(items)-1].ID
 		if isLabelMergePlan(plan) {
 			var err error
-			view.NextCursor, err = s.sealOrgCursor(orgCursorPayload{Owner: p.UserID, Query: "label-plan:"+p.TenantID+":"+plan.ID, CatalogueRevision: revisionString(plan.Revision), LastKey: view.NextCursor, Kind: "label-plan"})
-			if err != nil { return OrganizationPlanView{}, err }
+			view.NextCursor, err = s.sealOrgCursor(orgCursorPayload{Owner: p.UserID, Query: "label-plan:" + p.TenantID + ":" + plan.ID, CatalogueRevision: revisionString(plan.Revision), LastKey: view.NextCursor, Kind: "label-plan"})
+			if err != nil {
+				return OrganizationPlanView{}, err
+			}
 		}
 	}
 	return view, nil
@@ -489,8 +503,12 @@ func (s *Service) ConfirmOrganizationPlan(p Principal, planID string, q ConfirmO
 	if err := s.DB.First(&plan, "id = ? AND owner = ?", planID, p.dataOwner()).Error; err != nil {
 		return OrganizationPlanView{}, resourceReadError(err)
 	}
-	if IsPropertyMigrationPlan(plan) { return OrganizationPlanView{}, code("unsupported_action") }
-	if isLabelMergePlan(plan) { return s.confirmLabelMergePlan(p, plan, q) }
+	if IsPropertyMigrationPlan(plan) {
+		return OrganizationPlanView{}, code("unsupported_action")
+	}
+	if isLabelMergePlan(plan) {
+		return s.confirmLabelMergePlan(p, plan, q)
+	}
 	if q.ExpectedRevision != plan.Revision {
 		return OrganizationPlanView{}, code("plan_stale")
 	}
@@ -517,10 +535,14 @@ func (s *Service) ExecuteOrganizationPlan(p Principal, planID string, q ExecuteO
 	if err := s.DB.First(&plan, "id = ? AND owner = ?", planID, p.dataOwner()).Error; err != nil {
 		return OrganizationPlanView{}, resourceReadError(err)
 	}
-	if IsPropertyMigrationPlan(plan) { return OrganizationPlanView{}, code("unsupported_action") }
+	if IsPropertyMigrationPlan(plan) {
+		return OrganizationPlanView{}, code("unsupported_action")
+	}
 	labelMerge := isLabelMergePlan(plan)
 	if labelMerge {
-		if err := s.DB.Transaction(func(tx *gorm.DB) error { return s.labelMergePlanAuthorizeOn(tx, p, plan, true) }); err != nil { return OrganizationPlanView{}, err }
+		if err := s.DB.Transaction(func(tx *gorm.DB) error { return s.labelMergePlanAuthorizeOn(tx, p, plan, true) }); err != nil {
+			return OrganizationPlanView{}, err
+		}
 	}
 	if q.ExpectedRevision != plan.Revision {
 		return OrganizationPlanView{}, code("plan_stale")
@@ -542,17 +564,29 @@ func (s *Service) ExecuteOrganizationPlan(p Principal, planID string, q ExecuteO
 		}
 	}
 	claim := s.DB.Model(&OrganizationPlan{}).Where("id = ? AND revision = ? AND phase = ?", plan.ID, plan.Revision, plan.Phase).Updates(map[string]any{"phase": "executing", "updated_at": time.Now().UTC()})
-	if claim.Error != nil { return OrganizationPlanView{}, code("database_unavailable") }
-	if claim.RowsAffected != 1 { return OrganizationPlanView{}, code("plan_stale") }
+	if claim.Error != nil {
+		return OrganizationPlanView{}, code("database_unavailable")
+	}
+	if claim.RowsAffected != 1 {
+		return OrganizationPlanView{}, code("plan_stale")
+	}
 	var items []OrganizationPlanItem
 	itemQuery := s.DB.Where("plan_id = ? AND status = ?", plan.ID, "pending").Order("created_at, id")
-	if labelMerge { itemQuery = itemQuery.Limit(201) }
-	if err := itemQuery.Find(&items).Error; err != nil { return OrganizationPlanView{}, code("database_unavailable") }
-	if labelMerge && len(items) > 200 { return OrganizationPlanView{}, code("query_budget_exceeded") }
+	if labelMerge {
+		itemQuery = itemQuery.Limit(201)
+	}
+	if err := itemQuery.Find(&items).Error; err != nil {
+		return OrganizationPlanView{}, code("database_unavailable")
+	}
+	if labelMerge && len(items) > 200 {
+		return OrganizationPlanView{}, code("query_budget_exceeded")
+	}
 	now := time.Now().UTC()
 	for _, item := range items {
 		if labelMerge {
-			if err := s.executeLabelMergeItem(p, plan, item); err != nil { return OrganizationPlanView{}, err }
+			if err := s.executeLabelMergeItem(p, plan, item); err != nil {
+				return OrganizationPlanView{}, err
+			}
 			continue
 		}
 		var f File
@@ -650,16 +684,24 @@ func (s *Service) ExecuteOrganizationPlan(p Principal, planID string, q ExecuteO
 		s.DB.Model(&OrganizationPlanItem{}).Where("id = ?", item.ID).Updates(map[string]any{"status": "done", "result_version": f.VersionID, "updated_at": now})
 	}
 	var pending int64
-	if err := s.DB.Model(&OrganizationPlanItem{}).Where("plan_id = ? AND status IN ?", plan.ID, []string{"pending", "stale", "failed"}).Count(&pending).Error; err != nil { return OrganizationPlanView{}, code("database_unavailable") }
+	if err := s.DB.Model(&OrganizationPlanItem{}).Where("plan_id = ? AND status IN ?", plan.ID, []string{"pending", "stale", "failed"}).Count(&pending).Error; err != nil {
+		return OrganizationPlanView{}, code("database_unavailable")
+	}
 	phase := "completed"
 	if pending > 0 {
 		phase = "partial"
 	}
 	finished := s.DB.Model(&OrganizationPlan{}).Where("id = ? AND revision = ? AND phase = ?", plan.ID, plan.Revision, "executing").Updates(map[string]any{"phase": phase, "revision": gorm.Expr("revision + 1"), "updated_at": now})
-	if finished.Error != nil { return OrganizationPlanView{}, code("database_unavailable") }
-	if finished.RowsAffected != 1 { return OrganizationPlanView{}, code("plan_stale") }
+	if finished.Error != nil {
+		return OrganizationPlanView{}, code("database_unavailable")
+	}
+	if finished.RowsAffected != 1 {
+		return OrganizationPlanView{}, code("plan_stale")
+	}
 	var fresh OrganizationPlan
-	if err := s.DB.First(&fresh, "id = ?", plan.ID).Error; err != nil { return OrganizationPlanView{}, resourceReadError(err) }
+	if err := s.DB.First(&fresh, "id = ?", plan.ID).Error; err != nil {
+		return OrganizationPlanView{}, resourceReadError(err)
+	}
 	return s.OrganizationPlanViewFor(p, fresh, "", 0)
 }
 
@@ -698,7 +740,9 @@ func (s *Service) CreateCompensationPlan(p Principal, planID string, key string)
 	if err := s.DB.First(&plan, "id = ? AND owner = ?", planID, p.dataOwner()).Error; err != nil {
 		return OrganizationPlanView{}, resourceReadError(err)
 	}
-	if IsPropertyMigrationPlan(plan) || isLabelMergePlan(plan) { return OrganizationPlanView{}, code("unsupported_action") }
+	if IsPropertyMigrationPlan(plan) || isLabelMergePlan(plan) {
+		return OrganizationPlanView{}, code("unsupported_action")
+	}
 	// Same-key recovery reads persisted lineage only: the stored receipt
 	// must already name this parent, bound in its creation transaction.
 	// A key held by another parent or by an unrelated plan conflicts; the

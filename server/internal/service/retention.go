@@ -191,48 +191,87 @@ func (s *Service) CreateRetentionHold(p Principal, q RetentionHoldRequest, key s
 		return RetentionHoldView{}, code("invalid_request")
 	}
 	expiresAt, err := holdExpiry(q.ExpiresAt)
-	if err != nil { return RetentionHoldView{}, err }
+	if err != nil {
+		return RetentionHoldView{}, err
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var out RetentionHoldView
 	err = s.DB.Transaction(func(tx *gorm.DB) error {
-		if err := s.retentionActorOn(tx, p); err != nil { return err }
+		if err := s.retentionActorOn(tx, p); err != nil {
+			return err
+		}
 		var h RetentionHold
 		err := tx.Where("owner = ? AND key = ?", p.dataOwner(), key).First(&h).Error
 		if err == nil {
 			// Omission means the version pinned by this original request, not
 			// whatever head happens to exist when its response is recovered.
-			if h.TenantID != p.TenantID { return code("not_found") }
+			if h.TenantID != p.TenantID {
+				return code("not_found")
+			}
 			f, err := s.holdFileOn(tx, p, h.FileID, h.VersionID, false)
-			if err != nil { return err }
-			if _, err = s.holdSourceOn(tx, p, f, h.VersionID, h.SourceKind, h.SourceRef, false); err != nil { return err }
-			if q.VersionID == "" { q.VersionID = h.VersionID }
+			if err != nil {
+				return err
+			}
+			if _, err = s.holdSourceOn(tx, p, f, h.VersionID, h.SourceKind, h.SourceRef, false); err != nil {
+				return err
+			}
+			if q.VersionID == "" {
+				q.VersionID = h.VersionID
+			}
 			body, _ := json.Marshal(q)
-			if h.Fingerprint != Hash(string(body)) { return code("idempotency_conflict") }
+			if h.Fingerprint != Hash(string(body)) {
+				return code("idempotency_conflict")
+			}
 		} else {
-			if !errors.Is(err, gorm.ErrRecordNotFound) { return code("database_unavailable") }
+			if !errors.Is(err, gorm.ErrRecordNotFound) {
+				return code("database_unavailable")
+			}
 			f, err := s.holdFileOn(tx, p, q.FileID, q.VersionID, false)
-			if err != nil { return err }
-			if q.VersionID == "" { q.VersionID = f.VersionID }
+			if err != nil {
+				return err
+			}
+			if q.VersionID == "" {
+				q.VersionID = f.VersionID
+			}
 			var v Version
-			if err = tx.Where("id = ? AND file_id = ? AND owner = ?", q.VersionID, f.ID, p.dataOwner()).First(&v).Error; err != nil { return resourceReadError(err) }
-			if f.PurgeStartedAt != nil { return code("purge_in_progress") }
+			if err = tx.Where("id = ? AND file_id = ? AND owner = ?", q.VersionID, f.ID, p.dataOwner()).First(&v).Error; err != nil {
+				return resourceReadError(err)
+			}
+			if f.PurgeStartedAt != nil {
+				return code("purge_in_progress")
+			}
 			sourceKind, err := s.holdSourceOn(tx, p, f, q.VersionID, "", q.SourceRef, true)
-			if err != nil { return err }
+			if err != nil {
+				return err
+			}
 			body, _ := json.Marshal(q)
 			var count int64
-			if err = tx.Model(&RetentionHold{}).Where("owner = ?", p.dataOwner()).Count(&count).Error; err != nil { return code("database_unavailable") }
-			if count >= maxRetentionHoldsPerOwner { return code("quota_exceeded") }
+			if err = tx.Model(&RetentionHold{}).Where("owner = ?", p.dataOwner()).Count(&count).Error; err != nil {
+				return code("database_unavailable")
+			}
+			if count >= maxRetentionHoldsPerOwner {
+				return code("quota_exceeded")
+			}
 			now := time.Now().UTC()
 			h = RetentionHold{ID: ID(), Owner: p.dataOwner(), TenantID: p.TenantID, FileID: f.ID, VersionID: q.VersionID, Purpose: q.Purpose, SourceKind: sourceKind, SourceRef: q.SourceRef, Key: key, Fingerprint: Hash(string(body)), Revision: 1, State: "active", ExpiresAt: expiresAt, CreatedAt: now, UpdatedAt: now}
-			if err = tx.Create(&h).Error; err != nil { return code("database_unavailable") }
+			if err = tx.Create(&h).Error; err != nil {
+				return code("database_unavailable")
+			}
 		}
 		active := holdActiveAt(h, time.Now().UTC())
-		if active { active, err = holdSourceValidTx(tx, h); if err != nil { return err } }
+		if active {
+			active, err = holdSourceValidTx(tx, h)
+			if err != nil {
+				return err
+			}
+		}
 		out = retentionHoldView(h, active)
 		return nil
 	})
-	if err != nil { return RetentionHoldView{}, err }
+	if err != nil {
+		return RetentionHoldView{}, err
+	}
 	return out, nil
 }
 
@@ -241,14 +280,25 @@ func (s *Service) GetRetentionHold(p Principal, holdID string) (RetentionHoldVie
 	var out RetentionHoldView
 	err := s.DB.Transaction(func(tx *gorm.DB) error {
 		h, f, err := s.holdRowOn(tx, p, holdID, false)
-		if err != nil { return err }
-		if _, err = s.holdSourceOn(tx, p, f, h.VersionID, h.SourceKind, h.SourceRef, false); err != nil { return err }
+		if err != nil {
+			return err
+		}
+		if _, err = s.holdSourceOn(tx, p, f, h.VersionID, h.SourceKind, h.SourceRef, false); err != nil {
+			return err
+		}
 		active := holdActiveAt(h, time.Now().UTC())
-		if active { active, err = holdSourceValidTx(tx, h); if err != nil { return err } }
+		if active {
+			active, err = holdSourceValidTx(tx, h)
+			if err != nil {
+				return err
+			}
+		}
 		out = retentionHoldView(h, active)
 		return nil
 	})
-	if err != nil { return RetentionHoldView{}, err }
+	if err != nil {
+		return RetentionHoldView{}, err
+	}
 	return out, nil
 }
 
@@ -260,24 +310,38 @@ func (s *Service) ReleaseRetentionHold(p Principal, holdID string) (RetentionHol
 	var out RetentionHoldView
 	err := s.DB.Transaction(func(tx *gorm.DB) error {
 		h, f, err := s.holdRowOn(tx, p, holdID, true)
-		if err != nil { return err }
-		if _, err = s.holdSourceOn(tx, p, f, h.VersionID, h.SourceKind, h.SourceRef, false); err != nil { return err }
+		if err != nil {
+			return err
+		}
+		if _, err = s.holdSourceOn(tx, p, f, h.VersionID, h.SourceKind, h.SourceRef, false); err != nil {
+			return err
+		}
 		// Workspace provenance is atomic with creation. Its holds must never
 		// fall back to an ungated, non-CAS legacy release entry point.
 		var managed int64
-		if err = tx.Model(&WorkspaceRequest{}).Where("owner = ? AND tenant_id = ? AND resource_id = ? AND action = ?", h.Owner, h.TenantID, h.ID, "hold.create").Count(&managed).Error; err != nil { return code("database_unavailable") }
-		if managed != 0 { return code("unsupported_action") }
+		if err = tx.Model(&WorkspaceRequest{}).Where("owner = ? AND tenant_id = ? AND resource_id = ? AND action = ?", h.Owner, h.TenantID, h.ID, "hold.create").Count(&managed).Error; err != nil {
+			return code("database_unavailable")
+		}
+		if managed != 0 {
+			return code("unsupported_action")
+		}
 		if h.State != "released" {
 			now := time.Now().UTC()
 			result := tx.Model(&RetentionHold{}).Where("id = ? AND revision = ? AND state = ?", h.ID, h.Revision, h.State).Updates(map[string]any{"state": "released", "revision": h.Revision + 1, "released_at": now, "updated_at": now})
-			if result.Error != nil { return code("database_unavailable") }
-			if result.RowsAffected != 1 { return code("revision_conflict") }
-			h.State, h.Revision = "released", h.Revision + 1
+			if result.Error != nil {
+				return code("database_unavailable")
+			}
+			if result.RowsAffected != 1 {
+				return code("revision_conflict")
+			}
+			h.State, h.Revision = "released", h.Revision+1
 		}
 		out = retentionHoldView(h, false)
 		return nil
 	})
-	if err != nil { return RetentionHoldView{}, err }
+	if err != nil {
+		return RetentionHoldView{}, err
+	}
 	return out, nil
 }
 

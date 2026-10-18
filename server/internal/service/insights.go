@@ -147,7 +147,7 @@ func (s *Service) CaptureUsage(owner string) {
 		var totals struct {
 			Current int64
 			History int64
-			Trash int64
+			Trash   int64
 		}
 		err := s.DB.Table("versions AS v").
 			Select("COALESCE(SUM(CASE WHEN f.trashed = ? THEN v.size ELSE 0 END), 0) AS trash, COALESCE(SUM(CASE WHEN f.trashed = ? AND v.id = f.version_id THEN v.size ELSE 0 END), 0) AS current, COALESCE(SUM(CASE WHEN f.trashed = ? AND v.id <> f.version_id THEN v.size ELSE 0 END), 0) AS history", true, false, false).

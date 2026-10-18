@@ -12,7 +12,7 @@ import (
 // readback boundary after the real rclone alias has committed the nested file.
 type semanticAliasCommitProvider struct {
 	Provider
-	committed chan struct{}
+	committed    chan struct{}
 	lostResponse bool
 }
 

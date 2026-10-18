@@ -20,7 +20,9 @@ func workspaceMetadataKey(r *http.Request) (string, error) {
 func (s *Service) favoriteRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/favorites", s.wrapObserved("favorites.list", func(w http.ResponseWriter, r *http.Request, p Principal) error {
 		values, page, err := workspaceMetadataQuery(r.URL.RawQuery, "space_id")
-		if err != nil { return err }
+		if err != nil {
+			return err
+		}
 		out, err := s.WorkspaceFavorites(r.Context(), p, values.Get("space_id"), page)
 		if err != nil {
 			return err

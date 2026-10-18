@@ -56,4 +56,3 @@ func TestSubmissionRoutesUseActionAndNoInventedPathParameter(t *testing.T) {
 		}
 	}
 }
-

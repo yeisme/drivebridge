@@ -12,9 +12,10 @@
 - [清理/路由兼容/真实命令](../../../docs/web/ui/personal-workspace-rebuild.md)
 - [验收矩阵](../../../docs/web/ui/personal-workspace-acceptance.md)
 - [多笔记工作台正式实现规格](../../../docs/web/ui/notebook-workspace-production-spec.md) / [实现交接](../../../docs/delivery/notebook-workspace-implementation-handoff.md)
+- [知识库续接规格](../../../docs/web/ui/knowledge-base-continuation-spec.md)：OpenDesign 2026-10-18 增量、资源/Skill 边界与状态合同
 - [服务端配套包](../drivebridge-personal-workspace-contracts-v1/README.md)
 
-下列为历史分期顺序，不代表这些入口当前仍未实现：F01–F03负责基线与新壳；S1 文件后 S2 Agent：F19 是不等待知识/资源的首条联调，F20 补分组置顶；S3 信息工作台、S4 全 Web 再用 F17 最终验收。F21补首页与保留页面；F22承接S2标签建议审阅，F23是组织/建议/计划/期限等完整S2集成门；F18保留助手/原生。本包不执行生产删除、不提交推送、不修改 OpenDesign。
+下列为历史分期顺序，不代表这些入口当前仍未实现：F01–F03负责基线与新壳；S1 文件后 S2 Agent：F19 是不等待知识/资源的首条联调，F20 补分组置顶；S3 信息工作台、S4 全 Web 再用 F17 最终验收。F21补首页与保留页面；F22承接S2标签建议审阅，F23是组织/建议/计划/期限等完整S2集成门；F18保留助手/原生。本包不执行生产删除、不提交推送、不修改 OpenDesign。W206–W210 记录本轮知识库原型增量的规格、文档、Skill 与验证交接。
 
 ```bash
 openspec validate drivebridge-personal-workspace-rebuild-v1 --strict --no-interactive

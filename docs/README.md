@@ -4,6 +4,8 @@
 
 - [Electron 桌面架构](architecture/electron-desktop.md)：用户已选 Electron；同仓宿主、授权本机门面、Pinax 合同、受管范围与离线阅读，尚待实现。
 - [知识阅读三屏](web/ui/knowledge-reading-spec.md)：首页、搜索、阅读及共用 reader/无障碍。
+- [知识库续接规格](web/ui/knowledge-base-continuation-spec.md)：OpenDesign 当前页面树、块编辑、离线合并、页面数据库、媒体与 Skill/资源边界。
+- [知识库/资源库页面结构交接](web/ui/knowledge-base-continuation-spec.md#7-web-页面结构与恢复边界-2026-10-18)：Notebook/Resources 的 contract、projection、state、clients、recovery 与跨域公开入口。
 - [多笔记工作台正式实现规格](web/ui/notebook-workspace-production-spec.md)：标签页、分屏、Markdown 渲染、Obsidian 式交互、动效、私有状态与 Pinax 适配边界。
 - [多笔记工作台实现交接](delivery/notebook-workspace-implementation-handoff.md)：当前原型证据、正式 Web 实现顺序、验证命令与禁止的实现捷径。
 - [桌面阅读验收矩阵](delivery/desktop-knowledge-acceptance.md)：原 F/B 复用、新增 D/P 任务、三平台实机门与自然观察。

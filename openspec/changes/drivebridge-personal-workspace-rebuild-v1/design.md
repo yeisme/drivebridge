@@ -768,3 +768,11 @@ flowchart TD
 ## Validation and completion
 
 [AC01–30](../../../docs/web/ui/personal-workspace-acceptance.md) 逐项关联任务、层级和证据。真实命令见开发入口；根runner直接运行 pnpm --dir web exec vitest run 或 pnpm --dir web exec playwright test，避免嵌套模块runner。实现阶段 focused，稳定后完整门；禁止 race。只完成本包 strict 不能勾选代码、真实云或发布任务。
+
+## Web 页面结构与恢复边界（2026-10-18）
+
+DriveBridge Web 继续使用 `WorkspaceApp`、`page-list`、`WorkspaceShell` 和 lazy route。本轮不引入 MuWeave 的 `PageModule` 或第二套路由系统，只在 Notebook 与 Resources 内建立一致的 feature 边界：`contract.ts` 定义安全状态与固定 identity，`projection.ts` 做纯 DTO 投影，`state.ts` 保存局部 UI reducer，`clients/` 复用现有 HTTP/generated 合同，`recovery/` 保存原幂等键、CAS、operation/receipt 与本机恢复槽，`components/` 承载页面私有 UI。
+
+Notebook 与 Resources 不得互相导入私有模块。固定资料包成员阅读通过 `web/src/consumer-flows/public.ts` 的公开 reference entry 复用现有文件阅读合同。兼容 re-export 允许历史入口渐进迁移；不复制 Server schema、不新增 API/字段、不读取 `.pinax/**`、本机 vault、bearer token 或 provider payload。页面仅消费安全 projection，缺少 owner capability 时显示 `unsupported`/`unavailable`。
+
+本轮新增结构测试验证 identity/status 合同、投影状态、页面 reducer 和跨 feature import 边界；类型检查与生产构建作为稳定门。现有 focused knowledge/resource suite 的 `localStorage`、资源登记对话框及 W210 问题保持原样，不能通过改动无关业务清除。

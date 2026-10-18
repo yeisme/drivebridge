@@ -1,6 +1,6 @@
 # 知识阅读空间交互规格
 
-2026-10-01 · 设计待实施。复用 [个人工作台 UI Spec](personal-workspace-ui-spec.md) 与 Precision Pine，不另建 Reader 产品或设计系统。宿主、安全与类型见 [Electron 架构](../../architecture/electron-desktop.md)，Pinax 字段以其[人类阅读合同](../../../../pinax/docs/interfaces/human-reading-api.md)为准。多标签、分屏、Markdown 渲染和 Obsidian 式交互的正式 Web 交接见 [多笔记工作台正式实现规格](notebook-workspace-production-spec.md)。
+2026-10-01 · 设计待实施。复用 [个人工作台 UI Spec](personal-workspace-ui-spec.md) 与 Precision Pine，不另建 Reader 产品或设计系统。宿主、安全与类型见 [Electron 架构](../../architecture/electron-desktop.md)，Pinax 字段以其[人类阅读合同](../../../../pinax/docs/interfaces/human-reading-api.md)为准。多标签、分屏、Markdown 渲染和 Obsidian 式交互的正式 Web 交接见 [多笔记工作台正式实现规格](notebook-workspace-production-spec.md)。OpenDesign 2026-10-18 知识库增量见[知识库续接规格](knowledge-base-continuation-spec.md)。
 
 ## 1. 入口与边界
 
@@ -91,3 +91,15 @@ Cmd/Ctrl+K复用现有搜索浮层并携带来源；进入正文后 Cmd/Ctrl+F�
 F06.1/F06.2仍拥有共用reader/详情；F07.1拥有知识列表与三屏基础；F09.1拥有收藏控件，F09.2拥有既有搜索基础；本 change D05只负责Pinax adapter、source状态与阅读路由组合，不复制基础组件。F07.2普通Markdown编辑保留，Pinax编辑交D13后续合同。
 
 前端先在生成fixture下独立验收，再由D09真实本机链验收；浏览器截图不是Electron实机证据。详细场景、命令、平台门在[验收矩阵](../../delivery/desktop-knowledge-acceptance.md)。
+
+## 7. 2026-10-18 原型增量
+
+当前 OpenDesign 知识库方案增加了页面树/新建父页面、块编辑、页面数据库、图片块、离线草稿与并排合并。正式实现应复用本文件的固定来源、revision、权限和状态合同；原型中的本机草稿、评论、示例数据和本地页面数据库选择不能直接提升为跨设备真源。资源库中的 Skill、模板和 reference pack 仍是固定 descriptor/snapshot 的只读消费，检查、提案、安装和执行必须分别交给对应 owner。
+
+## 8. 页面 feature 与跨域入口
+
+正式 Web 页面继续由现有 `WorkspaceApp` 和 lazy route 装配。`features/notebook` 负责知识库页面树、固定版本正文、阅读状态和冲突恢复；`features/resources` 负责 descriptor、固定快照、检查回执和登记恢复。两者分别维护 `contract.ts`、`projection.ts`、`state.ts`、`clients/`、`recovery/` 与私有 `components/`，不得互相导入内部实现。
+
+Notebook 打开资料包固定成员时，只能调用 `consumer-flows/public.ts` 的公开 reference entry，再复用现有固定 `file_id/version_id` 阅读合同。页面不会复制生成 API 类型，也不会把 descriptor、snapshot 或 check receipt 升级为安装、执行、发布、授权或正文自动读取能力。
+
+目录、正文、关系、检查和登记恢复均以当前 scope 与固定 identity 为边界。页面 feature 只保存安全 projection 和局部 UI 状态；草稿、409、offline、丢回执和 unknown 继续查询原 operation/receipt，不生成新幂等键。旧文件入口保留兼容导出，便于渐进迁移和回滚。

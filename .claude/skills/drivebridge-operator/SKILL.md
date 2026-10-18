@@ -20,6 +20,30 @@ drivebridge relay targets --json
 
 Do not print credentials, owner endpoint/key-file config, transient download URLs or input grants. A stable file or grant ID is not a credential. Configuration commands execute on the owning host, not through arbitrary remote tool parameters.
 
+## Knowledge workspace and resource boundaries
+
+The `#/knowledge` surface is a DriveBridge reading and document workspace. It is source-scoped: keep the returned `space/source/object/version` identity, page-tree `parent_file_id`, and revision together. The directory may be paginated or partial; “checked N files” is coverage, not a whole-library count. A page tree or resource descriptor is metadata, not authorization to read hidden content.
+
+For a knowledge task, discover the live contract first:
+
+```bash
+drivebridge capabilities --json
+```
+
+Use the advertised Web/API or MCP action for notebook pages, fixed-version content, properties, resource descriptors, and checks. Do not guess a `knowledge` or `skill` action when the installed client does not advertise one. Ordinary file reads must not bypass a Pinax reader binding or a managed-vault guard.
+
+Knowledge writes follow `draft -> diff -> user confirmation -> owner save -> receipt`. Keep drafts local and bounded. On offline, stale, `409`, a lost response, or an unknown result, look up the original operation/receipt with the same identity and idempotency key; never replace it with a new key or silently save the latest version.
+
+The resource library may display `skill`, `template`, and `reference_pack` descriptors and fixed snapshots. An integrity or conformance check does not install, execute, publish, authorize, or approve a provider call. Canonical Skill prose and structured metadata remain with `.skills/yeisme/` or Template Registry; use the owner workflow for proposal, install, execution, or release.
+
+See [knowledge-workspace.md](references/knowledge-workspace.md) for the state matrix, Pinax boundary, recovery rules, and verification commands.
+
+## Web feature boundary
+
+DriveBridge Web keeps `WorkspaceApp`, `page-list`, `WorkspaceShell` and lazy routes as the integration entry. Notebook and Resources are separate feature lanes with `contract.ts`, `projection.ts`, `state.ts`, `clients/`, `recovery/` and private `components/`; they may not import one another's private modules. Fixed resource members cross the boundary only through the public `consumer-flows` reference entry.
+
+The page layer consumes safe projections and local UI state only. It must not copy generated owner schemas, store canonical content, read `.pinax/**` or a bearer token, or turn a descriptor/check receipt into installation, execution, publication, authorization or provider access. Historical imports remain compatibility re-exports during migration.
+
 ## Select the path
 
 | Source / job | Control path | Bytes and recovery |

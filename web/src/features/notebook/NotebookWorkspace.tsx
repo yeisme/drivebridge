@@ -125,9 +125,9 @@ function NotebookSession({ scope, entries, initialRef, directoryQuery = "", file
     if (action === "commands" || action === "open") setNavigation(action);
     else { focusNext.current = true; dispatch({ type: "cycle", direction: action === "next-tab" ? 1 : -1 }); }
   }}>
-    <div role="tablist" aria-label="已打开笔记" className="flex h-11 shrink-0 overflow-x-auto border-b bg-background md:h-8">
+    <div role="tablist" aria-label="已打开笔记" className="flex min-h-11 shrink-0 items-stretch overflow-x-auto border-b bg-card/70 px-1 md:min-h-9 md:px-2">
       {state.tabs.filter(tab => allowed.has(tab.key)).map(tab => <div key={tab.key} className="flex shrink-0 items-center">
-        <Button type="button" role="tab" variant="ghost" className="h-11 rounded-none text-[13px] aria-selected:bg-card aria-selected:font-semibold md:h-8" aria-selected={state.activeTab === tab.key} tabIndex={state.activeTab === tab.key ? 0 : -1}
+        <Button type="button" role="tab" variant="ghost" className="h-11 max-w-56 gap-1.5 rounded-md px-3 text-[13px] aria-selected:bg-background aria-selected:font-semibold aria-selected:text-primary md:h-8" aria-selected={state.activeTab === tab.key} tabIndex={state.activeTab === tab.key ? 0 : -1}
           ref={node => { if (node) tabs.current.set(tab.key, node); else tabs.current.delete(tab.key); }}
           onKeyDown={event => {
             const available = state.tabs.filter(item => allowed.has(item.key));
@@ -136,18 +136,21 @@ function NotebookSession({ scope, entries, initialRef, directoryQuery = "", file
             if (next !== undefined) { event.preventDefault(); focusNext.current = true; dispatch({ type: "activate", key: available[next].key }); }
           }}
           onClick={() => dispatch({ type: "activate", key: tab.key })} onDoubleClick={() => dispatch({ type: "pin", key: tab.key, pinned: true })}>
-          {tab.pinned && <Pin size={12} aria-label="已固定"/>}{title(tab.key)}{tab.dirty && <span aria-label="未保存">*</span>}
+          {tab.pinned && <Pin size={12} aria-label="已固定"/>}<span className="truncate">{title(tab.key)}</span>{tab.dirty && <span aria-label="未保存" className="text-primary">·</span>}
         </Button>
-        <Button type="button" variant="ghost" size="icon" className="size-11 rounded-none md:size-8" aria-label={`关闭 ${title(tab.key)}`} onClick={() => close(tab.key)}><X size={14}/></Button>
+        <Button type="button" variant="ghost" size="icon" className="size-10 rounded-md md:size-8" aria-label={`关闭 ${title(tab.key)}`} onClick={() => close(tab.key)}><X size={14}/></Button>
       </div>)}
+      {!state.tabs.length && <p className="flex items-center px-3 text-xs text-muted-foreground">从目录或快速打开选择一篇笔记</p>}
     </div>
-    <div className="flex min-h-12 shrink-0 flex-wrap items-center gap-0 border-b px-1 max-md:[&>button]:size-11 md:min-h-10 md:gap-1 md:px-2" role="toolbar" aria-label="笔记工具栏">
+    <div className="flex min-h-12 shrink-0 flex-wrap items-center gap-1 border-b bg-background/90 px-2 max-md:[&>button]:size-11 md:min-h-10 md:px-3" role="toolbar" aria-label="笔记工具栏">
       <Button type="button" variant="ghost" size="icon" aria-label="笔记目录" disabled={focused} aria-expanded={!focused && (directoryInline ? preferences.leftOpen : directoryOpen)} onClick={() => { if (!directoryInline) setDirectoryOpen(true); else savePreferences({ ...preferences, leftOpen: !preferences.leftOpen }); }}><ListTree/></Button>
       <Button type="button" variant="ghost" size="icon" aria-label="命令面板" onClick={() => setNavigation("commands")}><Terminal/></Button>
       <Button type="button" variant="ghost" size="icon" aria-label="快速打开" onClick={() => setNavigation("open")}><Search/></Button>
       <Button type="button" variant="ghost" size="icon" aria-label="切换分屏" aria-pressed={state.split} disabled={!state.activeTab || !allowed.has(state.activeTab)} onClick={() => dispatch({ type: "split" })}><Columns2/></Button>
       <Button type="button" variant="ghost" size="icon" aria-label="笔记信息" disabled={focused} aria-expanded={!focused && (propertiesInline ? preferences.rightOpen : propertiesOpen)} onClick={() => { if (!propertiesInline) setPropertiesOpen(true); else savePreferences({ ...preferences, rightOpen: !preferences.rightOpen }); }}><PanelRight/></Button>
-      <Button ref={focusControl} type="button" variant="ghost" size="icon" aria-label={focused ? "退出专注模式" : "进入专注模式"} aria-pressed={focused} onClick={() => setFocused(value => !value)}><Focus/></Button>
+      <span className="mx-1 hidden h-5 w-px bg-border md:block" aria-hidden="true"/>
+      <span className="hidden text-xs text-muted-foreground md:inline">{dirty ? "有未保存修改" : active ? "已固定版本" : "未选择笔记"}</span>
+      <Button ref={focusControl} type="button" variant="ghost" size="icon" className="ml-auto" aria-label={focused ? "退出专注模式" : "进入专注模式"} aria-pressed={focused} onClick={() => setFocused(value => !value)}><Focus/></Button>
       <Popover>
         <PopoverTrigger render={<Button type="button" variant="ghost" size="icon" className="ml-auto max-md:size-11" aria-label="阅读设置"/>}><Settings2/></PopoverTrigger>
         <PopoverContent align="end" className="w-64 gap-4 p-4">
@@ -203,5 +206,5 @@ function NotebookSession({ scope, entries, initialRef, directoryQuery = "", file
 function NotebookPane({ title, scrollTop, onScroll, children }: { title: string; scrollTop: number; onScroll: (value: number) => void; children: ReactNode }) {
   const element = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => { if (element.current) element.current.scrollTop = scrollTop; }, []);
-  return <div ref={element} role="region" aria-label={title} className="h-full min-w-0 overflow-auto bg-card" onScroll={event => onScroll(event.currentTarget.scrollTop)}>{children}</div>;
+  return <div ref={element} role="region" aria-label={title} className="h-full min-w-0 overflow-auto bg-card/80" onScroll={event => onScroll(event.currentTarget.scrollTop)}>{children}</div>;
 }

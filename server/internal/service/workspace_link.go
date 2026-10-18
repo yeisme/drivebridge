@@ -318,10 +318,18 @@ func (s *Service) WorkspaceLinks(ctx context.Context, p Principal, id, version s
 			keys[i] = string(encoded)
 		}
 		kind := "workspace.links"
-		if backlinks { kind = "workspace.backlinks" }
-		generation := struct { Indexed bool; Stale bool; Items []contract.FileLinkView }{out.Indexed, out.Stale, out.Items}
+		if backlinks {
+			kind = "workspace.backlinks"
+		}
+		generation := struct {
+			Indexed bool
+			Stale   bool
+			Items   []contract.FileLinkView
+		}{out.Indexed, out.Stale, out.Items}
 		start, end, next, err := s.workspaceMetadataPage(p, kind, []string{id, version}, page, generation, keys)
-		if err != nil { return err }
+		if err != nil {
+			return err
+		}
 		out.Items, out.NextCursor = out.Items[start:end], next
 		return nil
 	})

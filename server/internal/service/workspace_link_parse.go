@@ -16,13 +16,21 @@ const workspaceLinkBytes = 2 * 1024 * 1024
 // excludes code/comments/reference definitions from link evidence; no URL is
 // fetched. Both input bytes and emitted destinations have independent budgets.
 func markdownLinkDestinations(ctx context.Context, source []byte) ([]string, error) {
-	if err := ctx.Err(); err != nil { return nil, err }
-	if len(source) > workspaceLinkBytes || !utf8.Valid(source) || bytes.IndexByte(source, 0) >= 0 { return nil, code("query_budget_exceeded") }
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if len(source) > workspaceLinkBytes || !utf8.Valid(source) || bytes.IndexByte(source, 0) >= 0 {
+		return nil, code("query_budget_exceeded")
+	}
 	document := goldmark.DefaultParser().Parse(text.NewReader(source))
 	out := []string{}
 	err := ast.Walk(document, func(node ast.Node, entering bool) (ast.WalkStatus, error) {
-		if err := ctx.Err(); err != nil { return ast.WalkStop, err }
-		if !entering { return ast.WalkContinue, nil }
+		if err := ctx.Err(); err != nil {
+			return ast.WalkStop, err
+		}
+		if !entering {
+			return ast.WalkContinue, nil
+		}
 		var destination []byte
 		switch node := node.(type) {
 		case *ast.Image:
@@ -33,11 +41,15 @@ func markdownLinkDestinations(ctx context.Context, source []byte) ([]string, err
 			destination = node.URL(source)
 		}
 		if destination != nil {
-			if len(destination) > 4096 || len(out) >= workspaceMetadataBudget { return ast.WalkStop, code("query_budget_exceeded") }
+			if len(destination) > 4096 || len(out) >= workspaceMetadataBudget {
+				return ast.WalkStop, code("query_budget_exceeded")
+			}
 			out = append(out, string(destination))
 		}
 		return ast.WalkContinue, nil
 	})
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	return out, nil
 }

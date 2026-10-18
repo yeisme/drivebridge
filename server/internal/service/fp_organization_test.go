@@ -766,7 +766,9 @@ type FileRow struct {
 // the same blob-reuse semantics a deduplicated upload produces.
 func seedFileRows(t *testing.T, f *fixtures.Runtime, h *human, rows []FileRow, digest string) error {
 	t.Helper()
-	if len(rows) == 0 { return nil }
+	if len(rows) == 0 {
+		return nil
+	}
 	var sp service.Space
 	if e := f.Service.DB.First(&sp, "id = ?", h.space.ID).Error; e != nil {
 		return e
@@ -788,7 +790,9 @@ func seedFileRows(t *testing.T, f *fixtures.Runtime, h *human, rows []FileRow, d
 			version := service.Version{ID: versionID, Owner: h.user.ID, FileID: file.ID, ConnectionID: seedVersion.ConnectionID, ObjectKey: seedVersion.ObjectKey, BlobSHA256: seedVersion.BlobSHA256, SHA256: seedVersion.SHA256, Size: seedVersion.Size, MIME: seedVersion.MIME, Created: now}
 			versions = append(versions, version)
 		}
-		if err := tx.CreateInBatches(files, 100).Error; err != nil { return err }
+		if err := tx.CreateInBatches(files, 100).Error; err != nil {
+			return err
+		}
 		return tx.CreateInBatches(versions, 100).Error
 	})
 }

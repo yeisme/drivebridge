@@ -175,9 +175,13 @@ func (s *Service) WorkspaceFavorites(ctx context.Context, p Principal, space str
 			out.Items = append(out.Items, contract.FavoriteView{FavoriteID: row.ID, SpaceID: space, TargetKind: row.TargetKind, TargetRef: row.TargetRef, Revision: row.Revision, Deleted: row.Deleted})
 		}
 		keys := make([]string, len(out.Items))
-		for i, view := range out.Items { keys[i] = view.FavoriteID }
+		for i, view := range out.Items {
+			keys[i] = view.FavoriteID
+		}
 		start, end, next, err := s.workspaceMetadataPage(p, "workspace.favorites", []string{space}, page, out.Items, keys)
-		if err != nil { return err }
+		if err != nil {
+			return err
+		}
 		out.Items, out.NextCursor = out.Items[start:end], next
 		return nil
 	})
@@ -195,9 +199,13 @@ func (s *Service) CreateWorkspaceFavorite(ctx context.Context, p Principal, spac
 	return s.changeWorkspaceFavorite(ctx, p, space, "", q, false, key)
 }
 func (s *Service) DeleteWorkspaceFavorite(ctx context.Context, p Principal, id string, q contract.FavoriteDelete, key string) (contract.FavoriteReceipt, error) {
-	if !collectionHumanPrincipal(p) { return contract.FavoriteReceipt{}, code("forbidden") }
+	if !collectionHumanPrincipal(p) {
+		return contract.FavoriteReceipt{}, code("forbidden")
+	}
 	var row WorkspaceFavorite
-	if err := s.DB.WithContext(ctx).Where("id = ? AND owner = ? AND tenant_id = ?", id, p.UserID, p.TenantID).First(&row).Error; err != nil { return contract.FavoriteReceipt{}, resourceReadError(err) }
+	if err := s.DB.WithContext(ctx).Where("id = ? AND owner = ? AND tenant_id = ?", id, p.UserID, p.TenantID).First(&row).Error; err != nil {
+		return contract.FavoriteReceipt{}, resourceReadError(err)
+	}
 	return s.changeWorkspaceFavorite(ctx, p, row.SpaceID, id, contract.FavoriteCreate{ExpectedRevision: q.ExpectedRevision}, true, key)
 }
 

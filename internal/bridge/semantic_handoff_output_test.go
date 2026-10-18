@@ -56,7 +56,7 @@ func semanticOutputOwner(t *testing.T, raw []byte, status, imported, digest stri
 func TestSemanticHandoffSaveOutputRejectsUnreadyAndInvalidGrant(t *testing.T) {
 	for _, tc := range []struct {
 		name, status, imported, digest, want string
-		grantStatus                        int
+		grantStatus                          int
 	}{
 		{"pending", "running", "imported", "valid", "output_not_ready", 200},
 		{"failed", "failed", "imported", "valid", "output_not_ready", 200},
@@ -222,7 +222,7 @@ func TestSemanticHandoffCancelLateCommitRetainsOriginalRecoveryIdentity(t *testi
 
 type semanticUnknownCommitProvider struct {
 	*fakeProvider
-	started chan struct{}
+	started      chan struct{}
 	refuseLookup bool
 }
 

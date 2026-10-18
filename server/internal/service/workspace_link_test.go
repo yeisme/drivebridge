@@ -21,7 +21,9 @@ func TestWorkspaceLinksFixedVersionRebuildAndVisibility(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = f.Service.RebuildWorkspaceLinks(t.Context(), p, source.FileID, contract.FileLinkRebuild{VersionID: target.VersionID}, "wrong-file-version"); err == nil || err.Error() != "not_found" { t.Fatal("foreign version accepted", err) }
+	if _, err = f.Service.RebuildWorkspaceLinks(t.Context(), p, source.FileID, contract.FileLinkRebuild{VersionID: target.VersionID}, "wrong-file-version"); err == nil || err.Error() != "not_found" {
+		t.Fatal("foreign version accepted", err)
+	}
 	links, err := f.Service.WorkspaceLinks(t.Context(), p, source.FileID, source.VersionID, false, contract.PageQuery{})
 	if err != nil || !links.Indexed || links.Stale || len(links.Items) != 1 || links.Items[0].TargetRef != ref || links.Items[0].Anchor != "section" {
 		t.Fatal(links, err)
@@ -49,7 +51,9 @@ func TestWorkspaceLinksFixedVersionRebuildAndVisibility(t *testing.T) {
 	if err != nil || replay != first {
 		t.Fatal("rebuild replay changed receipt", err)
 	}
-	if _, err = f.Service.RebuildWorkspaceLinks(t.Context(), p, source.FileID, contract.FileLinkRebuild{VersionID: version.ID}, "links-build"); err == nil || err.Error() != "idempotency_conflict" { t.Fatal("same key retargeted source version", err) }
+	if _, err = f.Service.RebuildWorkspaceLinks(t.Context(), p, source.FileID, contract.FileLinkRebuild{VersionID: version.ID}, "links-build"); err == nil || err.Error() != "idempotency_conflict" {
+		t.Fatal("same key retargeted source version", err)
+	}
 	if err = f.Service.DB.Where("file_id = ?", source.FileID).Delete(&service.WorkspaceFileLinkProjection{}).Error; err != nil {
 		t.Fatal(err)
 	}

@@ -8,6 +8,7 @@
 
 - 设计基线：[多笔记工作台正式实现规格](../web/ui/notebook-workspace-production-spec.md)
 - 现有阅读合同：[知识阅读空间交互规格](../web/ui/knowledge-reading-spec.md)
+- 知识库增量方案：[知识库续接规格](../web/ui/knowledge-base-continuation-spec.md) / OpenDesign `kb-integration-plan.md`
 - 原型入口：http://10.10.1.101:7456/api/projects/drivebridge-personal-agent-workspace/raw/index.html
 - 动效与交互截图：http://10.10.1.101:7456/api/projects/drivebridge-personal-agent-workspace/raw/review/notebook-motion-v1/index.html
 - Pinax 映射：http://10.10.1.101:7456/api/projects/drivebridge-personal-agent-workspace/raw/pinax-notebook-contract-mapping.md
@@ -22,6 +23,8 @@
 - 标题/列表折叠、区块工具条、悬停预览、反向链接和大纲跟随。
 - 120/180/220ms 动效令牌、reduced-motion、触控端 44px 触点。
 - 私有视图状态不写入 Markdown、Pinax 或公开 API。
+
+2026-10-18 的 OpenDesign 读回又固定了知识库增量：页面树和父页面选择、块编辑、页面数据库、图片块、离线草稿和三方并排合并。正式交接见[知识库续接规格](../web/ui/knowledge-base-continuation-spec.md)。这些行为只作为设计输入；原型的评论、本机草稿、示例数据和本地页面数据库选择不能当作 Server/Pinax 真源。
 
 ## 当前证据
 
@@ -174,3 +177,11 @@ python3 scripts/check.py -- python3 -m unittest discover -s scripts -p test_prot
 | 22 入口 × 六宽度 × 浅深主题，264 个稳定观察与截图 | `153151Z-4aaf2c5d` |
 
 NotebookRecoveryReview 独立审查 R1–R5 和两项后续断连/父页面时序问题已关闭。全站截图只证明实际可见状态及布局，不代替各业务闭环；Pinax 私有 vault、原生设备、真实云、付费模型和三平台发布仍未由这些本地证据验收。
+
+## 页面结构收口（2026-10-18）
+
+本轮把 MuWeave 的 feature lane 思路适配到 DriveBridge Web，但保留现有 `WorkspaceApp`、`page-list`、`WorkspaceShell` 和 lazy route。Notebook 与 Resources 作为首批页面 feature，分别以 `contract.ts`、`projection.ts`、`state.ts`、`clients/`、`recovery/` 和 `components/` 划分职责；跨域固定成员阅读只通过 `consumer-flows/public.ts` 的公开入口。
+
+`projection.ts` 只做安全 DTO 投影，`state.ts` 只保存页面局部 UI 状态，客户端适配层复用现有 HTTP/generated 合同，恢复层继续保留原 `base_version_id`、CAS、operation、receipt 和幂等键。旧模块路径继续提供兼容导出，避免迁移时改变路由、权限或正文读取行为。页面不复制 owner schema，不读取 `.pinax/**`、本机 vault、bearer token 或 provider payload。
+
+新增结构测试覆盖 identity/status 合同、empty/ready/partial/stale 投影、页面 reducer 与 Notebook/Resources 跨 feature import 边界。类型检查和生产构建作为本轮稳定门；完整 knowledge/resource focused suite 中已有的 `localStorage` 与资源登记对话框失败仍归 W210，不能通过修改无关源码清除。

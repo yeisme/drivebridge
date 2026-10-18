@@ -313,7 +313,7 @@ func TestManagedVaultWaitingSyncApplyReloadsPlan(t *testing.T) {
 	t.Cleanup(func() { s.DB.Callback().Query().Remove(callback) })
 	type outcome struct {
 		view SyncPlanResult
-		err error
+		err  error
 	}
 	start := make(chan struct{})
 	ready := make(chan struct{}, 2)

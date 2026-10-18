@@ -1,8 +1,8 @@
 package service
 
 import (
-	"net/http"
 	"github.com/yeisme/drivebridge-server/internal/contract"
+	"net/http"
 )
 
 // agentorgRoutes registers the agent organization surface. Policy writes
@@ -24,7 +24,9 @@ func (s *Service) agentorgRoutes(mux *http.ServeMux) {
 	}))
 	mux.HandleFunc("GET /api/v1/organization-plans/{id}", s.wrapObserved("agentorg.plans_get", func(w http.ResponseWriter, r *http.Request, p Principal) error {
 		_, page, err := labelPageQuery(r.URL.RawQuery, false)
-		if err != nil { return err }
+		if err != nil {
+			return err
+		}
 		view, e := s.GetOrganizationPlan(p, r.PathValue("id"), page.Cursor, page.Limit)
 		if e != nil {
 			return e
@@ -33,9 +35,13 @@ func (s *Service) agentorgRoutes(mux *http.ServeMux) {
 		return nil
 	}, false))
 	mux.HandleFunc("POST /api/v1/organization-plans/{id}/confirm", s.wrap("agentorg.plans_confirm", func(w http.ResponseWriter, r *http.Request, p Principal) error {
-		if r.URL.RawQuery != "" { return code("invalid_request") }
+		if r.URL.RawQuery != "" {
+			return code("invalid_request")
+		}
 		q, err := contract.DecodeRequest[ConfirmOrganizationPlanRequest](http.MaxBytesReader(w, r.Body, 2048))
-		if err != nil { return code("invalid_request") }
+		if err != nil {
+			return code("invalid_request")
+		}
 		view, e := s.ConfirmOrganizationPlan(p, r.PathValue("id"), q)
 		if e != nil {
 			return e
@@ -45,9 +51,13 @@ func (s *Service) agentorgRoutes(mux *http.ServeMux) {
 		return nil
 	}))
 	mux.HandleFunc("POST /api/v1/organization-plans/{id}/execute", s.wrap("agentorg.plans_execute", func(w http.ResponseWriter, r *http.Request, p Principal) error {
-		if r.URL.RawQuery != "" { return code("invalid_request") }
+		if r.URL.RawQuery != "" {
+			return code("invalid_request")
+		}
 		q, err := contract.DecodeRequest[ExecuteOrganizationPlanRequest](http.MaxBytesReader(w, r.Body, 2048))
-		if err != nil { return code("invalid_request") }
+		if err != nil {
+			return code("invalid_request")
+		}
 		view, e := s.ExecuteOrganizationPlan(p, r.PathValue("id"), q)
 		if e != nil {
 			return e

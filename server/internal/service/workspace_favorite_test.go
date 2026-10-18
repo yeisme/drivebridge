@@ -47,9 +47,15 @@ func TestWorkspaceFavoriteCASRecoveryIsolation(t *testing.T) {
 		t.Fatal("binding CAS reset", added, err)
 	}
 	deleteReplay, err := f.Service.DeleteWorkspaceFavorite(t.Context(), p, first.FavoriteID, contract.FavoriteDelete{ExpectedRevision: 1}, "favorite-delete")
-	if err != nil || deleteReplay != removed { t.Fatal("delete replay followed readded binding", deleteReplay, err) }
-	if _, err = f.Service.CreateWorkspaceFavorite(t.Context(), p, h.space.ID, q, "favorite-create"); err == nil || err.Error() != "idempotency_conflict" { t.Fatal("same key changed CAS request", err) }
-	if _, err = f.Service.DeleteWorkspaceFavorite(t.Context(), p, first.FavoriteID, contract.FavoriteDelete{ExpectedRevision: 3}, "favorite-delete"); err == nil || err.Error() != "idempotency_conflict" { t.Fatal("delete same key accepted different CAS", err) }
+	if err != nil || deleteReplay != removed {
+		t.Fatal("delete replay followed readded binding", deleteReplay, err)
+	}
+	if _, err = f.Service.CreateWorkspaceFavorite(t.Context(), p, h.space.ID, q, "favorite-create"); err == nil || err.Error() != "idempotency_conflict" {
+		t.Fatal("same key changed CAS request", err)
+	}
+	if _, err = f.Service.DeleteWorkspaceFavorite(t.Context(), p, first.FavoriteID, contract.FavoriteDelete{ExpectedRevision: 3}, "favorite-delete"); err == nil || err.Error() != "idempotency_conflict" {
+		t.Fatal("delete same key accepted different CAS", err)
+	}
 	for _, bad := range []service.Principal{{UserID: bob.user.ID}, {UserID: p.UserID, TenantID: "other"}, {UserID: p.UserID, ScopeSpace: "other"}, {UserID: p.UserID, ExternalRead: true}} {
 		if _, err = f.Service.WorkspaceFavorites(t.Context(), bad, h.space.ID, contract.PageQuery{}); err == nil {
 			t.Fatal("foreign favorite visible")

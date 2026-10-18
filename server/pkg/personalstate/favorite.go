@@ -24,7 +24,7 @@ func (Favorite) TableName() string { return "workspace_favorites" }
 
 // FavoriteCreate identifies a logical target, never its mutable head version.
 type FavoriteCreate struct {
-	SpaceID string `json:"space_id"`
+	SpaceID          string `json:"space_id"`
 	TargetKind       string `json:"target_kind"`
 	TargetRef        string `json:"target_ref"`
 	ExpectedRevision uint64 `json:"expected_revision"`

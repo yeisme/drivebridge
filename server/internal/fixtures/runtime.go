@@ -71,9 +71,9 @@ type Options struct {
 	// PropertyEditing opts into sidecar writes only in disposable fixtures.
 	PropertyEditing      bool
 	AutomationManagement bool
-	ShareReceivers bool
-	HoldManagement bool
-	LabelManagement bool
+	ShareReceivers       bool
+	HoldManagement       bool
+	LabelManagement      bool
 }
 
 func existingDemoUsers(s *service.Service, names []string) ([]service.UserKeyIssued, error) {
@@ -104,14 +104,17 @@ func StartWithOptions(state, web, listen string, options Options) (*Runtime, err
 	}
 	if options.Demo || options.PublicOrigin != "" || options.FailArchivePublishOnce {
 		host, _, err := net.SplitHostPort(listen)
-		if ip := net.ParseIP(host); err != nil || ip == nil || !ip.IsLoopback() {
-			return nil, fmt.Errorf("demo requires an explicit numeric loopback listener")
+		if ip := net.ParseIP(host); err != nil || ip == nil || (!ip.IsLoopback() && !ip.IsUnspecified()) {
+			return nil, fmt.Errorf("demo requires an explicit numeric local listener")
 		}
 	}
 	if options.PublicOrigin != "" {
 		u, err := url.Parse(options.PublicOrigin)
-		if err != nil || u.Scheme != "http" || u.User != nil || u.Path != "" || u.RawQuery != "" || u.Fragment != "" || (u.Hostname() != "localhost" && !net.ParseIP(u.Hostname()).IsLoopback()) {
-			return nil, fmt.Errorf("fixture public origin must be an exact HTTP loopback origin")
+		if err != nil || u.Scheme != "http" || u.User != nil || u.Path != "" || u.RawQuery != "" || u.Fragment != "" || (u.Hostname() != "localhost" && !func() bool {
+			ip := net.ParseIP(u.Hostname())
+			return ip != nil && (ip.IsLoopback() || ip.IsUnspecified())
+		}()) {
+			return nil, fmt.Errorf("fixture public origin must be an exact HTTP local origin")
 		}
 	}
 	os.MkdirAll(state, 0700)

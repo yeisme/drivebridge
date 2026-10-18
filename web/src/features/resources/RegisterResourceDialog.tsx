@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, type Space } from '../../api';
 import { useRouteLeaveGuard } from '../../app/route-leave';
+import { useMobileViewport } from '../../app/useMobileViewport';
 import { AppDialog } from '../../components/AppDialog';
+import { AppSheet } from '../../components/AppSheet';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { SelectAdapter } from '../../components/SelectAdapter';
-import { claimResource, clearResource, matchesResourceReceipt, readResourceRecovery, resourceDigest, resourceSlot, type Recovery, type RegisterResource, type ResourceReceipt } from './resource-recovery';
+import { claimResource, clearResource, matchesResourceReceipt, readResourceRecovery, resourceDigest, resourceSlot, type Recovery, type RegisterResource, type ResourceReceipt } from './recovery';
 
 export function RegisterResourceDialog({ scope, spaces, close }: { scope: string; spaces: Space[]; close: () => void }) {
   const [phase, setPhase] = useState('initializing'), [message, setMessage] = useState('');
@@ -95,7 +97,8 @@ export function RegisterResourceDialog({ scope, spaces, close }: { scope: string
     try { await clearResource(slot, record); if (active.current) close(); } catch { if (active.current) setMessage('恢复槽已变化或不可清除，请保留原回执，不要清除其他页面请求。'); }
     finally { running.current = false; }
   }
-  return <AppDialog title="登记固定资源" close={() => { if (unsent) setDiscard(true); else close(); }}>
+  const mobile = useMobileViewport();
+  const content = <>
     {discard && <div role="alert"><p>关闭将丢弃未提交的资源登记草稿。</p><Button className="min-h-11" onClick={close}>丢弃登记草稿并关闭</Button><Button variant="outline" className="min-h-11" onClick={() => setDiscard(false)}>继续编辑登记</Button></div>}
     <p className="text-sm text-muted-foreground">登记不是安装或执行，也不是内容安全检查。名称、引用和表单仅留内存；浏览器只保存原请求键与摘要，刷新后只能查询原结果。</p>
     {message && <p role="alert">{message}</p>}
@@ -113,5 +116,6 @@ export function RegisterResourceDialog({ scope, spaces, close }: { scope: string
     {phase === 'done' && receipt && <div className="space-y-3"><p role="status">已确认原登记：{receipt.resource.display_name}</p><p className="break-all">描述标识：{receipt.resource.descriptor_id}</p><p>原提交时间：{receipt.committed_at} · 未检查</p><Button className="min-h-11" onClick={() => void acknowledge()}>确认回执并关闭</Button></div>}
     {phase === 'denied' && <p role="alert">权限、范围、网络或其他页面的恢复身份已变化，内容已清除。请在正确范围重新打开。</p>}
     {phase === 'unavailable' && <p role="alert">恢复存储或跨标签锁不可用，不能安全登记资源。</p>}
-  </AppDialog>;
+  </>;
+  return mobile ? <AppSheet title="登记固定资源" open onOpenChange={open => { if (!open) { if (unsent) setDiscard(true); else close(); } }}>{content}</AppSheet> : <AppDialog title="登记固定资源" close={() => { if (unsent) setDiscard(true); else close(); }}>{content}</AppDialog>;
 }

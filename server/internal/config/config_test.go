@@ -33,7 +33,9 @@ func TestLoadStrictUnknownKeysAndShapes(t *testing.T) {
 	}
 	badFeature := filepath.Join(dir, "f.yaml")
 	write(t, badFeature, "label_management: maybe\n")
-	if _, err := Load(badFeature); err == nil || !strings.Contains(err.Error(), "label_management") { t.Fatalf("invalid feature value must be rejected: %v", err) }
+	if _, err := Load(badFeature); err == nil || !strings.Contains(err.Error(), "label_management") {
+		t.Fatalf("invalid feature value must be rejected: %v", err)
+	}
 	good := filepath.Join(dir, "g.json")
 	write(t, good, `{"state": "/s", "listen": "127.0.0.1:9000", "origin": "https://files.example.com"}`)
 	file, err := Load(good)
