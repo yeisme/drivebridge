@@ -1,13 +1,16 @@
-import { useEffect, useState } from "react";
+import { useEffect, useReducer, useState } from "react";
 import { BookOpen, CheckCircle2, Cloud, FilePlus2, RefreshCw, UploadCloud } from "lucide-react";
 import { getDataContext, type Space } from "../../api";
 import { SelectAdapter } from "../../components/SelectAdapter";
 import { Input } from "../../components/ui/input";
 import { Button } from "../../components/ui/button";
 import { MarkdownFileDocument, NotebookPageTree, NotebookWorkspace, CreateNotebookPageDialog } from "./components";
-import { readKnowledgeFiles } from "./knowledge-files";
+import { readKnowledgeFiles } from "./clients";
+import { notebookLifecycleFromError, projectKnowledgeFilePage } from "./projection";
+import { initialNotebookPageUiState, notebookPageUiReducer } from "./state";
 import { noteKey } from "./notebook-state";
 import type { NotebookEntry } from "./notebook-navigation";
+import type { NotebookLifecycle } from "./contract";
 
 export function KnowledgePage({ actor, spaces, onDirtyChange }: { actor: string; spaces: Space[]; onDirtyChange?: (dirty: boolean) => void }) {
   const managedSpace = getDataContext().space;
@@ -36,9 +39,10 @@ function KnowledgeSource({ actor, space, onDirtyChange }: { actor: string; space
   const [cursor, setCursor] = useState<string | null>(null);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
-  const [state, setState] = useState<"loading" | "ready" | "error" | "forbidden" | "stale" | "unsupported" | "offline">("loading");
+  const [state, setState] = useState<NotebookLifecycle>("loading");
   const [coverage, setCoverage] = useState({ scanned: 0, unavailable: 0, stale: 0 });
-  const [query, setQuery] = useState("");
+  const [ui, dispatchUi] = useReducer(notebookPageUiReducer, initialNotebookPageUiState);
+  const query = ui.sourceQuery;
   const [parentFileId, setParentFileId] = useState<string | undefined>();
   const [creating, setCreating] = useState<"page" | "daily" | null>(null);
   const [dirty, setDirty] = useState(false);
@@ -56,16 +60,18 @@ function KnowledgeSource({ actor, space, onDirtyChange }: { actor: string; space
     if (!navigator.onLine) offline();
     else readKnowledgeFiles(space, cursor, controller.signal).then(page => {
       if (controller.signal.aborted) return;
-      setEntries(previous => [...new Map([...(cursor ? previous : []), ...page.entries].map(entry => [noteKey(entry.ref), entry])).values()]);
-      setCoverage(previous => ({ scanned: (cursor ? previous.scanned : 0) + page.scanned,
-        unavailable: (cursor ? previous.unavailable : 0) + page.unavailable, stale: (cursor ? previous.stale : 0) + page.stale }));
-      setNextCursor(page.nextCursor);
+      const projection = projectKnowledgeFilePage(page);
+      setEntries(previous => [...new Map([...(cursor ? previous : []), ...projection.entries].map(entry => [noteKey(entry.ref), entry])).values()]);
+      setCoverage(previous => ({ scanned: (cursor ? previous.scanned : 0) + projection.scanned,
+        unavailable: (cursor ? previous.unavailable : 0) + projection.unavailable, stale: (cursor ? previous.stale : 0) + projection.stale }));
+      setNextCursor(projection.nextCursor);
       setState("ready");
     }).catch(error => {
       if (controller.signal.aborted) return;
-      if (error.status === 401 || error.status === 403) { setEntries([]); setNextCursor(null); setState("forbidden"); }
-      else if (error.status === 409 || error.status === 410) { setEntries([]); setNextCursor(null); setState("stale"); }
-      else if (error.status === 404 || error.status === 405 || error.message === "unsupported_action") setState("unsupported");
+      const lifecycle = notebookLifecycleFromError(error);
+      if (lifecycle === "forbidden") { setEntries([]); setNextCursor(null); setState("forbidden"); }
+      else if (lifecycle === "stale") { setEntries([]); setNextCursor(null); setState("stale"); }
+      else if (lifecycle === "unsupported") setState("unsupported");
       else setState("error");
     });
     return () => { controller.abort(); window.removeEventListener("drivebridge-context", invalidate); window.removeEventListener("offline", offline); };
@@ -78,7 +84,7 @@ function KnowledgeSource({ actor, space, onDirtyChange }: { actor: string; space
     <details className="shrink-0 border-b bg-background">
     <summary className="flex min-h-11 cursor-pointer list-none flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-[13px] focus-visible:outline-2 focus-visible:outline-ring"><span className="font-medium">目录与筛选</span><span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground" role="status">{state === "loading" ? "正在读取文件目录…" : `已检查 ${coverage.scanned} 个文件 · ${entries.length} 篇 Markdown`}</span><span className="ml-auto text-xs text-muted-foreground">{state === "ready" ? "当前来源" : "状态"}</span></summary>
     <div className="flex flex-wrap items-center gap-2 px-3 pb-3 md:px-4">
-      <Input aria-label="筛选已加载笔记" value={query} onChange={event => setQuery(event.target.value)} placeholder="筛选已加载笔记名称…" className="w-56 max-w-full max-md:min-h-11"/>
+      <Input aria-label="筛选已加载笔记" value={query} onChange={event => dispatchUi({ type: "set-query", query: event.target.value })} placeholder="筛选已加载笔记名称…" className="w-56 max-w-full max-md:min-h-11"/>
       <Button type="button" variant="outline" className="gap-1.5 max-md:min-h-11" disabled={state !== "ready"} onClick={() => create(false)}><FilePlus2/>新建笔记</Button>
       <Button type="button" variant="ghost" className="gap-1.5 max-md:min-h-11" disabled={state !== "ready"} onClick={() => create(true)}><CheckCircle2/>日记</Button>
       <Button type="button" variant="ghost" size="icon" className="max-md:size-11" aria-label="刷新知识库" disabled={state === "loading"} onClick={refresh}><RefreshCw/></Button>

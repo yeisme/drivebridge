@@ -6,8 +6,7 @@ import { DocumentConflictMerge } from "./DocumentConflictMerge";
 import { NotebookReadError, readMarkdownFile } from "./notebook-adapters";
 import { noteKey } from "./notebook-state";
 import type { NoteIdentity } from "./notebook-state";
-import { claimDocumentSave, clearDocumentSave, documentCapability, documentRecoveryKey, lookupDocumentSave, saveDocument } from "./document-client";
-import type { DocumentCapability, DocumentSave } from "./document-client";
+import { claimDocumentSave, clearDocumentSave, documentCapability, documentRecoveryKey, lookupDocumentSave, saveDocument, type DocumentCapability, type DocumentSave } from "./clients";
 
 interface Props {
   identity: NoteIdentity;

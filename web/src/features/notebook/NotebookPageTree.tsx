@@ -1,18 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { api } from "../../api";
 import { Button } from "../../components/ui/button";
-
-export interface NotebookPageMeta {
-  file_id: string;
-  space_id: string;
-  version_id: string;
-  path: string;
-  parent_file_id: string;
-  icon: string;
-  revision: number;
-}
-
-type PageResponse = { items: NotebookPageMeta[]; next_cursor?: string | null };
+import { readNotebookPageTree } from './clients';
+import type { NotebookPageMeta } from './contract';
+export type { NotebookPageMeta } from './contract';
 
 function titleOf(page: NotebookPageMeta) {
   const name = page.path.split("/").pop() || page.path;
@@ -52,8 +42,7 @@ export function NotebookPageTree({ space, selected, onSelect, onLoaded }: { spac
       let cursor: string | null = null;
       let remaining = false;
       for (let pageNumber = 0; pageNumber < 10; pageNumber++) {
-        const suffix: string = cursor ? `&cursor=${encodeURIComponent(cursor)}` : "";
-        const page: PageResponse = await api<PageResponse>(`/notebook/pages?space_id=${encodeURIComponent(space)}&limit=100${suffix}`, "GET", undefined, {}, controller.signal);
+        const page = await readNotebookPageTree(space, cursor, controller.signal);
         const valid: NotebookPageMeta[] = Array.isArray(page.items) ? page.items.filter((item: NotebookPageMeta) => item && item.space_id === space && item.file_id && item.version_id && item.path && typeof item.parent_file_id === "string" && ["file", "book", "calendar", "idea", "project"].includes(item.icon) && Number.isSafeInteger(item.revision)) : [];
         pages.push(...valid);
         cursor = typeof page.next_cursor === "string" && page.next_cursor ? page.next_cursor : null;

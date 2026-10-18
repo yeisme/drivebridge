@@ -66,8 +66,8 @@ const DevicesPage = lazy(() => import("./features/devices/DevicesPage").then(mod
 const AutomationPage = lazy(() => import("./features/automation/AutomationPage").then(module => ({ default: module.AutomationPage })));
 const PropertiesPage = lazy(() => import("./features/properties/PropertiesPage").then(module => ({ default: module.PropertiesPage })));
 const CollectionsPage = lazy(() => import("./features/collections/CollectionsPage").then(module => ({ default: module.CollectionsPage })));
-const ResourcesPage = lazy(() => import("./features/resources/ResourcesPage").then(module => ({ default: module.ResourcesPage })));
-const KnowledgePage = lazy(() => import("./features/notebook/KnowledgePage").then(module => ({ default: module.KnowledgePage })));
+const ResourcesPage = lazy(() => import("./features/resources/page").then(module => ({ default: module.ResourcesPage })));
+const KnowledgePage = lazy(() => import("./features/notebook/page").then(module => ({ default: module.KnowledgePage })));
 const MarkdownNotebookPreview = lazy(() => import("./features/notebook/MarkdownNotebookPreview").then(module => ({ default: module.MarkdownNotebookPreview })));
 const GovernancePanel = lazy(() => import("./Governance").then(module => ({ default: module.GovernancePanel })));
 const TeamWorkspace = lazy(() => import("./Teams").then(module => ({ default: module.TeamWorkspace })));

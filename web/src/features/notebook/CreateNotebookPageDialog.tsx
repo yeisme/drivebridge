@@ -4,7 +4,7 @@ import { AppDialog } from "../../components/AppDialog";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { useRouteLeaveGuard } from "../../app/route-leave";
-import { createNotebookDaily, createNotebookPage, lookupNotebookCreation, resumeNotebookCreation, type NotebookCreation } from "./notebook-client";
+import { createNotebookDaily, createNotebookPage, lookupNotebookCreation, resumeNotebookCreation, type NotebookCreation } from "./clients";
 
 interface Recovery { key: string; date: string }
 function readRecovery(slot: string): Recovery | null {

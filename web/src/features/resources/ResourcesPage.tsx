@@ -1,6 +1,6 @@
 import { EmptyState } from "../../components/EmptyState";
-import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { api, type Space } from '../../api';
+import { useEffect, useReducer, useRef, useState, type ReactNode } from 'react';
+import type { Space } from '../../api';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { SelectAdapter } from '../../components/SelectAdapter';
@@ -11,18 +11,21 @@ import { RegisterResourceDialog, ResourceSnapshot, ResourceIntegrity } from './c
 import { getResourceDescriptor, listResourceDescriptors } from './clients/resource-descriptors';
 import { isResourceDescriptor, resourceKinds } from './contract';
 import { projectResourceList } from './projection';
-import type { ResourceDescriptor as Resource, ResourceDescriptorPage as Page } from './contract';
+import { initialResourcePageUiState, resourcePageUiReducer } from './state';
+import type { ResourceDescriptor as Resource, ResourceLifecycle } from './contract';
 const kinds = resourceKinds;
 const validResource = isResourceDescriptor;
 export function ResourcesPage({ scope, spaces }: { scope: string; spaces: Space[] }) {
   return <ResourceList key={scope} scope={scope} spaces={spaces}/>;
 }
 function ResourceList({ spaces, scope }: { spaces: Space[]; scope: string }) {
-  const [registering, setRegistering] = useState(false);
+  const [ui, dispatchUi] = useReducer(resourcePageUiReducer, initialResourcePageUiState);
+  const registering = ui.registrationOpen;
   const [kind, setKind] = useState(''), [space, setSpace] = useState('');
   const [search, setSearch] = useState('');
   const [items, setItems] = useState<Resource[]>([]), [cursor, setCursor] = useState(''), [next, setNext] = useState(''), [attempt, setAttempt] = useState(0);
-  const [selected, setSelected] = useState<Resource | null>(null), [state, setState] = useState('loading');
+  const [state, setState] = useState<ResourceLifecycle>('loading');
+  const selected = ui.selectedDescriptor ? items.find(item => item.descriptor_id === ui.selectedDescriptor) ?? null : null;
   const active = useRef<AbortController | null>(null), trigger = useRef<HTMLButtonElement | null>(null);
   const registerTrigger = useRef<HTMLButtonElement | null>(null), refreshTrigger = useRef<HTMLButtonElement | null>(null);
   const restoreRegistration = useRef(false);
@@ -31,10 +34,10 @@ function ResourceList({ spaces, scope }: { spaces: Space[]; scope: string }) {
     restoreRegistration.current = false;
     if (state !== 'denied' && state !== 'offline' && document.activeElement === document.body) (registerTrigger.current || refreshTrigger.current)?.focus();
   }, [state, registering]);
-  const deny = () => { restoreRegistration.current = false; active.current?.abort(); setSelected(null); setItems([]); setNext(''); setState('denied'); };
+  const deny = () => { restoreRegistration.current = false; active.current?.abort(); dispatchUi({ type: 'close-inspector' }); setItems([]); setNext(''); setState('denied'); };
   useEffect(() => {
     const controller = new AbortController(); active.current = controller; setState('loading');
-    const invalidate = () => { restoreRegistration.current = false; controller.abort(); setSelected(null); setItems([]); setNext(''); setState('denied'); };
+    const invalidate = () => { restoreRegistration.current = false; controller.abort(); dispatchUi({ type: 'close-inspector' }); setItems([]); setNext(''); setState('denied'); };
     const offline = () => { invalidate(); setState('offline'); };
     window.addEventListener('drivebridge-context', invalidate); window.addEventListener('offline', offline);
     const query = new URLSearchParams({ limit: '50' });
@@ -47,17 +50,17 @@ function ResourceList({ spaces, scope }: { spaces: Space[]; scope: string }) {
       setNext(page.next_cursor); setState('ready');
     }).catch((error: { status?: number }) => {
       if (controller.signal.aborted) return;
-      setItems([]); setSelected(null); setNext('');
+      setItems([]); dispatchUi({ type: 'close-inspector' }); setNext('');
       setState(error.status === 401 || error.status === 403 ? 'denied' : error.status === 410 ? 'stale' : error.status === 404 || error.status === 405 ? 'unsupported' : 'error');
     });
     return () => { controller.abort(); window.removeEventListener('drivebridge-context', invalidate); window.removeEventListener('offline', offline); };
   }, [kind, space, cursor, attempt]);
-  const refresh = () => { active.current?.abort(); setState('loading'); setItems([]); setSelected(null); setCursor(''); setNext(''); setAttempt(value => value + 1); };
+  const refresh = () => { active.current?.abort(); setState('loading'); setItems([]); dispatchUi({ type: 'close-inspector' }); setCursor(''); setNext(''); setAttempt(value => value + 1); };
   const filteredItems = projectResourceList(items, search).filteredItems;
   const kindIcon = (value: Resource['kind']) => value === 'skill' ? <Shapes className="size-4"/> : value === 'template' ? <BookOpen className="size-4"/> : <Package2 className="size-4"/>;
   return <section aria-label="资源库" className="min-w-0 space-y-4">
-    <WorkspacePageHeader title="资源库" description="登记 Skill、模板与资料包的固定版本。保存不等于检查通过、安装或执行。" actions={<div className="flex items-center gap-2"><span className="hidden rounded-full bg-primary/10 px-2 py-1 text-[11px] font-medium text-primary md:inline">{state === 'ready' ? `${items.length} 个已加载资源` : '按当前范围读取'}</span>{scope && state === 'ready' ? <Button ref={registerTrigger} className="min-h-11 gap-1.5 text-[13px] md:min-h-8" onClick={() => setRegistering(true)}><FileCheck2/>登记固定资源</Button> : undefined}</div>}/>
-    {registering && <RegisterResourceDialog scope={scope} spaces={spaces} close={() => { restoreRegistration.current = true; setRegistering(false); refresh(); }}/>}
+    <WorkspacePageHeader title="资源库" description="登记 Skill、模板与资料包的固定版本。保存不等于检查通过、安装或执行。" actions={<div className="flex items-center gap-2"><span className="hidden rounded-full bg-primary/10 px-2 py-1 text-[11px] font-medium text-primary md:inline">{state === 'ready' ? `${items.length} 个已加载资源` : '按当前范围读取'}</span>{scope && state === 'ready' ? <Button ref={registerTrigger} className="min-h-11 gap-1.5 text-[13px] md:min-h-8" onClick={() => dispatchUi({ type: 'set-registration', open: true })}><FileCheck2/>登记固定资源</Button> : undefined}</div>}/>
+    {registering && <RegisterResourceDialog scope={scope} spaces={spaces} close={() => { restoreRegistration.current = true; dispatchUi({ type: 'set-registration', open: false }); refresh(); }}/>}
     {state !== 'denied' && <div className="flex flex-wrap items-end gap-3 [&_label]:min-w-0 [&_label]:max-w-full md:[&_button]:min-h-8">
       <label className="grid min-w-56 flex-1 gap-2 text-sm"><span>筛选已加载资源</span><span className="relative"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"/><Input aria-label="筛选已加载资源" className="min-h-11 pl-9" value={search} onChange={event => setSearch(event.target.value)} placeholder="按名称筛选当前页…"/></span></label>
       <label className="grid gap-2 text-sm">资源类型<SelectAdapter aria-label="资源类型" className="min-h-11" value={kind} onChange={event => { if (event.target.value !== kind) { refresh(); setKind(event.target.value); } }}><option value="">全部类型</option>{Object.entries(kinds).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</SelectAdapter></label>
@@ -65,7 +68,7 @@ function ResourceList({ spaces, scope }: { spaces: Space[]; scope: string }) {
       <Button ref={refreshTrigger} variant="outline" className="min-h-11 self-end" disabled={state === 'loading'} onClick={refresh}>刷新资源库</Button>
     </div>}
     {state === 'loading' && <ResourceSkeleton/>}
-    {state === 'ready' && !filteredItems.length && <div role="status"><EmptyState title={items.length ? '当前页没有匹配资源' : '还没有登记资源'} description={items.length ? '搜索只作用于当前已加载页；继续翻页或清除筛选后再查看。' : '登记固定版本的 Skill、模板或资料包，资源会保留来源和修订。'} action={scope ? <Button className="min-h-11 gap-1.5" onClick={() => setRegistering(true)}><FileCheck2/>登记固定资源</Button> : undefined}/></div>}
+    {state === 'ready' && !filteredItems.length && <div role="status"><EmptyState title={items.length ? '当前页没有匹配资源' : '还没有登记资源'} description={items.length ? '搜索只作用于当前已加载页；继续翻页或清除筛选后再查看。' : '登记固定版本的 Skill、模板或资料包，资源会保留来源和修订。'} action={scope ? <Button className="min-h-11 gap-1.5" onClick={() => dispatchUi({ type: 'set-registration', open: true })}><FileCheck2/>登记固定资源</Button> : undefined}/></div>}
     {state === 'stale' && <ResourceNotice tone="warning" title="资源分页已过期" detail="旧结果已清除，请刷新重读。" action={<Button variant="outline" className="min-h-11" onClick={refresh}>重新读取资源</Button>}/>}
     {state === 'error' && <ResourceNotice tone="danger" title="资源描述暂不可用" detail="合同不匹配或服务错误不代表没有资源。" action={<Button variant="outline" className="min-h-11" onClick={refresh}>重试读取</Button>}/>}
     {state === 'unsupported' && <ResourceNotice title="当前服务尚未开放资源描述列表" detail="资源库会保留明确的 unsupported 状态，不使用模拟数据填充。"/>}
@@ -74,10 +77,10 @@ function ResourceList({ spaces, scope }: { spaces: Space[]; scope: string }) {
     {!!filteredItems.length && <ul aria-label="资源描述列表" className="m-0 list-none divide-y divide-border overflow-hidden rounded-xl border border-border bg-card p-0">{filteredItems.map(row => <li key={row.descriptor_id} className="group flex min-w-0 items-center gap-3 px-3 py-3 transition-colors hover:bg-accent/40 md:px-4">
       <div className="grid size-9 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">{kindIcon(row.kind)}</div>
       <div className="min-w-0 flex-1"><div className="flex min-w-0 flex-wrap items-center gap-2"><h3 className="m-0 min-w-0 break-words text-sm font-semibold">{row.display_name}</h3><span className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">{kinds[row.kind]}</span><span className="rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground">未检查</span></div><p className="mt-1 text-xs text-muted-foreground">修订 {row.descriptor_revision} · {row.collection_snapshot_id ? '集合快照' : '固定文件版本'} · {row.space_id}</p></div>
-      <Button variant="outline" className="min-h-11 shrink-0 text-[13px] md:min-h-8" aria-label={`查看资源描述 ${row.display_name}`} disabled={state !== 'ready'} onClick={event => { trigger.current = event.currentTarget; setSelected(row); }}>查看详情</Button>
+      <Button variant="outline" className="min-h-11 shrink-0 text-[13px] md:min-h-8" aria-label={`查看资源描述 ${row.display_name}`} disabled={state !== 'ready'} onClick={event => { trigger.current = event.currentTarget; dispatchUi({ type: 'select', descriptor: row.descriptor_id }); }}>查看详情</Button>
     </li>)}</ul>}
-    {state === 'ready' && next && <Button variant="outline" aria-label="更多资源描述" className="min-h-11" onClick={() => { setSelected(null); setCursor(next); }}>加载更多资源</Button>}
-    {selected && <AppSheet title="固定资源描述" open onOpenChange={open => { if (!open) { setSelected(null); trigger.current?.focus(); } }} detailWidth={420} initialDetailWidth={420}><ResourceDetail key={selected.descriptor_id} original={selected} onDenied={deny} close={() => { setSelected(null); trigger.current?.focus(); }}/></AppSheet>}
+    {state === 'ready' && next && <Button variant="outline" aria-label="更多资源描述" className="min-h-11" onClick={() => { dispatchUi({ type: 'close-inspector' }); setCursor(next); }}>加载更多资源</Button>}
+    {selected && <AppSheet title="固定资源描述" open onOpenChange={open => { if (!open) { dispatchUi({ type: 'close-inspector' }); trigger.current?.focus(); } }} detailWidth={420} initialDetailWidth={420}><ResourceDetail key={selected.descriptor_id} original={selected} onDenied={deny} close={() => { dispatchUi({ type: 'close-inspector' }); trigger.current?.focus(); }}/></AppSheet>}
     <p className="flex items-center gap-1.5 text-xs text-muted-foreground"><FileCheck2 className="size-3.5"/>仅提供固定字节编码检查；完整格式检查、安装与领域交接尚未提供，本页不授予额外权限。列表按原标识分页，未提供全库数量。</p>
   </section>;
 }

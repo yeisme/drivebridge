@@ -97,6 +97,7 @@ DriveBridge Web 沿用 `WorkspaceApp`、`page-list`、`WorkspaceShell` 和现有
 
 ```text
 web/src/features/notebook/
+├── page.tsx           # 路由兼容入口
 ├── contract.ts       # actor/tenant/space/source/object/version/revision 与页面状态
 ├── projection.ts     # DTO 到安全 view model 的纯投影
 ├── state.ts          # 来源、目录、阅读和局部 Sheet 状态
@@ -105,6 +106,7 @@ web/src/features/notebook/
 └── components/       # 页面树、目录、正文、属性与工作台组件
 
 web/src/features/resources/
+├── page.tsx           # 路由兼容入口
 ├── contract.ts       # descriptor、revision、snapshot、check 与登记回执
 ├── projection.ts     # 列表筛选、详情和检查历史投影
 ├── state.ts          # Inspector、检查、快照和登记阶段
