@@ -21,7 +21,7 @@ http://127.0.0.1:7456/api/projects/drivebridge-personal-agent-workspace/raw/kb-i
 | 能力 | 正式 owner/合同 | 本轮规格口径 | 原型状态 |
 | --- | --- | --- | --- |
 | 来源范围与 Markdown 列表 | DriveBridge Web + Server file-query | 绑定 `actor/tenant/space/source`；分页、游标、扫描覆盖度和不可用项分开显示 | 已做，部分仍是原型数据 |
-| 页面树与新建 | DriveBridge Server `GET /notebook/pages`、`POST /notebook/pages` | `parent_file_id`、`version_id`、`revision`、图标类型由服务端裁决；循环保护在 owner | 已做 |
+| 物理目录与新建 | DriveBridge Server `/browser`、`POST /directories`、`POST /notebook/pages` | 网盘物理目录是层级真源；笔记写入 `<directory_path>/<title>.md`；`parent_file_id` 仅兼容读取 | 已做本地闭环 |
 | 阅读/实时/源码 | DriveBridge reader primitives | 共享 Markdown AST 与 anchor；源码块原样保留；安全失败可回源码 | 已做 |
 | 保存与冲突 | DriveBridge document save + `base_version_id`/CAS | 草稿 → 差异 → 用户确认 → owner 保存 → receipt；409 保留双方内容 | 已做本机/fixture，生产回执仍独立验收 |
 | 离线草稿与合并 | DriveBridge Web 私有草稿 + Server 版本 | 草稿只存本机；恢复先查原身份；三方合并后人工选择，不能换键覆盖 | 原型已做，服务端同步缺口保留 |
@@ -50,7 +50,11 @@ http://127.0.0.1:7456/api/projects/drivebridge-personal-agent-workspace/raw/kb-i
 | `unknown` | 回查原 operation/receipt 后再决定 | 不生成新幂等键重试 |
 | `unsupported` | 说明缺失合同、宿主或格式 | 不用 mock 假装可用 |
 
-保存、创建页面、属性变更、资源登记和检查都必须复用原幂等键与原回执。页面树慢、响应丢失或刷新只允许 lookup 原请求；服务端拒绝时保留用户输入并给出 owner 修复位置。
+保存、创建目录、创建页面、属性变更、资源登记和检查都必须复用原幂等键与原回执。目录树慢、响应丢失或刷新只允许 lookup 原请求；服务端拒绝时保留用户输入并给出 owner 修复位置。
+
+知识库的目录层级直接读取 `/browser?space_id=<space>&path=<directory>`，只展示当前物理目录的直属子目录和 Markdown 文件。带幂等键的目录创建写入 `WorkspaceRequest`，通过 `/directories/lookup` 回查；无幂等键的旧 Finder 创建路径保持兼容。普通笔记创建增加 `directory_path`，服务端仍复用上传、版本和 metadata receipt 链。
+
+创建弹层在发送请求前必须预检恢复能力。localStorage、Web Locks 或非本机普通 HTTP 安全上下文不可用时，页面保持拒写并显示具体原因；不得为了可用性改用无锁单标签写入。损坏的恢复槽不得自动删除，只有用户明确确认后，应用才能在锁内校验并清理该槽。服务端已确认成功但浏览器清理槽失败时，仍打开已创建对象并保留原 key，后续只允许查询原请求。
 
 ## 4. Skill、模板与资源边界
 
@@ -75,7 +79,7 @@ http://127.0.0.1:7456/api/projects/drivebridge-personal-agent-workspace/raw/kb-i
 
 本续接复用既有 F25/F26、F65–F68、W201–W205，不新建第二套知识库任务系统：
 
-- 页面目录、页面树和新建继续落在 `web/src/features/notebook` 与 Server notebook contract。
+- 页面目录、物理目录树和新建继续落在 `web/src/features/notebook` 与 Server notebook contract；旧页面 metadata 只作为兼容投影。
 - Skill/模板/资料包继续落在正式 `features/resources`、resource descriptor/check owner 和 canonical Skill/Registry owner。
 - Pinax reader/writer 继续由 desktop/Pinax change 负责；Web 不绕过受管范围。
 - 原型只读回读先更新来源摘要，再更新本地 spec、任务和 Skill；OpenDesign 写入必须另行明确授权。
@@ -84,7 +88,7 @@ http://127.0.0.1:7456/api/projects/drivebridge-personal-agent-workspace/raw/kb-i
 
 ```bash
 cd /home/yeshugen/workplace/yeisme-agent/cli/drivebridge
-python3 scripts/check.py -- pnpm --dir web exec vitest run src/features/notebook/KnowledgePage.test.tsx src/features/notebook/NotebookPageTree.test.tsx src/features/resources/ResourcesPage.test.tsx src/features/resources/ResourceIntegrity.test.tsx
+NODE_OPTIONS=--no-experimental-webstorage pnpm --dir web exec vitest run src/features/notebook/KnowledgePage.test.tsx src/features/notebook/CreateNotebookPageDialog.test.tsx src/features/notebook/NotebookDirectoryTree.test.tsx src/features/notebook/knowledge-files.test.ts
 openspec validate drivebridge-personal-workspace-rebuild-v1 --strict --no-interactive
 git diff --check
 ```

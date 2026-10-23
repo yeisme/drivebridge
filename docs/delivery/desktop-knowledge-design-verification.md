@@ -30,7 +30,7 @@
 
 ```bash
 openspec validate drivebridge-pinax-reading-integration-v1 --strict --no-interactive
-git diff --check -- AGENTS.md docs/architecture/subproject-product-boundaries.md openspec/changes/drivebridge-pinax-reading-integration-v1
+git diff --check -- AGENTS.md docs/architecture/subproject-product-boundaries.md cli/drivebridge/openspec/changes/drivebridge-pinax-reading-integration-v1
 ```
 
 `cli/drivebridge`：

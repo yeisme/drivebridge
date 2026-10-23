@@ -281,3 +281,8 @@ data clients → Server public contract → owner receipts
 [AC01–30](personal-workspace-acceptance.md) 是完成口径。覆盖浅/深色、鼠标/键盘/触摸、320/390/768/1280/1440/1920px（1024px 保留为补充断点）；截图至少包含默认页、展开导航、文件详情、Agent 表单、计划确认、权限失败和移动端收件。
 
 壳层/工具条/列表切换的位移在同一 viewport 下不超过 1px；可读正文不得被无意义裁切。快捷键在输入框、编辑器、文字选择内让位。对比度与 focus 通过实际渲染检查，不以 token 数值替代。每个图表有同口径数据表，重要状态包含文字；缩放到 200% 仍可导航与确认。
+## 2026-10-20 主路径视觉基础
+
+知识库与网盘共用 Precision Pine 工作区基础。颜色、边框、圆角、间距、控件尺寸、文件行高和动效只从 `web/src/app/theme/tokens.css` 读取；共享状态和结构组件位于 `web/src/components/workspace`。页面不得新增硬编码主题色，也不得增加第二个全局搜索入口。
+
+桌面壳层保持 184px 导航、56px 收起 rail、48px 顶栏和 8px 内容外间距；Finder 采用约 220px 目录树与 360px 检查器，知识库沿用目录树、笔记列表和 `NotebookWorkspace` 阅读工作区。移动端转为目录抽屉/详情叠层，触控目标至少 44px；浅色、深色和 reduced-motion 必须使用同一语义 token。真实文件、版本、权限、创建恢复和 CAS 状态优先于原型样本，未提供的能力继续显示为 `unsupported`。

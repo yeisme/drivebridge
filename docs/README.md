@@ -53,3 +53,5 @@ DriveBridge 统一拥有文件、版本、授权、传输与稳定引用，CLI/M
 - [持续集成与交付](delivery/ci-cd.md)：按改动选择检查，区分本地、远端与发布证据。
 
 - [语义视频生产交接与本仓任务](semantic-video-production.md)：固定来源、用途、版本、恢复与验收边界。下一阶段的合同、恢复与任务拆分见[归档设计细节](../openspec/changes/archive/2026-10-11-drivebridge-semantic-video-handoff-v1/design.md)。
+
+资源查询、详情与补全使用指南：[CLI 资源命令](commands/resource-views.md)。该页明确源码候选与已安装版本的边界。

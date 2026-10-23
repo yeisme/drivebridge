@@ -122,6 +122,17 @@
 
 ## 逐详情与关键弹层对照
 
+### 2026-10-20 知识库与网盘视觉收口
+
+本轮把“知识库 + 网盘”主路径收口到同一套 Precision Pine 工作区基础：`app/theme/tokens.css` 是颜色、间距、圆角、控件尺寸、文件行高和动效的唯一语义来源；`components/workspace` 提供页面工具栏、状态提示、空态、骨架、检查器头部、视图切换、面包屑和选择工具条；壳层继续保留单一 TopBar/CommandSearch 入口。
+
+- 知识库：保留真实目录读取、直属 Markdown、创建恢复、固定版本、CAS 和权限状态，把页面标题、来源选择、目录与筛选、路径提示、空态和异常提示统一到共享组件；`NotebookWorkspace` 的目录、阅读、实时、源码、分屏和检查器状态继续由原组件负责。
+- 网盘：Finder 保留目录导航、上传、新建、拖拽、列表/网格/分栏/画廊和预览能力，统一目录树密度、工具栏、视图切换和 360px 检查器；移动端仍使用目录抽屉与详情叠层。
+- 响应式：桌面主导航 184px、收起 56px、顶栏 48px；工作区外间距 8px、外框圆角 12px；桌面文件行 36px、移动端目标至少 44px。浅色、深色和 reduced-motion 共享语义 token，不新增页面级主题色。
+- 证据边界：本轮只改变正式 UI 结构与视觉层，不复制原型 bundle、样本数据或 CSS；服务端合同、恢复槽、Web Locks、原 key、版本和权限行为保持不变。原型未覆盖的能力继续标记为 `unsupported`，不使用视觉占位冒充已实现。
+
+实现验证命令：`NODE_OPTIONS=--no-experimental-webstorage pnpm --dir web exec vitest run src/features/notebook src/features/resources src/app --no-file-parallelism`、`pnpm --dir web exec tsc --noEmit`、`pnpm --dir web build`。浏览器验收需设置 `DRIVEBRIDGE_EVIDENCE_ARTIFACTS`，并覆盖知识库创建/工作区、笔记布局、Finder 和文件预览。
+
 以下逐项关联原型依据、当前实现、处理决定、公共合同和实际证据。原型是只读演示，不是业务证明；参考缺失明确标出，不能用桌面图充当手机图。
 
 | 场景 | 原型依据 | 当前实现/处理决定 | 合同依赖 | 实际证据 |

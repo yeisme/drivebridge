@@ -29,7 +29,7 @@ drivebridge bind discover --allow-generic # 才列出 openlist/webdav/smb/sftp/a
 drivebridge bind add --consumer pinax --project drama-1 \
   --space pinax-vault --prefix notes --purpose vault
 drivebridge bind list
-drivebridge bind show <bind-id>
+drivebridge bind describe <bind-id>
 drivebridge bind revoke <bind-id>         # 停该 bind 的新读取；不删空间/adopt/owner 文件
 ```
 
