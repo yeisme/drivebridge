@@ -68,12 +68,23 @@
     "schema_version": "drivebridge.desktop.v1alpha1",
     "available": []
   },
+  "DesktopEditorDraftInput": {
+    "object_id": "note-fixture",
+    "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "body": "draft"
+  },
   "DesktopError": {
     "origin": "drivebridge",
     "code": "owner_unavailable",
     "message": "The owner is unavailable.",
     "recovery": "owner_required",
     "operation_id": null
+  },
+  "DesktopSyncConflictResolveInput": {
+    "file": "notes/example.md",
+    "keep_local": true,
+    "keep_remote": false,
+    "yes": true
   },
   "EmptyRequest": {},
   "ExportLookup": {

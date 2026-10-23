@@ -1047,6 +1047,30 @@
           "available"
         ]
       },
+      "DesktopEditorDraftInput": {
+        "properties": {
+          "object_id": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1
+          },
+          "revision": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "body": {
+            "type": "string",
+            "maxLength": 65536
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "object_id",
+          "revision",
+          "body"
+        ]
+      },
       "DesktopError": {
         "properties": {
           "origin": {
@@ -1098,6 +1122,32 @@
           "message",
           "recovery",
           "operation_id"
+        ]
+      },
+      "DesktopSyncConflictResolveInput": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "maxLength": 1024,
+            "minLength": 1
+          },
+          "keep_local": {
+            "type": "boolean"
+          },
+          "keep_remote": {
+            "type": "boolean"
+          },
+          "yes": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "file",
+          "keep_local",
+          "keep_remote",
+          "yes"
         ]
       },
       "EmptyRequest": {

@@ -1610,6 +1610,95 @@
           "data"
         ]
       },
+      "DirectoryCreate": {
+        "properties": {
+          "space_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "space_id",
+          "path"
+        ]
+      },
+      "DirectoryCreateLookup": {
+        "properties": {
+          "space_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "space_id",
+          "idempotency_key"
+        ]
+      },
+      "DirectoryCreationEnvelope": {
+        "properties": {
+          "data": {
+            "properties": {
+              "found": {
+                "type": "boolean"
+              },
+              "status": {
+                "type": "string"
+              },
+              "directory": {
+                "oneOf": [
+                  {
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "space_id": {
+                        "type": "string"
+                      },
+                      "path": {
+                        "type": "string"
+                      }
+                    },
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "id",
+                      "space_id",
+                      "path"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "found",
+              "status",
+              "directory"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "data"
+        ]
+      },
       "DocumentCapabilityEnvelope": {
         "properties": {
           "data": {
@@ -4705,6 +4794,9 @@
             "type": "string",
             "maxLength": 120
           },
+          "directory_path": {
+            "type": "string"
+          },
           "parent_file_id": {
             "type": "string"
           },
@@ -4727,6 +4819,7 @@
         "required": [
           "space_id",
           "title",
+          "directory_path",
           "parent_file_id",
           "icon",
           "daily_date"
@@ -4737,6 +4830,9 @@
           "idempotency_key": {
             "type": "string"
           },
+          "directory_path": {
+            "type": "string"
+          },
           "daily_date": {
             "type": "string"
           }
@@ -4745,6 +4841,7 @@
         "type": "object",
         "required": [
           "idempotency_key",
+          "directory_path",
           "daily_date"
         ]
       },
@@ -11478,6 +11575,273 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AutomationPreviewEnvelope"
+                }
+              }
+            },
+            "description": "Successful result"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Safe error; status semantics follow the application contract"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Safe error; status semantics follow the application contract"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Safe error; status semantics follow the application contract"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Safe error; status semantics follow the application contract"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Safe error; status semantics follow the application contract"
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Safe error; status semantics follow the application contract"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Safe error; status semantics follow the application contract"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Safe error; status semantics follow the application contract"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Safe error; status semantics follow the application contract"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "sessionAuth": []
+          }
+        ],
+        "x-csrf-required-for-session": true,
+        "x-human-only": true,
+        "x-implementation-status": "planned"
+      }
+    },
+    "/api/v1/directories": {
+      "post": {
+        "operationId": "createDirectory",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DirectoryCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectoryCreationEnvelope"
+                }
+              }
+            },
+            "description": "Successful result"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Safe error; status semantics follow the application contract"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Safe error; status semantics follow the application contract"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Safe error; status semantics follow the application contract"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Safe error; status semantics follow the application contract"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Safe error; status semantics follow the application contract"
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Safe error; status semantics follow the application contract"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Safe error; status semantics follow the application contract"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Safe error; status semantics follow the application contract"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Safe error; status semantics follow the application contract"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "sessionAuth": []
+          }
+        ],
+        "x-csrf-required-for-session": true,
+        "x-human-only": true,
+        "x-implementation-status": "planned"
+      }
+    },
+    "/api/v1/directories/lookup": {
+      "post": {
+        "operationId": "lookupDirectoryCreation",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DirectoryCreateLookup"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectoryCreationEnvelope"
                 }
               }
             },

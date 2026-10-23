@@ -6,7 +6,7 @@
   },
   "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
   "x-owner": "pinax",
-  "x-owner-openapi-digest": "sha256:4c85fe7909c8575546deee3ae2d5f0d85c20f30e5d3ab1e6e1617d1824f595a8",
+  "x-owner-openapi-digest": "sha256:792537ecc26d6778ed0eb09496821b8be3d8dd6c08d4caf448ca1cd8d6ea3519",
   "x-reader-schema-digest": "sha256:54ba3fbd4794904fb89e22ee8cdd7e1f4a49fb69aa0f4738166addc4e600bb9b",
   "x-drivebridge-integration-status": "pending",
   "paths": {},
