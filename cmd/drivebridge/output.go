@@ -33,6 +33,13 @@ func (m outputMode) write(command, status, summary string, data any) error {
 	if data != nil {
 		envelope["data"] = data
 	}
+	next := ""
+	if values, ok := data.(map[string]any); ok {
+		next, _ = values["next_command"].(string)
+	}
+	if next != "" {
+		envelope["actions"] = []map[string]string{{"name": "next", "command": next}}
+	}
 	switch m.name() {
 	case "json":
 		return json.NewEncoder(os.Stdout).Encode(envelope)
@@ -50,6 +57,9 @@ func (m outputMode) write(command, status, summary string, data any) error {
 		fmt.Printf("Conclusion: %s\nEvidence: Local application projection; no live provider readiness is inferred.\n", summary)
 	default:
 		fmt.Println(summary)
+		if next != "" {
+			fmt.Println("Next: " + next)
+		}
 	}
 	return nil
 }
@@ -95,6 +105,11 @@ func writeAgent(envelope map[string]any, data any) error {
 	fmt.Printf("spec_version=%s\nmode=agent\ncommand=%s\nstatus=%s\n", envelope["spec_version"], envelope["command"], envelope["status"])
 	for _, row := range flattenFacts(data, "fact.", 0) {
 		fmt.Println(row)
+	}
+	if actions, ok := envelope["actions"].([]map[string]string); ok {
+		for _, a := range actions {
+			fmt.Printf("action.%s=%s\n", a["name"], a["command"])
+		}
 	}
 	return nil
 }

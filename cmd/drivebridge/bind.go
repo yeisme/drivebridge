@@ -10,7 +10,7 @@ import (
 
 func newBindCommand(c *cli) *cobra.Command {
 	root := &cobra.Command{Use: "bind", Short: "Bind a project to a DriveBridge space prefix (caller labels are not authentication)."}
-	root.AddCommand(bindDiscoverCommand(c), bindAddCommand(c), bindListCommand(c), bindShowCommand(c), bindRevokeCommand(c))
+	root.AddCommand(bindDiscoverCommand(c), bindAddCommand(c), resourceRead(c, "bind", "list"), resourceRead(c, "bind", "get"), resourceRead(c, "bind", "describe"), resourceRead(c, "bind", "show"), bindRevokeCommand(c))
 	return root
 }
 

@@ -115,62 +115,6 @@ func newConnectionCommand(c *cli) *cobra.Command {
 	}
 	remove.Flags().String("id", "", "Connection identifier")
 
-	list := &cobra.Command{
-		Use:   "list",
-		Short: "List connections as a read-only projection (no credentials).",
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			s, release, err := c.openService(false)
-			if err != nil {
-				return err
-			}
-			defer release()
-			connections := s.Connections()
-			data := make([]map[string]any, 0, len(connections)+1)
-			for _, cn := range connections {
-				data = append(data, connectionProjection(cn, credentialConfigured(cn), false))
-			}
-			// Empty registry: project the legacy global remote configuration as
-			// a synthetic default connection without persisting anything.
-			if len(connections) == 0 {
-				if url := c.effective.Values["remote_url"]; url != "" {
-					source := "env"
-					configured := os.Getenv("DRIVEBRIDGE_TOKEN") != ""
-					if tokenPath := c.effective.Values["remote_token_file"]; tokenPath != "" {
-						source = "token-file"
-						configured = credentialConfigured(bridge.Connection{CredentialSource: "token-file", TokenFile: tokenPath})
-					}
-					data = append(data, connectionProjection(bridge.Connection{ID: "default", Label: "Default (global remote_url)", BaseURL: url, InstanceID: "local", CredentialSource: source}, configured, true))
-				}
-			}
-			summary := fmt.Sprintf("%d connection(s).", len(data))
-			if !(c.mode.JSON || c.mode.Agent || c.mode.Events || c.mode.Explain) {
-				for _, row := range data {
-					fmt.Printf("%-16s %-24s %s\n", row["connection_id"], row["label"], row["base_url"])
-				}
-			}
-			return c.mode.write("connection.list", "success", summary, map[string]any{"count": len(data), "connections": data})
-		},
-	}
-
-	show := &cobra.Command{
-		Use:   "show",
-		Short: "Show one connection as a read-only projection (no credentials).",
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			id, _ := cmd.Flags().GetString("id")
-			s, release, err := c.openService(false)
-			if err != nil {
-				return err
-			}
-			defer release()
-			cn, err := s.Connection(id)
-			if err != nil {
-				return err
-			}
-			return c.mode.write("connection.show", "success", fmt.Sprintf("Connection %s (%s).", cn.ID, cn.Label), connectionProjection(cn, credentialConfigured(cn), false))
-		},
-	}
-	show.Flags().String("id", "", "Connection identifier")
-
-	root.AddCommand(add, set, remove, list, show)
+	root.AddCommand(add, set, remove, resourceRead(c, "connection", "list"), resourceRead(c, "connection", "get"), resourceRead(c, "connection", "describe"), resourceRead(c, "connection", "show"))
 	return root
 }

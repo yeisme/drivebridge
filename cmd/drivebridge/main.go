@@ -17,6 +17,10 @@ func main() {
 	defer stop()
 	c := &cli{}
 	if err := newRootCommand(c).ExecuteContext(ctx); err != nil {
+		var resourceErr resourceInputError
+		if errors.As(err, &resourceErr) {
+			os.Exit(2)
+		}
 		if errors.Is(err, errQuiet) || errors.Is(err, errDoctorNotReady) {
 			// The command already produced its full projection.
 			os.Exit(1)
@@ -43,6 +47,9 @@ func newRootCommand(c *cli) *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
+			if resourceCompletionPreRun(cmd) {
+				return nil
+			}
 			c.command = commandAction(cmd)
 			file, effective, err := c.resolve(cmd)
 			if err != nil {
@@ -101,6 +108,17 @@ func newRootCommand(c *cli) *cobra.Command {
 		root.AddCommand(command)
 	}
 	root.InitDefaultCompletionCmd()
+	for _, group := range root.Commands() {
+		if group.Name() == "completion" {
+			group.AddCommand(resourceCompletionCommands(func(cmd *cobra.Command, r resourceCompletionReport) error {
+				if r.ErrorCode != "" {
+					_ = c.mode.fail("completion."+cmd.Name(), r.ErrorCode, resourceCompletionMessage(r), map[string]any{"completion": r})
+					return resourceInputError{r.ErrorCode}
+				}
+				return c.mode.write("completion."+cmd.Name(), "success", resourceCompletionMessage(r), map[string]any{"completion": resourceCompletionFacts(r), "next_command": resourceCompletionNext(cmd, r)})
+			})...)
+		}
+	}
 	return root
 }
 
