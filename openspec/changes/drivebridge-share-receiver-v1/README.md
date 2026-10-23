@@ -4,6 +4,6 @@
 
 - [提案](proposal.md) · [设计与接口](design.md) · [任务](tasks.md) · [能力规格](specs/shares/spec.md)
 - 设计参照 [AlterSend](https://github.com/denislupookov/altersend) 接收方机制（挑战证明、设备配对、会话上限），采纳范围与不采纳理由见 design 对照表
-- [根能力账本与owner交接](../../../../../openspec/changes/drivebridge-file-platform-evolution-v2/handoffs.md)（工作区导航；独立checkout实施以本地文件为准）
+- [根能力账本与owner交接](../drivebridge-file-platform-evolution-v2/handoffs.md)（工作区导航；独立checkout实施以本地文件为准）
 
 在本 owner 目录验证：`openspec validate drivebridge-share-receiver-v1 --strict --no-interactive`。

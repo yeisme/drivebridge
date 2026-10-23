@@ -33,6 +33,21 @@
 - **WHEN** 用户保存 Skill 或模板并打开详情
 - **THEN** 显示未检查/检查版本，不能宣称已安装或执行，不自动运行内容指令。
 
+### Requirement: 知识库物理目录创建
+客户端 MUST 使用当前 Space 的物理目录作为知识库层级来源，并通过受保护的创建合同写入目录和 Markdown 笔记。
+
+#### Scenario: 创建目录并回读
+- **WHEN** 用户在知识库当前目录提交新目录
+- **THEN** 目录通过 `POST /directories` 创建，丢响应时用原 `Idempotency-Key` 查询，刷新后在知识库和网盘页面都可见。
+
+#### Scenario: 在目录内创建笔记
+- **WHEN** 用户在选中的物理目录提交笔记或日记
+- **THEN** 服务端使用 `directory_path` 写入 `<directory>/<title>.md` 或 `<directory>/<YYYY-MM-DD>.md`，完成后返回固定版本并打开同一笔记。
+
+#### Scenario: 旧页面元数据兼容
+- **WHEN** 旧客户端读取 `parent_file_id` 页面 metadata
+- **THEN** 服务端继续返回兼容字段，但新建入口不把虚拟页面关系当成物理目录层级，也不移动底层文件。
+
 #### Scenario: 集合或链接成员失权
 - **WHEN** 刷新包含不可读文件的集合或反链
 - **THEN** 不泄漏其名称/计数细节，不移动或删除文件，不扩大访问范围。

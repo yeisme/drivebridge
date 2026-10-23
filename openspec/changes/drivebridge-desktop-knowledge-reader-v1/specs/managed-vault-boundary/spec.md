@@ -27,3 +27,15 @@
 #### Scenario: 回退到不理解guard的版本
 - **WHEN** 旧binary打开带active guard的state
 - **THEN** 阻断写入并提示使用兼容owner，不恢复旧数据库或删除登记来继续
+
+### Requirement: State 升级保留旧写入拒绝条件与原恢复身份
+若实现选择受控 state 格式栅栏，升级服务 SHALL 在原 process lock 下复验所选目录身份、数据库 revision 与迁移 identity，并在发布格式标记前持久保留完整原数据库；旧数据库路径不得出现可由旧程序自动创建空库的缺口。存在 WAL/SHM/journal、未知参与者、目录别名或 source 变化时 SHALL 拒绝继续并保留原数据。格式升级完成只代表 fenced maintenance state，不得直接授予 binding ready 或 reader/writer scope。
+
+#### Scenario: 迁移进程在格式标记发布前后退出
+- **WHEN** 迁移进程在快照写入、持久化或格式标记原子发布前后退出
+- **THEN** 旧路径仍为完整旧数据库或能拒绝旧启动的完整格式标记
+- **AND** 恢复使用原 migration identity 和固定 source revision，不覆盖未匹配的恢复快照、不猜测已完成 guard 安装
+
+#### Scenario: 相同数据库字节位于另一个 state
+- **WHEN** 调用者把一个目录的迁移 plan 用于另一个目录，或者进程锁被占用
+- **THEN** 升级在复制或替换数据库前拒绝，保留两个目录及原 operation identity

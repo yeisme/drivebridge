@@ -269,6 +269,10 @@ cursor使用每store实例随机AES-GCM密钥，只有内存，不持久秘密�
 
 ## D03 准入复查与候选边界（未获准替代现合同）
 
+2026-10-24 补充实测与候选排序见 [managed-vault-admission-options.md](managed-vault-admission-options.md)：Linux 离线容器证明独立 UID 的有效条件及旧句柄、祖先重命名、普通编辑器副作用；真实 `bridge.New` 证明候选旧数据库路径栅栏可拒绝本 checkout 的旧启动，同时保留跨 state 旁路反例。下一片优先验证受控 state 的兼容栅栏与崩溃恢复，不直接引入系统 broker；没有安装 guard 或放宽原验收标准，D03/D08 仍未完成。
+
+D03.4 共享候选协议已实现，迁移/拒绝/恢复语义见 [state-fence-protocol.md](state-fence-protocol.md)。为消除先移数据库再 mkdir 的缺口，改用持久快照后原子替换格式标记；`fenced` 仅为维护状态，生产 startup/guard/binding 尚未接入。
+
 再次核对root openService/model.New、server New与现有managed_vault_admission_test：仅发现各state进程锁，没有已被旧writer理解的最低writer/state版本准入门。不能通过新guard表、锁文件、chmod同用户目录或停止当前进程证明跨state旧writer受控；0700也不能阻止同UID旧进程。当前预检继续blocked，无新增ready/正文/writer授权。
 
 可能的后续工程路径需要单独证明：所有参与DriveBridge writer经独立OS权限域/受控broker访问原vault，而旧进程没有直接写权限，并验证既有打开句柄、祖先rename/delete、挂载别名、worker恢复和降级；这涉及安装/服务身份/跨平台权限与已有连接迁移，不是给预检传一个布尔量。私有副本或只读快照不能悄悄代替用户选择的原vault写回；普遍禁止同用户外部程序也与允许外部编辑器的边界不同。未执行权限修改、用户数据迁移或系统服务安装，D03父项保留。
@@ -307,3 +311,14 @@ window.close走正常window-all-closed/before-quit，要求Electron exit_code=0�
 - 签名/公证与公开分发另门；缺机器保持任务未完成，不降级用户要求。
 
 规格校验 `openspec validate drivebridge-desktop-knowledge-reader-v1 --strict --no-interactive`；产品测试复用现有runner，详情见验收文档。禁止race/真实账号/云同步；失败保留六件套并按introduced/pre-existing/concurrent/environmental/ambiguous归因。
+
+
+## 2026-10-23～24 writer/sync 消费合同与组件续接
+
+D14.1 重新消费当前 sibling Pinax 的公开 OpenAPI export，由原生成器更新 writer/sync、IPC 和 facade 产物。Pinax owner schema 保留原样；renderer sync push/pull 的 input 和 facade body 使用收窄副本，移除 owner operation headers，由外层唯一 idempotency key 留给宿主建立原 operation 映射。收窄副本不复用 owner `$id`。新增 IPC/HTTP schema 负例证明第二组 identity 无法进入请求；所有方法仍为 planned，无新增 runtime handler 或 write admission。
+
+纯 reducer 增加页面内草稿文本和编辑后失效的 preview；applying/unknown 不能被 read/apply 丢弃，unknown 仅接受带原 key 的终态，非法／替代 key 拒绝，revoked 清除草稿与 key。`pinaxWorkbenchRecoveryKey` 只投影原 opaque key；`pinax-workbench-recovery` 复用 notebook Web Locks/storage，在 actor/source/binding 独立槽中仅持久化这个 key，坏记录／无锁／拒绝存储均 fail closed，同槽拒绝换 key，CAS 清理避免删掉另一标签的操作。独立 API 与真实浏览器 reload 验证完成；目前没有把它与完整 writer/preload、真实 Pinax apply/reconcile 接到产品入口，因此 DriveBridge D14.2 父项继续未完成。Pinax spec 的 D14.2 仅要求纯状态机、内存草稿与 opaque 槽，可以按独立组件证据关闭。
+
+只读 Sync 面板使用 `sync_status` 与 `last_synced_revision`，把 envelope success 与同步状态分开；读取 conflict-list 的 count，缺失值保持“未提供”。结果绑定 source、bridge 方法和刷新次数；切换来源、刷新或撤权后不显示旧事实，晚响应被丢弃。父组件创建新 bridge 包装对象不会造成循环请求。owner failed/partial 不显示为健康状态，push/pull/resolve 始终 disabled。
+
+验证复用既有 Vitest、Playwright 与 Vite。`node web/scripts/pinax-workbench-smoke.mjs` 将真实组件/CSS 构建到临时 fixture，检查 1440px 与 390px、键盘刷新、深色/reduced-motion、跨来源晚响应、撤权、draft 不落盘、native Web Locks 下跨 reload 保留原 key 与禁用写按钮，并通过既有 evidence runner 保存截图。这是浏览器组件证据，IPC 为合成 fixture；不替代 D03/D08 原 vault 保护、D09/D14.3 真实 Electron/Pinax 纵切或三平台验收。

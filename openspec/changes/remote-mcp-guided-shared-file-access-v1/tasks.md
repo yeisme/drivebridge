@@ -1,0 +1,7 @@
+- [ ] Gateway 按调用者过滤 DriveBridge 与媒体 owner 的 `tools/list`，并保留能力说明资源。
+- [x] DriveBridge Server 对普通用户列举/统计工具执行服务端 fail-closed 保护。
+- [x] DriveBridge 增加 `input.bind_reference` 及绑定生命周期骨架（用户/版本/consumer/project/purpose/digest/过期校验）。
+- [ ] 三个 owner 统一错误信封和恢复动作。
+- [ ] 增加 Gateway → DriveBridge → owner 的引用交接系统测试。
+- [ ] 增加无回执、过期、版本变化、权限不足、摘要不匹配和 retryable 恢复测试。
+- [ ] 更新各子项目 MCP 文档和能力矩阵。

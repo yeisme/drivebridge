@@ -20,5 +20,5 @@
 ## Impact
 
 - owner `cli/drivebridge/server` 的应用合同及其文档；接口映射见 [设计](design.md)，原子任务见 [任务](tasks.md)。
-- 跨 owner 范围与保留能力见 [根 handoff](../../../../../openspec/changes/drivebridge-file-platform-evolution-v2/handoffs.md)。根包只维护设计关系，不记录本包实现完成状态。
+- 跨 owner 范围与保留能力见 [根 handoff](../drivebridge-file-platform-evolution-v2/handoffs.md)。根包只维护设计关系，不记录本包实现完成状态。
 - 规划 HTTP/SDK、可选配置和数据模型均为加法；未启用时旧系统可运行，主程序保持 pure Go。
