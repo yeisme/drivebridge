@@ -99,6 +99,11 @@ export interface components {
             schema_version: "drivebridge.desktop.v1alpha1";
             available: string[];
         };
+        DesktopEditorDraftInput: {
+            object_id: string;
+            revision: string;
+            body: string;
+        };
         DesktopError: {
             /** @enum {string} */
             origin: "drivebridge" | "pinax";
@@ -107,6 +112,12 @@ export interface components {
             /** @enum {string} */
             recovery: "none" | "reauthorize" | "refresh" | "lookup_original" | "owner_required";
             operation_id: string | null;
+        };
+        DesktopSyncConflictResolveInput: {
+            file: string;
+            keep_local: boolean;
+            keep_remote: boolean;
+            yes: boolean;
         };
         EmptyRequest: Record<string, never>;
         ExportLookup: {

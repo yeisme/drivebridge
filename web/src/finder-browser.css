@@ -926,3 +926,28 @@
     pointer-events: none;
   }
 }
+
+/* Precision Pine browser geometry: the tree and inspector share the same
+   density as the notebook workspace while retaining Finder's interactions. */
+@layer components {
+  .finder { grid-template-columns:220px minmax(0,1fr); border-radius:var(--radius-finder); box-shadow:var(--shadow-sm); }
+  .finder.has-inspector { grid-template-columns:220px minmax(0,1fr) 360px; }
+  .finder.tree-collapsed.has-inspector { grid-template-columns:minmax(0,1fr) 360px; }
+  .finder-tree { padding:12px 10px; }
+  .finder-tree .finder-label { margin:16px 8px 7px; }
+  .finder-tree .tree-row, .finder-tree .tree-row button { min-height:var(--file-row-height); }
+  .finder-toolbar { min-height:48px; padding:8px 12px; }
+  .finder-actions { min-height:48px; }
+  .finder .workspace-view-switch { flex:none; }
+  .finder-file { min-height:var(--file-row-height); }
+  .finder-inspector { min-width:320px; max-width:640px; padding:16px; }
+  .finder-inspector .workspace-inspector-header { margin-bottom:16px; }
+  .finder-inspector .workspace-inspector-header button { flex:none; }
+  .finder-inspector .media-preview { min-height:220px; }
+  .finder button, .finder input { transition:background-color var(--motion-fast) ease, border-color var(--motion-fast) ease, color var(--motion-fast) ease, transform var(--motion-fast) ease; }
+  .finder button:active:not(:disabled) { transform:translateY(1px); }
+}
+
+@media (max-width: 767px) {
+  .finder-inspector { min-width:0; max-width:none; }
+}

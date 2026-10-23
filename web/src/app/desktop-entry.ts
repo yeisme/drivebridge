@@ -1,6 +1,6 @@
 import type { DesktopBridge } from '../generated/desktop-ipc';
 
-export type DesktopEntryBridge = Pick<DesktopBridge, 'capabilities'> & Partial<Pick<DesktopBridge, 'chooseVault' | 'listNotes' | 'searchNotes' | 'readDocument' | 'readLinks'>>;
+export type DesktopEntryBridge = Pick<DesktopBridge, 'capabilities'> & Partial<Pick<DesktopBridge, 'chooseVault' | 'listNotes' | 'searchNotes' | 'readDocument' | 'readLinks' | 'readEditorSource' | 'proposeEditorDraft' | 'syncStatus' | 'syncDiff' | 'listSyncConflicts' | 'syncPush' | 'syncPull' | 'resolveSyncConflict'>>;
 declare global { interface Window { drivebridgeDesktop?: DesktopEntryBridge } }
 
 // Only the packaged origin selects local mode. A page-defined global on a

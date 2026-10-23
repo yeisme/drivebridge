@@ -4,8 +4,10 @@ import { Button } from "../../components/ui/button";
 import { AsyncState } from "../../components/AsyncState";
 import type { DesktopBridge, DesktopResult } from "../../generated/desktop-ipc";
 import type { components as Pinax } from "../../generated/pinax-reader";
+import { PinaxSyncPanel } from "./PinaxSyncPanel";
+import { createPinaxWorkbenchState, transitionPinaxWorkbench, type PinaxWorkbenchState } from "./pinax-workbench-state";
 
-type ReaderBridge = Pick<DesktopBridge, "listNotes" | "searchNotes" | "readDocument" | "readLinks">;
+type ReaderBridge = Pick<DesktopBridge, "listNotes" | "searchNotes" | "readDocument" | "readLinks"> & Partial<Pick<DesktopBridge, "syncStatus" | "syncDiff" | "listSyncConflicts">>;
 type Note = Pinax["schemas"]["pinax.reader.note_card.v1alpha1"];
 type Document = Pinax["schemas"]["pinax.reader.document.v1alpha1"];
 
@@ -30,12 +32,13 @@ export function PinaxReaderWorkspace({ bridge, sourceId, displayName = "Pinax �
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
   const [attempt, setAttempt] = useState(0);
+  const [workbenchState, setWorkbenchState] = useState<PinaxWorkbenchState>(() => createPinaxWorkbenchState(sourceId));
   const generation = useRef(0);
   const request = useMemo(() => query.trim(), [query]);
 
   useEffect(() => {
     const epoch = ++generation.current;
-    setLoading(true); setError(undefined); setSelected(undefined); setDocument(undefined); setBacklinks([]);
+    setLoading(true); setError(undefined); setSelected(undefined); setDocument(undefined); setBacklinks([]); setWorkbenchState(createPinaxWorkbenchState(sourceId));
     const call: Promise<DesktopResult<any>> = request
       ? bridge.searchNotes({ input: { q: request, limit: 50, sort: "relevance_desc" }, source_id: sourceId })
       : bridge.listNotes({ input: { limit: 50, sort: "updated_desc" }, source_id: sourceId });
@@ -51,6 +54,7 @@ export function PinaxReaderWorkspace({ bridge, sourceId, displayName = "Pinax �
 
   useEffect(() => {
     if (!selected) return;
+    setWorkbenchState(current => transitionPinaxWorkbench(current, { type: "read" }));
     const epoch = ++generation.current;
     setDocument(undefined); setBacklinks([]); setError(undefined); setLoading(true);
     Promise.all([
@@ -78,6 +82,9 @@ export function PinaxReaderWorkspace({ bridge, sourceId, displayName = "Pinax �
     </aside>
     <main className="min-w-0 rounded-md border p-4">
       {!selected && <p role="status" className="text-sm text-muted-foreground">请选择固定版本笔记。</p>}
-      {selected && <><header className="border-b pb-3"><h2 className="m-0 text-lg font-semibold">{selected.title}</h2><p className="m-0 break-all text-xs text-muted-foreground">{selected.uri} · revision {selected.revision}</p></header><AsyncState loading={loading && !document} error={error} onRetry={() => setAttempt(value => value + 1)}>{document && <><article aria-label="Pinax 固定正文" className="prose max-w-none whitespace-pre-wrap py-4 text-sm">{textOf(document.nodes) || "（正文为空）"}</article>{document.warnings?.length ? <p role="status" className="text-xs text-muted-foreground">正文包含 owner 警告，未执行不受支持的内容。</p> : null}<section aria-label="Pinax 反向链接" className="border-t pt-3"><h3 className="text-sm font-semibold">反向链接</h3>{backlinks.length ? <ul className="m-0 list-disc pl-5 text-xs">{backlinks.map(ref => <li key={ref}>{ref}</li>)}</ul> : <p className="text-xs text-muted-foreground">当前没有可见反向链接，或来源尚未提供关系。</p>}</section><section aria-label="Pinax 附件状态" className="border-t pt-3"><h3 className="text-sm font-semibold">附件与嵌入</h3>{attachments.length ? <ul className="m-0 list-disc pl-5 text-xs">{attachments.map(item => <li key={item}>{item}</li>)}</ul> : <p className="text-xs text-muted-foreground">当前正文没有需要单独读取的附件投影。</p>}</section><p className="mt-4 text-xs text-muted-foreground">当前为只读 Pinax reader；正文、标签和来源文件不会在此页面写入。</p></>}</AsyncState></>}</main>
+      {selected && <><header className="border-b pb-3"><h2 className="m-0 text-lg font-semibold">{selected.title}</h2><p className="m-0 break-all text-xs text-muted-foreground">{selected.uri} · revision {selected.revision}</p></header><AsyncState loading={loading && !document} error={error} onRetry={() => setAttempt(value => value + 1)}>{document && <><article aria-label="Pinax 固定正文" className="prose max-w-none whitespace-pre-wrap py-4 text-sm">{textOf(document.nodes) || "（正文为空）"}</article>{document.warnings?.length ? <p role="status" className="text-xs text-muted-foreground">正文包含 owner 警告，未执行不受支持的内容。</p> : null}<section aria-label="Pinax 反向链接" className="border-t pt-3"><h3 className="text-sm font-semibold">反向链接</h3>{backlinks.length ? <ul className="m-0 list-disc pl-5 text-xs">{backlinks.map(ref => <li key={ref}>{ref}</li>)}</ul> : <p className="text-xs text-muted-foreground">当前没有可见反向链接，或来源尚未提供关系。</p>}</section><section aria-label="Pinax 附件状态" className="border-t pt-3"><h3 className="text-sm font-semibold">附件与嵌入</h3>{attachments.length ? <ul className="m-0 list-disc pl-5 text-xs">{attachments.map(item => <li key={item}>{item}</li>)}</ul> : <p className="text-xs text-muted-foreground">当前正文没有需要单独读取的附件投影。</p>}</section><p className="mt-4 text-xs text-muted-foreground">当前为只读 Pinax reader；正文、标签和来源文件不会在此页面写入。</p></>}</AsyncState></>}
+      {bridge.syncStatus && bridge.syncDiff && bridge.listSyncConflicts && <div className="mt-4"><PinaxSyncPanel bridge={{ syncStatus: bridge.syncStatus, syncDiff: bridge.syncDiff, listSyncConflicts: bridge.listSyncConflicts }} sourceId={sourceId}/></div>}
+      <p className="mt-4 text-xs text-muted-foreground">工作台状态：{workbenchState.kind}；草稿只保存在内存，恢复只使用 opaque operation key。</p>
+    </main>
   </section>;
 }

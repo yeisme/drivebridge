@@ -4,6 +4,9 @@
 @import "../finder.css";
 @import "../workspace-layout.css";
 @import "../finder-browser.css";
+@import "../components/workspace/workspace.css";
+
+@import "../features/notebook/notebook-browser.css";
 
 /* OpenDesign current-product baseline: Pine navigation + inset workspace. */
 @layer components {
@@ -65,8 +68,12 @@
   .db-pine-workspace .storage-meter { min-height: 44px; border-top: 1px solid var(--nav-edge); border-radius: 9px; }
   .db-pine-workspace .profile { min-height: 44px; border-radius: 9px; }
   .db-pine-workspace .sidebar-toggle { color: var(--nav-fg); }
+  .db-pine-workspace .main .topbar { min-height: var(--workspace-topbar-height); height: var(--workspace-topbar-height); padding-inline: 16px; gap: 8px; }
+  .db-pine-workspace .main .topbar > * { min-height: var(--control-height); }
+  .db-pine-workspace .main .topbar button { transition: background-color var(--motion-fast) ease, color var(--motion-fast) ease, transform var(--motion-fast) ease; }
   @media (max-width: 767px) {
     .db-pine-workspace .db-workspace-content { margin: 0; border-radius: 0; box-shadow: none; }
+    .db-pine-workspace .main .topbar { height:auto; min-height:var(--workspace-topbar-height); padding-inline:10px; }
   }
   @media (prefers-reduced-motion: reduce) {
     .db-pine-workspace *, .db-pine-workspace *::before, .db-pine-workspace *::after { transition: none !important; animation: none !important; }

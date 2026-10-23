@@ -47,6 +47,50 @@ export function readerContract(projection) {
   };
 }
 
+function validateProjection(projection) {
+  const source = projection?.data?.schema;
+  if (projection?.command !== 'api.schema.export' || projection?.status !== 'success' || source?.openapi !== '3.1.0' || ownerDigest(source) !== projection?.facts?.schema_digest) throw new Error('Invalid Pinax owner schema projection or digest');
+  const all = source.components?.schemas;
+  if (!all || typeof all !== 'object' || Array.isArray(all)) throw new Error('Missing Pinax schema registry');
+  return { source, all };
+}
+
+export function writerSyncContract(projection) {
+  const { source, all } = validateProjection(projection);
+  const names = Object.keys(all).filter(name => name.startsWith('pinax.writer.') || name.startsWith('pinax.sync.')).sort();
+  const required = ['pinax.writer.editor_source.request.v1alpha1', 'pinax.writer.propose.request.v1alpha1', 'pinax.writer.apply.request.v1alpha1', 'pinax.sync.status.request.v1', 'pinax.sync.diff.request.v1', 'pinax.sync.push.request.v1', 'pinax.sync.pull.request.v1'];
+  if (!required.every(name => names.includes(name))) throw new Error('Required Pinax writer/sync contracts are missing');
+  const selected = {};
+  const shared = new Set(['pinax.projection.v1', 'pinax.projection_warning.v1', 'pinax.action.v1', 'pinax.operation.v1', 'pinax.error.v1']);
+  function include(name) {
+    if (Object.hasOwn(selected, name)) return;
+    if ((!name.startsWith('pinax.writer.') && !name.startsWith('pinax.sync.') && !shared.has(name)) || !Object.hasOwn(all, name)) throw new Error('Unsupported writer/sync schema dependency');
+    selected[name] = structuredClone(all[name]);
+    visit(selected[name]);
+  }
+  function visit(value) {
+    if (!value || typeof value !== 'object') return;
+    if (Object.hasOwn(value, '$ref')) {
+      const ref = value.$ref;
+      if (typeof ref !== 'string' || !ref.startsWith('#/components/schemas/') || /[~%]/.test(ref)) throw new Error('Writer/sync schema contains unsupported reference');
+      include(ref.slice('#/components/schemas/'.length));
+    }
+    for (const child of Object.values(value)) visit(child);
+  }
+  names.forEach(include);
+  // The response projection is part of the public control DTO even when the
+  // request schemas do not currently reference it.
+  for (const name of shared) if (Object.hasOwn(all, name)) include(name);
+  const schemas = Object.fromEntries(Object.keys(selected).sort().map(name => [name, selected[name]]));
+  return {
+    openapi: '3.1.0', info: { title: 'Pinax writer and sync owner contracts', version: 'v1alpha1' },
+    'jsonSchemaDialect': source.jsonSchemaDialect,
+    'x-owner': 'pinax', 'x-owner-openapi-digest': projection.facts.schema_digest,
+    'x-writer-sync-schema-digest': ownerDigest(schemas),
+    'x-drivebridge-integration-status': 'pending', paths: {}, components: { schemas },
+  };
+}
+
 export async function exportReaderContract(root) {
   if (/(?:^|[\s"'])-race(?:=|[\s"']|$)/.test(process.env.GOFLAGS || '')) throw new Error('Race detection is excluded from contract export');
   if (process.env.DRIVEBRIDGE_PINAX_READER_CONTRACT_SOURCE === 'fixture') {
@@ -58,7 +102,9 @@ export async function exportReaderContract(root) {
   try {
     // Explicit empty disposable directory prevents default personal-vault selection.
     const packagedPinax = process.env.DRIVEBRIDGE_PINAX_BIN || join(root, 'desktop', 'host-bin', process.platform === 'win32' ? 'pinax.exe' : 'pinax');
-    const usePackagedPinax = await access(packagedPinax).then(() => true, () => false);
+    const siblingSource = resolve(root, '../pinax');
+    const sourceAvailable = await access(join(siblingSource, 'go.mod')).then(() => true, () => false);
+    const usePackagedPinax = !sourceAvailable && await access(packagedPinax).then(() => true, () => false);
     const command = usePackagedPinax ? packagedPinax : 'go';
     const args = usePackagedPinax
       ? ['api', 'schema', 'export', '--format', 'openapi', '--vault', vault, '--json']
@@ -72,6 +118,36 @@ export async function exportReaderContract(root) {
   } catch {
     // Do not echo subprocess arguments, local paths, or owner payloads.
     throw new Error('Pinax reader contract export failed; verify the sibling owner checkout and public schema command');
+  } finally {
+    await rm(vault, { recursive: true, force: true });
+  }
+}
+
+export async function exportWriterSyncContract(root) {
+  if (/(?:^|[\s"'])-race(?:=|[\s"']|$)/.test(process.env.GOFLAGS || '')) throw new Error('Race detection is excluded from contract export');
+  if (process.env.DRIVEBRIDGE_PINAX_WRITER_SYNC_CONTRACT_SOURCE === 'fixture') {
+    const fixture = JSON.parse(await readFile(join(root, 'contracts', 'desktop', 'pinax-writer-sync.openapi.json'), 'utf8'));
+    if (fixture.openapi !== '3.1.0' || fixture['x-owner'] !== 'pinax' || fixture['x-drivebridge-integration-status'] !== 'pending') throw new Error('Invalid checked-in Pinax writer/sync contract fixture');
+    return fixture;
+  }
+  const vault = await mkdtemp(join(tmpdir(), 'drivebridge-pinax-contract-'));
+  try {
+    const packagedPinax = process.env.DRIVEBRIDGE_PINAX_BIN || join(root, 'desktop', 'host-bin', process.platform === 'win32' ? 'pinax.exe' : 'pinax');
+    const siblingSource = resolve(root, '../pinax');
+    const sourceAvailable = await access(join(siblingSource, 'go.mod')).then(() => true, () => false);
+    const usePackagedPinax = !sourceAvailable && await access(packagedPinax).then(() => true, () => false);
+    const command = usePackagedPinax ? packagedPinax : 'go';
+    const args = usePackagedPinax
+      ? ['api', 'schema', 'export', '--format', 'openapi', '--vault', vault, '--json']
+      : ['run', './cmd/pinax', 'api', 'schema', 'export', '--format', 'openapi', '--vault', vault, '--json'];
+    const raw = execFileSync(command, args, {
+      cwd: usePackagedPinax ? root : resolve(root, '../pinax'), encoding: 'utf8', maxBuffer: 16 * 1024 * 1024, timeout: 120000,
+      env: { ...process.env, CGO_ENABLED: '0', GOWORK: 'off' }, stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    if ((await readdir(vault)).length) throw new Error('Schema export mutated its disposable vault');
+    return writerSyncContract(JSON.parse(raw));
+  } catch {
+    throw new Error('Pinax writer/sync contract export failed; verify the sibling owner checkout and public schema command');
   } finally {
     await rm(vault, { recursive: true, force: true });
   }

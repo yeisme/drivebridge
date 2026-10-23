@@ -37,6 +37,12 @@ describe("notebook private preferences", () => {
     }
   });
 
+  it("persists only bounded per-note modes", () => {
+    const store = storage();
+    writeNotebookPreferences(store, scope, { ...defaultNotebookPreferences(), modeByNote: { "[\"source\",\"note\",\"one\"]": "source", bad: "editor" } as never });
+    expect(readNotebookPreferences(store, scope).modeByNote).toEqual({ "[\"source\",\"note\",\"one\"]": "source" });
+  });
+
   it("handles denied storage and refuses anonymous scope writes", () => {
     const denied = { getItem: () => { throw new Error("denied"); }, setItem: () => { throw new Error("denied"); }, removeItem: () => { throw new Error("denied"); } };
     expect(readNotebookPreferences(denied, scope)).toEqual(defaultNotebookPreferences());

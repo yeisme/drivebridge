@@ -1,6 +1,7 @@
 // Generated from Go IPC catalog and owner schemas. No runtime implementation.
 import type { components as Desktop } from './desktop';
 import type { components as Pinax } from './pinax-reader';
+import type { components as PinaxWriterSync } from './pinax-writer-sync';
 export type DesktopResult<T> = { data: T } | { error: Desktop['schemas']['DesktopError'] };
 export interface DesktopBridge {
   capabilities(request: { input: Desktop['schemas']["EmptyRequest"] }): Promise<DesktopResult<Desktop['schemas']["DesktopCapabilities"]>>;
@@ -17,6 +18,15 @@ export interface DesktopBridge {
   listTags(request: { input: Pinax['schemas']["pinax.reader.tags.request.v1alpha1"]; source_id: string }): Promise<DesktopResult<Pinax['schemas']["pinax.reader.tags.v1alpha1"]>>;
   readGraph(request: { input: Pinax['schemas']["pinax.reader.graph.request.v1alpha1"]; source_id: string }): Promise<DesktopResult<Pinax['schemas']["pinax.reader.graph.v1alpha1"]>>;
   findDaily(request: { input: Pinax['schemas']["pinax.reader.daily.request.v1alpha1"]; source_id: string }): Promise<DesktopResult<Pinax['schemas']["pinax.reader.daily.v1alpha1"]>>;
+  readEditorSource(request: { input: PinaxWriterSync['schemas']["pinax.writer.editor_source.request.v1alpha1"]; source_id: string }): Promise<DesktopResult<PinaxWriterSync['schemas']["pinax.writer.editor_source.v1alpha1"]>>;
+  proposeEditorDraft(request: { input: Desktop['schemas']["DesktopEditorDraftInput"]; source_id: string }): Promise<DesktopResult<PinaxWriterSync['schemas']["pinax.projection.v1"]>>;
+  syncStatus(request: { input: PinaxWriterSync['schemas']["pinax.sync.status.request.v1"]; source_id: string }): Promise<DesktopResult<PinaxWriterSync['schemas']["pinax.projection.v1"]>>;
+  syncDiff(request: { input: PinaxWriterSync['schemas']["pinax.sync.diff.request.v1"]; source_id: string }): Promise<DesktopResult<PinaxWriterSync['schemas']["pinax.projection.v1"]>>;
+  syncPush(request: { input: Omit<PinaxWriterSync['schemas']["pinax.sync.push.request.v1"], "X-Pinax-Operation-ID" | "Idempotency-Key">; source_id: string; idempotency_key: string }): Promise<DesktopResult<PinaxWriterSync['schemas']["pinax.projection.v1"]>>;
+  syncPull(request: { input: Omit<PinaxWriterSync['schemas']["pinax.sync.pull.request.v1"], "X-Pinax-Operation-ID" | "Idempotency-Key">; source_id: string; idempotency_key: string }): Promise<DesktopResult<PinaxWriterSync['schemas']["pinax.projection.v1"]>>;
+  listSyncConflicts(request: { input: PinaxWriterSync['schemas']["pinax.sync.conflicts.list.request.v1"]; source_id: string }): Promise<DesktopResult<PinaxWriterSync['schemas']["pinax.projection.v1"]>>;
+  diffSyncConflict(request: { input: PinaxWriterSync['schemas']["pinax.sync.conflicts.diff.request.v1"]; source_id: string }): Promise<DesktopResult<PinaxWriterSync['schemas']["pinax.projection.v1"]>>;
+  resolveSyncConflict(request: { input: Desktop['schemas']["DesktopSyncConflictResolveInput"]; source_id: string; idempotency_key: string }): Promise<DesktopResult<PinaxWriterSync['schemas']["pinax.projection.v1"]>>;
   listReadingState(request: { input: Desktop['schemas']["PageQuery"] }): Promise<DesktopResult<Desktop['schemas']["ReadingStatePage"]>>;
   updateReadingState(request: { input: Desktop['schemas']["UpdateReadingState"]; idempotency_key: string }): Promise<DesktopResult<Desktop['schemas']["ReadingState"]>>;
   lookupReadingMutation(request: { input: Desktop['schemas']["LookupReadingMutation"] }): Promise<DesktopResult<Desktop['schemas']["ReadingMutationResult"]>>;

@@ -3,7 +3,7 @@
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { applyArtifacts } from './contract-artifacts.mjs';
-import { exportReaderContract } from './pinax-reader-contract.mjs';
+import { exportReaderContract, exportWriterSyncContract } from './pinax-reader-contract.mjs';
 import { ipcArtifacts } from './desktop-ipc-contract.mjs';
 import { httpContract } from './desktop-http-contract.mjs';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
@@ -35,11 +35,14 @@ if (profile === 'desktop' || profile === 'all') {
   const reader = await exportReaderContract(root);
   artifacts['contracts/desktop/pinax-reader.openapi.json'] = JSON.stringify(reader, null, 2) + '\n';
   artifacts['web/src/generated/pinax-reader.ts'] = '// Generated from the Pinax public schema export. Do not edit. DriveBridge integration pending.\n' + astToString(await openapiTS(reader));
+  const writerSync = await exportWriterSyncContract(root);
+  artifacts['contracts/desktop/pinax-writer-sync.openapi.json'] = JSON.stringify(writerSync, null, 2) + '\n';
+  artifacts['web/src/generated/pinax-writer-sync.ts'] = '// Generated from the Pinax public writer/sync schema export. Do not edit. DriveBridge integration pending.\n' + astToString(await openapiTS(writerSync));
   const methods = JSON.parse(execFileSync('go', ['-C', 'server', 'run', './cmd/drivebridge-contracts', 'ipc', '--profile', 'desktop'], { cwd: root, encoding: 'utf8' }));
-  const ipc = ipcArtifacts(methods, JSON.parse(artifacts['contracts/desktop/openapi.json']), reader);
+  const ipc = ipcArtifacts(methods, JSON.parse(artifacts['contracts/desktop/openapi.json']), reader, writerSync);
   artifacts['contracts/desktop/ipc.json'] = JSON.stringify(ipc.document, null, 2) + '\n';
   artifacts['web/src/generated/desktop-ipc.ts'] = ipc.ts;
-  const http = httpContract(methods, JSON.parse(artifacts['contracts/desktop/openapi.json']), reader);
+  const http = httpContract(methods, JSON.parse(artifacts['contracts/desktop/openapi.json']), reader, writerSync);
   artifacts['contracts/desktop/facade.openapi.json'] = JSON.stringify(http, null, 2) + '\n';
   artifacts['web/src/generated/desktop-http.ts'] = '// Generated planned facade contract. No runtime handlers.\n' + astToString(await openapiTS(http));
 }

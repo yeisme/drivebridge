@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import fixtures from '../../../../contracts/personal-workspace/fixtures/responses.json';
 import { ResourcesPage } from './ResourcesPage';
@@ -51,8 +51,8 @@ it('keeps snapshots distinct from single-file targets', async () => {
 it('clears expired pages and explicitly restarts', async () => {
   const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(json({ data: { ...page.data, next_cursor: 'next+resource' } })).mockResolvedValueOnce(json({}, 410)).mockResolvedValueOnce(json(page));
   render(<ResourcesPage {...props}/>); fireEvent.click(await screen.findByRole('button', { name: '更多资源描述' }));
-  await screen.findByText(/资源分页已过期/); expect(screen.queryByRole('listitem')).toBeNull();
-  fireEvent.click(screen.getByRole('button', { name: '刷新资源库' })); await screen.findByRole('listitem'); expect(fetch.mock.calls[2][0]).toBe('/api/v1/resource-descriptors?limit=50');
+  await screen.findByText(/资源分页已过期/); expect(screen.queryByRole('list', { name: '资源描述列表' })).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: '刷新资源库' })); await within(await screen.findByRole('list', { name: '资源描述列表' })).findByRole('listitem'); expect(fetch.mock.calls[2][0]).toBe('/api/v1/resource-descriptors?limit=50');
 });
 it('detail identity drift never substitutes the fixed target', async () => {
   vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(json(page)).mockResolvedValueOnce(json({ data: { ...row, file_ref: 'other' } }));
@@ -62,17 +62,36 @@ it('detail identity drift never substitutes the fixed target', async () => {
 it('detail 403 clears the parent list', async () => {
   vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(json(page)).mockResolvedValueOnce(json({}, 403));
   render(<ResourcesPage {...props}/>); fireEvent.click(await screen.findByRole('button', { name: '查看资源描述 Synthetic resource' }));
-  await screen.findByText(/资源列表与详情已清除/); expect(screen.queryByRole('listitem')).toBeNull();
+  await screen.findByText(/资源列表与详情已清除/); expect(screen.queryByRole('list', { name: '资源描述列表' })).toBeNull();
 });
 it.each(['offline', 'drivebridge-context'])('drops late list on %s and does not auto reload', async event => {
   let finish!: (value: Response) => void;
   const fetch = vi.spyOn(globalThis, 'fetch').mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
   render(<ResourcesPage {...props}/>); fireEvent(window, new Event(event)); finish(json(page));
-  await waitFor(() => expect(screen.queryByRole('listitem')).toBeNull()); fireEvent(window, new Event('online')); expect(fetch).toHaveBeenCalledTimes(1);
+  await waitFor(() => expect(screen.queryByRole('list', { name: '资源描述列表' })).toBeNull()); fireEvent(window, new Event('online')); expect(fetch).toHaveBeenCalledTimes(1);
 });
 it('uses kind filtering on the server and rejects mismatched returned kinds', async () => {
   const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(json(page)).mockResolvedValueOnce(json(page));
-  render(<ResourcesPage {...props}/>); await screen.findByRole('listitem');
+  render(<ResourcesPage {...props}/>); await within(await screen.findByRole('list', { name: '资源描述列表' })).findByRole('listitem');
   fireEvent.click(screen.getByRole('combobox', { name: '资源类型' })); const option = await screen.findByRole('option', { name: '模板' }); fireEvent.pointerDown(option, { pointerType: 'mouse' }); fireEvent.click(option);
-  await screen.findByText(/合同不匹配/); expect(fetch.mock.calls[1][0]).toContain('kind=template'); expect(screen.queryByRole('listitem')).toBeNull();
+  await screen.findByText(/合同不匹配/); expect(fetch.mock.calls[1][0]).toContain('kind=template'); expect(screen.queryByRole('list', { name: '资源描述列表' })).toBeNull();
+});
+
+it('switches between Finder views, keeps selection, and waits for an explicit fixed preview', async () => {
+  const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(json(page)).mockResolvedValueOnce(json({ data: row })).mockResolvedValueOnce(json({ data: { file: { id: 'file', space_id: row.space_id, version_id: 'v1', path: 'reference.md', size_bytes: 12, mime_type: 'text/markdown', trashed: false, updated_at: row.created_at }, ref: row.file_ref } }));
+  render(<ResourcesPage {...props}/>);
+  await screen.findByRole('list', { name: '资源描述列表' });
+  fireEvent.click(screen.getByRole('button', { name: '资源大图网格' }));
+  const card = await screen.findByRole('article');
+  expect(card.getAttribute('data-selected')).toBe('false');
+  fireEvent.click(card);
+  expect(card.getAttribute('data-selected')).toBe('true');
+  expect(screen.queryByRole('dialog', { name: 'Synthetic resource' })).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: '预览固定版本 Synthetic resource' }));
+  await screen.findByRole('dialog', { name: 'Synthetic resource' });
+  expect(fetch.mock.calls.some(([url]) => String(url).includes('/references?ref='))).toBe(true);
+  expect(fetch.mock.calls.some(([url]) => String(url).endsWith('/content'))).toBe(false);
+  fireEvent.click(screen.getByRole('button', { name: '关闭' }));
+  fireEvent.click(screen.getByRole('button', { name: '资源详情列表' }));
+  expect(within(screen.getByRole('list', { name: '资源描述列表' })).getByRole('listitem').getAttribute('data-selected')).toBe('true');
 });

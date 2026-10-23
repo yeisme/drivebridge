@@ -20,7 +20,7 @@ it('validates every fixed IPC wrapper and rejects arbitrary transport/private fi
     const ajv = new Ajv2020({ strict: true, strictRequired: false }); addFormats(ajv);
     const validate = ajv.compile(jsonSchema({ ...doc['x-ipc-requests'][method.name], $defs: doc.components.schemas }));
     // Rewrite only local reference prefixes; owner schemas remain unchanged.
-    const input = fixtures[method.request_schema] ?? (method.name === 'readGraph' ? { mode: 'source' } : method.name === 'findDaily' ? { date: '2026-01-01', timezone: 'UTC' } : method.name === 'searchNotes' ? { q: 'fixture' } : method.name === 'readDocument' ? { object_id: 'note_fixture', revision: 'sha256:' + 'a'.repeat(64) } : method.name === 'readLinks' ? { object_id: 'note_fixture', revision: 'sha256:' + 'a'.repeat(64) } : {});
+    const input = fixtures[method.request_schema] ?? (method.name === 'readGraph' ? { mode: 'source' } : method.name === 'findDaily' ? { date: '2026-01-01', timezone: 'UTC' } : method.name === 'searchNotes' ? { q: 'fixture' } : ['readDocument', 'readEditorSource'].includes(method.name) ? { object_id: 'note_fixture', revision: 'sha256:' + 'a'.repeat(64) } : method.name === 'readLinks' ? { object_id: 'note_fixture', revision: 'sha256:' + 'a'.repeat(64) } : {});
     const request: Record<string, unknown> = { input };
     if (method.target_field) request[method.target_field] = 'fixture-id';
     if (method.idempotent) request.idempotency_key = 'original-key';
@@ -28,6 +28,9 @@ it('validates every fixed IPC wrapper and rejects arbitrary transport/private fi
     for (const extra of [{ path: '/private' }, { url: 'https://example.invalid' }, { method: 'DELETE' }, { token: 'fixture' }, { native_selection_id: 'spoofed' }]) expect(validate({ ...request, ...extra })).toBe(false);
     if (method.name === 'readDocument') { const missing = { ...input }; delete missing.revision; expect(validate({ ...request, input: missing })).toBe(false); }
     if (method.idempotent) { const bad = { ...request }; delete bad.idempotency_key; expect(validate(bad)).toBe(false); }
+    if (['syncPush', 'syncPull'].includes(method.name)) {
+      for (const field of ['X-Pinax-Operation-ID', 'Idempotency-Key']) expect(validate({ ...request, input: { ...input, [field]: 'replacement-key' } })).toBe(false);
+    }
     if (method.native_selection) expect(validate({ ...request, input: { ...input, native_selection_id: 'spoofed' } })).toBe(false);
   }
 });

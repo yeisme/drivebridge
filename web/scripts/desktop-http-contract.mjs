@@ -1,8 +1,9 @@
 // Derive planned main-to-facade HTTP contracts from the fixed Go IPC catalog.
 // HTTP does not accept the renderer wrapper: route IDs are path parameters,
 // mutation identities are headers, and native selection is main-only input.
-export function httpContract(methods, desktop, owner) {
-  const schemas = { ...desktop.components.schemas, ...owner.components.schemas };
+import { syncTransferInputSchema } from './desktop-ipc-contract.mjs';
+export function httpContract(methods, desktop, owner, writerSync = { components: { schemas: {} } }) {
+  const schemas = { ...desktop.components.schemas, ...owner.components.schemas, ...writerSync.components.schemas };
   const paths = {};
   const ref = name => ({ $ref: `#/components/schemas/${name}` });
   const envelope = name => ({ type: 'object', additionalProperties: false, properties: { data: ref(name) }, required: ['data'] });
@@ -36,7 +37,8 @@ export function httpContract(methods, desktop, owner) {
       responses: { [status]: { description: 'Owner result; not a runtime availability claim.', content: json(envelope(m.response_schema)) }, ...errors() } };
     if (m.http_method !== 'GET') {
       const bodySchema = m.name === 'chooseVault' ? 'NativeSelection' : m.name === 'exportSource' ? 'ExportRequest' : m.request_schema;
-      operation.requestBody = { required: true, content: json(ref(bodySchema)) };
+      const body = ['syncPush', 'syncPull'].includes(m.name) ? syncTransferInputSchema(schemas[bodySchema]) : ref(bodySchema);
+      operation.requestBody = { required: true, content: json(body) };
       operation['x-request-max-bytes'] = 131072;
       if (m.native_selection) operation['x-main-only-native-selection'] = true;
     }
@@ -60,6 +62,6 @@ export function httpContract(methods, desktop, owner) {
   paths['/v1/desktop/assets/{handle}'].get.responses['416'].headers = { 'Content-Range': { required: true, schema: { type: 'string', pattern: '^bytes \\*/[0-9]+$' } } };
   return { openapi: '3.1.0', info: { title: 'DriveBridge planned desktop facade', version: 'v1alpha1' },
     jsonSchemaDialect: 'https://json-schema.org/draft/2020-12/schema',
-    'x-implementation-status': 'planned', 'x-owner-reader-digest': owner['x-reader-schema-digest'], paths,
+    'x-implementation-status': 'planned', 'x-owner-reader-digest': owner['x-reader-schema-digest'], 'x-owner-writer-sync-digest': writerSync['x-writer-sync-schema-digest'], paths,
     components: { schemas, securitySchemes: { desktopSession: { type: 'http', scheme: 'bearer', description: 'Private main-to-facade session; never exposed to renderer.' } } } };
 }

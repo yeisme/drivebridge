@@ -6,6 +6,7 @@ export interface NoteIdentity {
   revision: string;
 }
 export type Pane = "primary" | "secondary";
+export type NotebookMode = "reading" | "live" | "source";
 export interface NotebookTab {
   key: string;
   ref: NoteIdentity;

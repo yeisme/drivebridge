@@ -5,7 +5,7 @@ import { NotebookDocument } from "./NotebookDocument";
 import { DocumentConflictMerge } from "./DocumentConflictMerge";
 import { NotebookReadError, readMarkdownFile } from "./notebook-adapters";
 import { noteKey } from "./notebook-state";
-import type { NoteIdentity } from "./notebook-state";
+import type { NoteIdentity, NotebookMode } from "./notebook-state";
 import { claimDocumentSave, clearDocumentSave, documentCapability, documentRecoveryKey, lookupDocumentSave, saveDocument, type DocumentCapability, type DocumentSave } from "./clients";
 
 interface Props {
@@ -16,13 +16,17 @@ interface Props {
   onSaved?: (ref: NoteIdentity) => void;
   onRevoked?: () => void;
   editablePane?: boolean;
+  title?: string;
+  path?: string;
+  mode?: NotebookMode;
+  onModeChange?: (mode: NotebookMode) => void;
 }
 interface SaveIntent { ref: NoteIdentity; before: string; after: string }
 interface MergeSession { baseVersion: string; base: string; ref: NoteIdentity; remote: string; originalDraft: string; maxBytes: number }
 export function MarkdownFileDocument(props: Props) {
   return <FileDocumentSession key={JSON.stringify([props.actor, noteKey(props.identity)])} {...props}/>;
 }
-function FileDocumentSession({ identity, actor, draft, onDraft, onSaved, onRevoked, editablePane = false }: Props) {
+function FileDocumentSession({ identity, actor, draft, onDraft, onSaved, onRevoked, editablePane = false, title, path, mode, onModeChange }: Props) {
   const [attempt, setAttempt] = useState(0);
   const [online, setOnline] = useState(navigator.onLine);
   useEffect(() => {
@@ -230,7 +234,8 @@ function FileDocumentSession({ identity, actor, draft, onDraft, onSaved, onRevok
     {pendingKey && <div role="status" className="flex flex-wrap items-center gap-2 border-b p-2 text-sm"><span>{message || "有一个待确认的保存请求。"}</span><Button type="button" variant="outline" disabled={status === "saving"} onClick={() => void recover()}>查询原保存结果</Button>{canResend && <Button type="button" variant="outline" onClick={() => void submit()}>继续原保存</Button>}</div>}
     {message && !pendingKey && <p role="alert" className="p-2 text-sm">{message}</p>}
     {canRebase && !pendingKey && <div className="border-b p-2"><Button type="button" variant="outline" disabled={status === "saving"} onClick={() => void loadMerge()}>读取当前版本并人工合并</Button></div>}
-    <NotebookDocument identity={identity} body={result.body} draft={value} historical={historical} editable={editable}
+    <NotebookDocument identity={identity} body={result.body} draft={value} historical={historical} editable={editable} initialMode={mode} onModeChange={onModeChange}
+      title={title} path={path}
       readonlyMessage={pendingKey ? "原保存结果待确认，暂时锁定编辑；内存草稿保留。" : canRebase ? "草稿尚未保存，请在人工合并窗口审阅新基线。" : !editablePane && actor ? "此窗格只读，编辑请使用主窗格。" : undefined}
       maxBytes={capability?.max_bytes ?? 2 * 1024 * 1024} onDraft={onDraft ?? (() => {})}
       actions={editablePane && <Button type="button" variant="outline" disabled={!editable || !dirty || new TextEncoder().encode(value ?? "").byteLength > (capability?.max_bytes ?? 0)} onClick={() => { setMessage(""); setPreview({ ref: identity, before: result.body, after: value! }); }}>预览保存</Button>}/>

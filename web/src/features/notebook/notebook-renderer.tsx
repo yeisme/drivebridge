@@ -192,8 +192,11 @@ export function NotebookRenderer({ body, onAnchor }: { body: string; onAnchor?: 
   }, [body]);
   // Memoizing the element avoids reparsing while a pane divider is dragged.
   return useMemo(() => {
-    const heading = (Tag: "h1" | "h2" | "h3" | "h4" | "h5" | "h6") => ({ id, children }: { id?: string; children?: React.ReactNode }) =>
-      <Tag id={`${prefix}-${id}`} data-notebook-anchor={id} tabIndex={-1}>{children}</Tag>;
+    const heading = (Tag: "h1" | "h2" | "h3" | "h4" | "h5" | "h6") => ({ id, children }: { id?: string; children?: React.ReactNode }) => {
+      const anchor = id ? `${prefix}-${id}` : undefined;
+      const copy = () => { if (anchor) void navigator.clipboard?.writeText(`${window.location.href.split("#")[0]}#${encodeURIComponent(anchor)}`); };
+      return <div className="group relative"><Tag id={anchor} data-notebook-anchor={id} tabIndex={-1}>{children}</Tag>{anchor && <div className="pointer-events-none absolute right-0 top-0 flex gap-1 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100"><Button type="button" variant="outline" className="min-h-8 px-2 text-[11px]" aria-label={`复制 ${id} 区块链接`} onClick={copy}>复制链接</Button></div>}</div>;
+    };
     return <div ref={root} style={{ fontSize: "var(--notebook-font-size, 16px)", maxWidth: "var(--notebook-line-width, 720px)", lineHeight: 1.75 }} className="mx-auto min-w-0 break-words [&_pre]:my-5 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:bg-muted [&_pre]:p-4 [&_pre]:text-sm [&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-[0.9em] [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_table]:my-5 [&_table]:block [&_table]:max-w-full [&_table]:overflow-x-auto [&_table]:border-collapse [&_th]:border [&_th]:bg-muted/50 [&_th]:text-left [&_th]:font-medium [&_td]:border [&_th]:px-3 [&_th]:py-2 [&_td]:px-3 [&_td]:py-2 [&_h1]:text-[2em] [&_h1]:font-bold [&_h1]:leading-tight [&_h1]:tracking-tight [&_h2]:text-[1.5em] [&_h2]:font-semibold [&_h2]:leading-snug [&_h3]:text-[1.25em] [&_h3]:font-semibold [&_h4]:font-semibold [&_p]:my-3 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:list-decimal [&_ol]:pl-6 [&_li]:my-1 [&_blockquote]:my-5 [&_blockquote]:border-l-[3px] [&_blockquote]:border-foreground/30 [&_blockquote]:pl-4 [&_blockquote]:text-muted-foreground [&_hr]:my-8 [&_hr]:border-border [&_a]:underline [&_a]:decoration-border [&_a]:underline-offset-4 [&_a:hover]:decoration-foreground [&_[data-notebook-anchor]]:scroll-mt-16">
     <Markdown remarkPlugins={[remarkGfm, remarkMath, notebookWikiLinks, anchorPlugin]} rehypePlugins={mathPlugins} skipHtml components={{
       div: ({ node, children, ...props }) => {

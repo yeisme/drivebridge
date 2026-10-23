@@ -1,4 +1,5 @@
 export interface ResourcePageUiState {
+  viewMode: 'list' | 'grid';
   selectedDescriptor: string | null;
   inspectorOpen: boolean;
   checking: boolean;
@@ -6,9 +7,10 @@ export interface ResourcePageUiState {
   registrationOpen: boolean;
 }
 
-export const initialResourcePageUiState: ResourcePageUiState = { selectedDescriptor: null, inspectorOpen: false, checking: false, snapshotOpen: false, registrationOpen: false };
+export const initialResourcePageUiState: ResourcePageUiState = { viewMode: 'list', selectedDescriptor: null, inspectorOpen: false, checking: false, snapshotOpen: false, registrationOpen: false };
 
 export type ResourcePageUiAction =
+  | { type: 'set-view'; mode: 'list' | 'grid' }
   | { type: 'select'; descriptor: string }
   | { type: 'close-inspector' }
   | { type: 'toggle-check' }
@@ -17,6 +19,7 @@ export type ResourcePageUiAction =
 
 export function resourcePageUiReducer(state: ResourcePageUiState, action: ResourcePageUiAction): ResourcePageUiState {
   switch (action.type) {
+    case 'set-view': return { ...state, viewMode: action.mode };
     case 'select': return { ...state, selectedDescriptor: action.descriptor, inspectorOpen: true, checking: false, snapshotOpen: false };
     case 'close-inspector': return { ...state, selectedDescriptor: null, inspectorOpen: false, checking: false, snapshotOpen: false };
     case 'toggle-check': return { ...state, checking: !state.checking };

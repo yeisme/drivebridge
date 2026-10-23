@@ -1,6 +1,7 @@
 import { queryFiles, statFile } from "../../info-workspace/client";
 import { canOpenMarkdownNotebook } from "./notebook-capability";
 import type { NotebookEntry } from "./notebook-navigation";
+import { readNotebookDirectoryPage, type NotebookDriveEntry } from './clients/directory-tree';
 
 export interface KnowledgeFilePage {
   entries: NotebookEntry[];
@@ -13,7 +14,7 @@ export interface KnowledgeFilePage {
 
 // The existing file query has no extension/OR filter. Examine one bounded page
 // and disclose coverage rather than mislabelling a partial scan as all notes.
-export async function readKnowledgeFiles(space: string, cursor: string | null, signal: AbortSignal): Promise<KnowledgeFilePage> {
+async function readLegacyKnowledgeFiles(space: string, cursor: string | null, signal: AbortSignal): Promise<KnowledgeFilePage> {
   const result = await queryFiles({ mode: "exact", space_ids: [space], sort: [{ field: "name", direction: "asc" }], limit: 50, cursor }, signal);
   const entries: NotebookEntry[] = [];
   let unavailable = 0, stale = 0;
@@ -39,4 +40,19 @@ export async function readKnowledgeFiles(space: string, cursor: string | null, s
     });
   }
   return { entries, nextCursor: result.next_cursor, scanned: result.items.length, unavailable, stale };
+}
+
+export async function readKnowledgeFiles(space: string, cursor: string | null, signal: AbortSignal, directoryPath?: string): Promise<KnowledgeFilePage> {
+  if (directoryPath === undefined) return readLegacyKnowledgeFiles(space, cursor, signal);
+  const result = await readNotebookDirectoryPage(space, directoryPath, cursor, signal);
+  const entries: NotebookEntry[] = [];
+  let unavailable = 0;
+  for (const item of Array.isArray(result.entries) ? result.entries : []) {
+    if (item.kind !== 'file' || !item.file) continue;
+    const file = item.file as NotebookDriveEntry['file'];
+    if (!file || file.space_id !== space || file.trashed) { unavailable += 1; continue; }
+    if (!canOpenMarkdownNotebook(file, space)) continue;
+    entries.push({ title: file.path.split('/').at(-1) || file.path, path: file.path, ref: { sourceId: space, objectId: file.id, revision: file.version_id } });
+  }
+  return { entries, nextCursor: result.next_cursor || null, scanned: Array.isArray(result.entries) ? result.entries.length : 0, unavailable, stale: 0 };
 }

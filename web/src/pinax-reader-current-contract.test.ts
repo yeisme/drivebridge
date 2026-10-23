@@ -4,18 +4,23 @@ import Ajv2020 from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
 import { expect, it } from 'vitest';
 import type { components } from './generated/pinax-reader';
+// @ts-expect-error Build-only JavaScript generator.
+import { ownerDigest } from '../scripts/pinax-reader-contract.mjs';
 
 async function load(name: string) {
   return JSON.parse(await readFile(resolve(process.cwd(), '../contracts/desktop', name), 'utf8'));
 }
 
-it('consumes current owner union schemas without adding runtime IPC or private authority', async () => {
+it('consumes current owner union schemas and keeps IPC declarations planned', async () => {
   const owner = await load('pinax-reader.openapi.json');
   const ipc = await load('ipc.json');
-  expect(owner['x-owner-openapi-digest']).toBe('sha256:4c85fe7909c8575546deee3ae2d5f0d85c20f30e5d3ab1e6e1617d1824f595a8');
+  expect(owner['x-owner-openapi-digest']).toMatch(/^sha256:[a-f0-9]{64}$/);
+  expect(owner['x-reader-schema-digest']).toBe(ownerDigest(owner.components.schemas));
+  expect(ipc['x-owner-reader-digest']).toBe(owner['x-reader-schema-digest']);
   expect(owner.paths).toEqual({});
   expect(owner['x-drivebridge-integration-status']).toBe('pending');
-  expect(ipc['x-methods']).toHaveLength(23);
+  expect(ipc['x-methods']).toHaveLength(32);
+  expect(ipc['x-methods'].every((m: { status: string }) => m.status === 'planned')).toBe(true);
   expect(ipc['x-methods'].some((m: { name: string }) => /rich|composed|recovery|writer/i.test(m.name))).toBe(false);
   for (const name of Object.keys(owner.components.schemas)) {
     expect(name.startsWith('pinax.reader.') || name === 'pinax.projection_warning.v1').toBe(true);

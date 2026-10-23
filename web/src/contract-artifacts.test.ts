@@ -26,7 +26,7 @@ it('detects missing and altered outputs without overwriting them', async () => {
 it('detects real generated OpenAPI, fixture and TypeScript drift', async () => {
  const root = await directory();
  const artifacts: Record<string, string> = {};
- for (const name of ['src/generated/personal-workspace.ts', '../contracts/personal-workspace/openapi.json', '../contracts/personal-workspace/fixtures/responses.json', 'src/generated/desktop.ts', '../contracts/desktop/openapi.json', '../contracts/desktop/fixtures/responses.json', 'src/generated/pinax-reader.ts', '../contracts/desktop/pinax-reader.openapi.json', 'src/generated/desktop-ipc.ts', '../contracts/desktop/ipc.json', 'src/generated/desktop-http.ts', '../contracts/desktop/facade.openapi.json']) {
+ for (const name of ['src/generated/personal-workspace.ts', '../contracts/personal-workspace/openapi.json', '../contracts/personal-workspace/fixtures/responses.json', 'src/generated/desktop.ts', '../contracts/desktop/openapi.json', '../contracts/desktop/fixtures/responses.json', 'src/generated/pinax-reader.ts', '../contracts/desktop/pinax-reader.openapi.json', 'src/generated/pinax-writer-sync.ts', '../contracts/desktop/pinax-writer-sync.openapi.json', 'src/generated/desktop-ipc.ts', '../contracts/desktop/ipc.json', 'src/generated/desktop-http.ts', '../contracts/desktop/facade.openapi.json']) {
   artifacts[name.replaceAll('../', '').replaceAll('/', '_')] = await readFile(join(process.cwd(), name), 'utf8');
  }
  await applyArtifacts(root, artifacts);

@@ -5,6 +5,18 @@
   --radius-control: 6px;
   --radius-surface: 8px;
   --radius-finder: 12px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --control-height: 32px;
+  --touch-target: 44px;
+  --file-row-height: 36px;
+  --file-row-touch-height: 48px;
+  --motion-fast: 120ms;
+  --motion-standard: 180ms;
   --icon-button: 36px;
   --navigation-expanded-width: 184px;
   --navigation-rail-width: 56px;

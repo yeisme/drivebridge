@@ -6,7 +6,13 @@ export interface ResourceListProjection {
   search: string;
 }
 
-export function projectResourceList(items: ResourceDescriptor[], search: string): ResourceListProjection {
+export type ResourceSort = 'name' | 'created';
+
+export function projectResourceList(items: ResourceDescriptor[], search: string, sort: ResourceSort = 'name'): ResourceListProjection {
   const normalized = search.trim().toLocaleLowerCase();
-  return { items, search, filteredItems: normalized ? items.filter(item => item.display_name.toLocaleLowerCase().includes(normalized)) : items };
+  const filtered = normalized ? items.filter(item => item.display_name.toLocaleLowerCase().includes(normalized)) : items;
+  const filteredItems = [...filtered].sort((left, right) => sort === 'created'
+    ? right.created_at.localeCompare(left.created_at)
+    : left.display_name.localeCompare(right.display_name, 'zh-CN', { sensitivity: 'base' }));
+  return { items, search, filteredItems };
 }

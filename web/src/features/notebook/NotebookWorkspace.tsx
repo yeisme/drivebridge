@@ -5,7 +5,7 @@ import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { AppDialog } from "../../components/AppDialog";
 import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from "../../components/ui/popover";
 import { NotebookNavigator, notebookShortcut, type NotebookEntry } from "./notebook-navigation";
-import { createNotebookState, notebookReducer, noteKey, type NoteIdentity, type Pane } from "./notebook-state";
+import { createNotebookState, notebookReducer, noteKey, type NoteIdentity, type NotebookMode, type Pane } from "./notebook-state";
 import { defaultNotebookPreferences, readNotebookPreferences, writeNotebookPreferences, type NotebookScope } from "./notebook-preferences";
 import { NotebookSplit } from "./NotebookSplit";
 import { NotebookDirectory } from "./NotebookDirectory";
@@ -19,6 +19,10 @@ export interface NotebookDocumentContext {
   onDraft: (body: string) => void;
   onSaved: (ref: NoteIdentity) => void;
   editablePane: boolean;
+  mode: NotebookMode;
+  onModeChange: (mode: NotebookMode) => void;
+  title: string;
+  path?: string;
 }
 interface Props {
   scope: NotebookScope;
@@ -104,7 +108,7 @@ function NotebookSession({ scope, entries, initialRef, directoryQuery = "", file
       {mounted.map(tab => <div key={tab.key} hidden={tab.key !== key} className="h-full min-h-0">
         <NotebookPane title={title(tab.key)} scrollTop={state.positions[which][tab.key]?.scrollTop ?? 0}
           onScroll={scrollTop => dispatch({ type: "position", pane: which, key: tab.key, scrollTop })}>
-          {renderDocument({ ref: tab.ref, pane: which, draft: state.drafts[tab.key], editablePane: which === "primary", onDraft: body => dispatch({ type: "draft", key: tab.key, body }), onSaved: ref => {
+          {renderDocument({ ref: tab.ref, pane: which, draft: state.drafts[tab.key], editablePane: which === "primary", mode: preferences.modeByNote[tab.key] ?? "reading", onModeChange: mode => savePreferences({ ...preferences, modeByNote: { ...preferences.modeByNote, [tab.key]: mode } }), title: title(tab.key), path: visible.find(entry => noteKey(entry.ref) === tab.key)?.path, onDraft: body => dispatch({ type: "draft", key: tab.key, body }), onSaved: ref => {
             if (ref.sourceId !== tab.ref.sourceId || ref.objectId !== tab.ref.objectId) return;
             onSaved?.(tab.ref, ref);
             dispatch({ type: "saved", key: tab.key, ref });
@@ -183,9 +187,9 @@ function NotebookSession({ scope, entries, initialRef, directoryQuery = "", file
       savePreferences({ ...preferences, splitRatio: value });
     }}
       primary={pane("primary", state.activeTab)} secondary={state.split ? pane("secondary", state.secondTab) : null}/>
-    {!focused && propertiesInline && preferences.rightOpen && <aside aria-label="笔记信息侧栏" className="shrink-0 overflow-auto border-l" style={{ width: preferences.rightWidth }}><NotebookProperties identity={active?.ref} actor={scope.actor} fileRelations={fileRelations}/></aside>}
+    {!focused && propertiesInline && preferences.rightOpen && <aside aria-label="笔记信息侧栏" className="shrink-0 overflow-auto border-l" style={{ width: preferences.rightWidth }}><NotebookProperties identity={active?.ref} title={active ? title(active.key) : undefined} path={active ? visible.find(entry => noteKey(entry.ref) === active.key)?.path : undefined} actor={scope.actor} fileRelations={fileRelations}/></aside>}
     </div>
-    {!propertiesInline && propertiesOpen && <AppDialog title="笔记信息" close={() => setPropertiesOpen(false)}><NotebookProperties identity={active?.ref} actor={scope.actor} fileRelations={fileRelations}/></AppDialog>}
+    {!propertiesInline && propertiesOpen && <AppDialog title="笔记信息" close={() => setPropertiesOpen(false)}><NotebookProperties identity={active?.ref} title={active ? title(active.key) : undefined} path={active ? visible.find(entry => noteKey(entry.ref) === active.key)?.path : undefined} actor={scope.actor} fileRelations={fileRelations}/></AppDialog>}
     {!directoryInline && directoryOpen && <AppDialog title="当前来源笔记" close={() => setDirectoryOpen(false)}>
       <NotebookDirectory entries={directoryEntries} activeKey={state.activeTab} onOpen={ref => { open(ref); setDirectoryOpen(false); }} onPin={ref => dispatch({ type: "open", ref, pinned: true })}/>
     </AppDialog>}

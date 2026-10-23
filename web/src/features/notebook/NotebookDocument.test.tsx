@@ -22,6 +22,21 @@ it("keeps the same editor and undo history through all three modes", () => {
   expect(source.state.doc.toString()).toBe("# Original");
 });
 
+it("starts from and reports the per-revision remembered mode", () => {
+  const onModeChange = vi.fn();
+  render(<NotebookDocument identity={identity} body="# Original" historical={false} editable initialMode="source" onModeChange={onModeChange} onDraft={vi.fn()}/>);
+  expect(screen.getByRole("button", { name: /^源码$/ }).getAttribute("aria-pressed")).toBe("true");
+  fireEvent.click(screen.getByRole("button", { name: "实时预览" }));
+  expect(onModeChange).toHaveBeenCalledWith("live");
+});
+
+it("offers a Markdown-native block menu without replacing the editor model", () => {
+  const view = render(<NotebookDocument identity={identity} body="/" historical={false} editable initialMode="source" onDraft={vi.fn()}/>);
+  fireEvent.click(screen.getByRole("button", { name: "插入块" }));
+  fireEvent.click(screen.getByRole("menuitem", { name: "任务" }));
+  expect(editor(view.container).state.doc.toString()).toContain("- [ ] ");
+});
+
 it("preserves disclosure state across modes but not across revisions", () => {
   const props = { identity, body: "# Heading\n\nBody", historical: false, editable: false, onDraft: vi.fn() };
   const view = render(<NotebookDocument {...props}/>);

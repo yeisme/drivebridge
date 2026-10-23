@@ -5,6 +5,7 @@ import { Checkbox } from "./components/ui/checkbox";
 import { Input } from "./components/ui/input";
 import { SearchField } from "./components/SearchField";
 import { Button } from "./components/ui/button";
+import { InspectorHeader, ViewModeSwitch } from "./components/workspace";
 import { SelectAdapter } from "./components/SelectAdapter";
 import { AppDialog as WorkspaceDialog } from "./components/AppDialog";
 import React, { useEffect, useId, useRef, useState } from "react";
@@ -1482,24 +1483,12 @@ export function Finder({
               {([['list', '列表视图', List], ['grid', '网格视图', LayoutGrid], ['columns', '分栏视图', Columns3], ['gallery', '画廊视图', GalleryHorizontal]] as const).map(([mode, label, Icon]) =>
                 <DropdownMenuItem key={mode} aria-label={label} className="min-h-11" onClick={() => chooseMode(mode)}><Icon />{label}{viewMode === mode && <span className="ml-auto text-xs">当前</span>}</DropdownMenuItem>)}
             </DropdownMenuContent>
-          </DropdownMenu> : <div className="view-switch" role="group" aria-label="文件视图">
-            <Button variant="ghost" size="icon" type="button"
-              aria-label="列表视图"
-              aria-pressed={viewMode === "list"}
-              onClick={() => chooseMode("list")}
-            >
-              <List size={17} />
-            </Button>
-            <Button variant="ghost" size="icon" type="button"
-              aria-label="网格视图"
-              aria-pressed={viewMode === "grid"}
-              onClick={() => chooseMode("grid")}
-            >
-              <LayoutGrid size={17} />
-            </Button>
-            <Button variant="ghost" size="icon" type="button" aria-label="分栏视图" aria-pressed={viewMode === "columns"} onClick={() => chooseMode("columns")}><Columns3 size={17} /></Button>
-            <Button variant="ghost" size="icon" type="button" aria-label="画廊视图" aria-pressed={viewMode === "gallery"} onClick={() => chooseMode("gallery")}><GalleryHorizontal size={17} /></Button>
-          </div>}
+          </DropdownMenu> : <ViewModeSwitch label="文件视图" value={viewMode} onChange={chooseMode} items={[
+            { value: "list" as const, label: "列表视图", icon: <List size={17} /> },
+            { value: "grid" as const, label: "网格视图", icon: <LayoutGrid size={17} /> },
+            { value: "columns" as const, label: "分栏视图", icon: <Columns3 size={17} /> },
+            { value: "gallery" as const, label: "画廊视图", icon: <GalleryHorizontal size={17} /> },
+          ]} />}
           {focusAction && <div className="finder-focus border-l border-border pl-2 max-md:[&>a]:size-11">{focusAction}</div>}
         </div>
         <div className="finder-search px-3 pb-2 max-md:[&_[data-slot=input-group]]:min-h-11">          <SearchField
@@ -1890,16 +1879,7 @@ export function Finder({
       </section>
       {inspected && (
         <aside className="finder-inspector" aria-label="文件检查器">
-          <header>
-            <strong>文件信息</strong>
-            <Button variant="ghost" size="icon" type="submit"
-              className="icon"
-              aria-label="关闭检查器"
-              onClick={() => setInspectorOpen(false)}
-            >
-              <X size={17} />
-            </Button>
-          </header>
+          <InspectorHeader eyebrow="文件检查器" title="文件信息" onClose={() => setInspectorOpen(false)} />
           <MediaPreview key={inspected.version_id} file={inspected} compact />
           <h3>{inspected.path.split("/").pop()}</h3>
           <dl>

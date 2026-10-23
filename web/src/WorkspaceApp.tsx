@@ -36,11 +36,12 @@ import { GovernanceBar, useGovernance, governanceMode } from "./governance-conte
 import { getDataContext } from "./api";
 import { FilesPage } from "./features/files/FilesPage";
 import { FilePreviewDialog } from "./features/files/FilePreviewDialog";
+import { PreviewDirectoryTree } from "./features/files/PreviewDirectoryTree";
+import { createPreviewWorkspaceState, previewKey, previewReducer } from "./features/files/preview-state";
 import { TrashPage } from "./features/trash/TrashPage";
 import { restorableSelection } from "./features/trash/selection";
 import { MediaPreview } from "./Media";
 import { canOpenMarkdownNotebook } from "./features/notebook/notebook-capability";
-import { PreviewFiles } from "./PreviewFiles";
 import { RobotSetup } from "./RobotSetup";
 import { CapacityPanel } from "./CapacityView";
 import { ShareDialog, SharesPage } from "./Sharing";
@@ -264,6 +265,8 @@ function App() {
   }, [mobile, toggleSidebar]);
   const [shareSelection, setShareSelection] = useState<{files: DriveFile[]; path: string}>();
   const [previewSiblings, setPreviewSiblings] = useState<DriveFile[]>([]);
+  const [previewState, dispatchPreview] = useReducer(previewReducer, undefined, createPreviewWorkspaceState);
+  const [previewFiles, setPreviewFiles] = useState<Record<string, DriveFile>>({});
   const [notebookPreview, setNotebookPreview] = useState(false);
   useEffect(() => { setNotebookPreview(false); }, [selected?.id, selected?.version_id]);
   const [usageOpen, setUsageOpen] = useState(false);
@@ -303,6 +306,63 @@ function App() {
   const managementRestricted = readOnly || accessMode === "granted";
   useEffect(() => () => { for (const c of controllers.current.values()) c.abort(); }, []);
   const currentSpace = spaces.find((s) => s.id === space);
+  const rememberPreview = (items: DriveFile[]) => {
+    if (!items.length) return;
+    setPreviewFiles(old => {
+      const next = { ...old };
+      for (const file of items) next[previewKey(file)] = file;
+      return next;
+    });
+  };
+  const openPreview = (file: DriveFile, siblings: DriveFile[] = files, pinned = false) => {
+    const nearby = siblings.length ? siblings : [file];
+    rememberPreview([...nearby, file]);
+    setPreviewSiblings(nearby);
+    setSelected(file);
+    dispatchPreview({ type: 'open', file, pinned });
+  };
+  const activatePreview = (key: string) => {
+    const file = previewFiles[key];
+    if (!file) return;
+    dispatchPreview({ type: 'activate', key });
+    setSelected(file);
+    const nearby = files.filter(item => item.space_id === file.space_id && item.path.split('/').slice(0, -1).join('/') === file.path.split('/').slice(0, -1).join('/'));
+    setPreviewSiblings(nearby.length ? nearby : [file]);
+  };
+  const closePreviewTab = (key: string) => {
+    const wasActive = previewState.activeTab === key;
+    const remaining = previewState.tabs.filter(tab => tab.key !== key);
+    dispatchPreview({ type: 'close', key });
+    if (!wasActive) return;
+    const next = remaining.at(-1);
+    if (!next) { setSelected(null); return; }
+    const file = previewFiles[next.key];
+    if (file) { setSelected(file); setPreviewSiblings([file]); }
+  };
+  const closePreviewAll = () => {
+    const remaining = previewState.tabs.filter(tab => tab.pinned);
+    dispatchPreview({ type: 'closeAll' });
+    const next = remaining.at(-1);
+    if (!next) { setSelected(null); return; }
+    const file = previewFiles[next.key];
+    if (file) { setSelected(file); setPreviewSiblings([file]); }
+  };
+  const clearPreview = () => {
+    setSelected(null);
+    setPreviewSiblings([]);
+    setPreviewFiles({});
+    dispatchPreview({ type: 'retain', files: [] });
+  };
+  useEffect(() => {
+    if (!selected && previewState.tabs.length) {
+      setPreviewFiles({});
+      setPreviewSiblings([]);
+      dispatchPreview({ type: 'retain', files: [] });
+    }
+  }, [selected, previewState.tabs.length]);
+  useEffect(() => {
+    if (page !== 'files') clearPreview();
+  }, [page, space]);
   const meterSpace = currentSpace || spaces[0];
   const requestedInsight = new URLSearchParams(routeHash.split("?")[1] || "").get("view");
   const insightView = requestedInsight && ["overview", "capacity", "transfers", "robots", "audit"].includes(requestedInsight) ? requestedInsight : (shellTab === "usage" ? "capacity" : "overview");
@@ -472,7 +532,7 @@ function App() {
       if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(e.key)) {
         const current = previewSiblings.findIndex(f => f.id === selected.id);
         const next = previewSiblings[current + (["ArrowRight", "ArrowDown"].includes(e.key) ? 1 : -1)];
-        if (current >= 0 && next) { e.preventDefault(); setSelected(next); }
+        if (current >= 0 && next) { e.preventDefault(); openPreview(next, previewSiblings); }
       }
     };
     // Capture phase: the Base UI dialog popup stops propagation of arrow keys
@@ -489,7 +549,7 @@ function App() {
       const pinned=await pinnedFile(result.file,op.version_id,headers,controller.signal);
       if(revision!==getDataContext().revision)return;
       const file={...pinned.file,tenant_context:getDataContext().tenant||governance?.tenant_id};
-      setModal("");setPreviewSiblings([file]);setSelected(file);
+      setModal("");openPreview(file, [file]);
     } catch(e) {if(controller.signal.aborted)throw new Error("preview_timeout");throw e;} finally {clearTimeout(timer);}
   }
   async function uploadFiles(list: File[], target: { resume?: Operation; version?: DriveFile } = {}) {
@@ -682,7 +742,7 @@ function App() {
             finder={{ readOnly, managementRestricted, space, prefix, setPrefix, revision: files, reload: refreshFiles, backendLabel: currentBackend.label,
               upload: list => { setResume(undefined); setNewVersion(undefined); if (list) void uploadFiles(list); else input.current?.click(); },
               onOperation: op => setOps(old => [op, ...old.filter(x => x.id !== op.id)]),
-              onPreview: (file, siblings) => { setSelected(file); setPreviewSiblings(siblings); },
+              onPreview: (file, siblings) => openPreview(file, siblings),
               onShare: (files, path) => setShareSelection({ files, path }),
             }} />}
           {page === "knowledge" && <KnowledgePage key={`${instance}:${user.id}:${getDataContext().tenant}:${getDataContext().space}`} actor={`${instance}:${user.id}`} spaces={availableSpaces} onDirtyChange={setKnowledgeDirty}/> }
@@ -707,7 +767,7 @@ function App() {
               await api("/files/batch/restore", "POST", { ids }); setPicked({}); await refreshFiles();
             }); }}
             onRestore={file => { void act(async () => { await api("/files/" + file.id + "/restore", "POST", {}); await refreshFiles(); }); }}
-            onPreview={file => { setSelected(file); setVersions([]); }}
+            onPreview={file => { openPreview(file, [file]); setVersions([]); }}
           />}
           {page === "devices" && <DevicesPage onNavigate={navigatePage}/>}
           {page === "automation" && <AutomationPage scope={JSON.stringify([instance,user.id,getDataContext().tenant,getDataContext().space])} spaces={availableSpaces.filter(s=>!getDataContext().space||s.id===getDataContext().space)} onNavigate={navigatePage}/>}
@@ -733,7 +793,7 @@ function App() {
 
           {page === "insights" && insightView === "overview" && (
             <>
-              <DashboardOverview onUsage={openUsage} spaces={availableSpaces} operations={ops} agents={agents} files={files} spaceName={currentSpace?.name} openFiles={driveHome} openTransfers={() => setPage("transfers")} preview={file => {setSelected(file);setPreviewSiblings(files);}}/>
+              <DashboardOverview onUsage={openUsage} spaces={availableSpaces} operations={ops} agents={agents} files={files} spaceName={currentSpace?.name} openFiles={driveHome} openTransfers={() => setPage("transfers")} preview={file => openPreview(file, files)}/>
 
             </>
           )}
@@ -747,7 +807,7 @@ function App() {
                     const result = await api<{ file: DriveFile }>(
                       "/files/" + encodeURIComponent(id),
                     );
-                    setSelected(result.file);
+                    openPreview(result.file, [result.file]);
                   } else {
                     const result = await api<{ operation: Operation }>(
                       "/operations/" + encodeURIComponent(id),
@@ -841,10 +901,29 @@ function App() {
       {selected && !modal && (
         <FilePreviewDialog
           title={selected.path.split("/").pop() || "文件详情"}
-          close={() => setSelected(null)}
+          close={clearPreview}
+          navigationWidth={mobile ? 0 : sidebarCollapsed ? 56 : 184}
+          tabs={previewState.tabs}
+          activeTab={previewState.activeTab}
+          onActivateTab={activatePreview}
+          onCloseTab={closePreviewTab}
+          onPinTab={(key, pinned) => dispatchPreview({ type: 'pin', key, pinned })}
+          onCloseOthers={key => dispatchPreview({ type: 'closeOthers', key })}
+          onCloseToRight={key => dispatchPreview({ type: 'closeToRight', key })}
+          onCloseAll={closePreviewAll}
+          panelMode={previewState.rightPanelMode}
+          onPanelModeChange={mode => dispatchPreview({ type: 'panelMode', mode })}
+          panelOpen={previewState.rightPanelOpen}
+          onPanelOpenChange={open => dispatchPreview({ type: 'panel', open })}
+          directory={<PreviewDirectoryTree
+            space={selected.space_id}
+            selectedKey={previewKey(selected)}
+            expandedPaths={previewState.treeExpanded}
+            onToggle={(path, expanded) => dispatchPreview({ type: 'tree', path, expanded })}
+            onOpenFile={file => openPreview(file, files.filter(item => item.space_id === file.space_id && item.path.split('/').slice(0, -1).join('/') === file.path.split('/').slice(0, -1).join('/')))}
+          />}
           notebookAction={canOpenMarkdownNotebook(selected, getDataContext().space || space) && <Button type="button" variant="outline" aria-pressed={notebookPreview} onClick={() => setNotebookPreview(value => !value)}>{notebookPreview ? "原文件预览" : "笔记工作台"}</Button>}
           information={<> 
-          <PreviewFiles files={previewSiblings.length ? previewSiblings : [selected]} selected={selected} onSelect={setSelected} />
           <section className="space-y-3 border-t border-border pt-5"><h3 className="text-sm font-semibold">文件信息</h3><dl className="quicklook-metadata"><dt>路径</dt><dd title={selected.path}>{selected.path}</dd><dt>大小</dt><dd>{bytes(selected.size_bytes)}</dd><dt>格式</dt><dd>{selected.mime_type}</dd></dl></section>
           {!selected.trashed && <LabelSuggestionEntry key={JSON.stringify([instance,user.id,getDataContext().tenant,getDataContext().space,selected.id,selected.version_id])} file={selected.id} version={selected.version_id} scope={JSON.stringify([instance,user.id,getDataContext().tenant,getDataContext().space])} readOnly={managementRestricted}/>}
           {!selected.trashed && <FilePropertiesEntry key={JSON.stringify([instance,user.id,getDataContext().tenant,getDataContext().space,selected.id,selected.version_id])} file={selected.id} version={selected.version_id} space={selected.space_id} path={selected.path} scope={JSON.stringify([instance,user.id,getDataContext().tenant,getDataContext().space])} readOnly={managementRestricted} onDirty={onPropertyDirty}/>}
@@ -1024,7 +1103,7 @@ function App() {
           {notebookPreview && canOpenMarkdownNotebook(selected, getDataContext().space || space)
             ? <RouteBoundary scope={`${user.id}:${selected.space_id}:${selected.id}:${selected.version_id}`}><Suspense fallback={<p role="status">正在加载笔记工作台…</p>}><MarkdownNotebookPreview key={`${selected.space_id}:${selected.id}:${selected.version_id}`} actor={user.id} file={selected} siblings={previewSiblings}/></Suspense></RouteBoundary>
             : <MediaPreview key={selected.id + selected.version_id} file={selected} />}
-          <nav className="quicklook-controls flex flex-row items-center justify-center gap-3 max-md:[&_button]:min-h-11" aria-label="切换预览文件">{[-1,1].map(step => {const index=previewSiblings.findIndex(f=>f.id===selected.id);const next=previewSiblings[index+step];return <Button variant="outline" size="sm" type="button" key={step} disabled={index<0 || !next} onClick={()=>setSelected(next)}>{step<0?"上一个":"下一个"}</Button>})}<span>{Math.max(1,previewSiblings.findIndex(f=>f.id===selected.id)+1)} / {Math.max(1,previewSiblings.length)} · 方向键切换</span></nav>
+          <nav className="quicklook-controls flex flex-row items-center justify-center gap-3 max-md:[&_button]:min-h-11" aria-label="切换预览文件">{[-1,1].map(step => {const index=previewSiblings.findIndex(f=>f.id===selected.id);const next=previewSiblings[index+step];return <Button variant="outline" size="sm" type="button" key={step} disabled={index<0 || !next} onClick={()=>next && openPreview(next, previewSiblings)}>{step<0?"上一个":"下一个"}</Button>})}<span>{Math.max(1,previewSiblings.findIndex(f=>f.id===selected.id)+1)} / {Math.max(1,previewSiblings.length)} · 方向键切换</span></nav>
         </FilePreviewDialog>
       )}
       {modal && (

@@ -57,7 +57,7 @@ it("does not treat a cursor expiry as an empty library", async () => {
   expect(screen.queryByText("当前来源没有可阅读的 Markdown 文件。")).toBeNull();
   vi.mocked(readKnowledgeFiles).mockResolvedValue({ entries: [], nextCursor: null, scanned: 0, unavailable: 0, stale: 0 });
   fireEvent.click(screen.getByRole("button", { name: "重新查询" }));
-  await waitFor(() => expect(readKnowledgeFiles).toHaveBeenLastCalledWith("s", null, expect.any(AbortSignal)));
+  await waitFor(() => expect(readKnowledgeFiles).toHaveBeenLastCalledWith("s", null, expect.any(AbortSignal), ""));
   await screen.findByText("当前来源没有可阅读的 Markdown 文件。");
 });
 it('keeps offline distinct from an empty library and discards late directory results', async () => {

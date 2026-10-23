@@ -30,3 +30,17 @@ it("fails closed on revoked authorization instead of retaining a successful sibl
   });
   await expect(readKnowledgeFiles("s", null, new AbortController().signal)).rejects.toThrow("forbidden");
 });
+
+it("reads only Markdown files directly under the selected physical directory", async () => {
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ data: {
+    entries: [
+      { kind: "directory", path: "notes/sub" },
+      { kind: "file", path: "notes/one.md", file: file("one", "notes/one.md") },
+      { kind: "file", path: "notes/image.png", file: { ...file("image", "notes/image.png"), mime_type: "image/png" } },
+    ], next_cursor: "next", total: 3,
+  } }), { status: 200, headers: { "Content-Type": "application/json" } }));
+  const result = await readKnowledgeFiles("s", null, new AbortController().signal, "notes");
+  expect(result.entries.map(entry => entry.path)).toEqual(["notes/one.md"]);
+  expect(result).toMatchObject({ scanned: 3, nextCursor: "next" });
+  expect(fetch).toHaveBeenCalledWith("/api/v1/browser?space_id=s&path=notes&cursor=", expect.objectContaining({ method: "GET" }));
+});

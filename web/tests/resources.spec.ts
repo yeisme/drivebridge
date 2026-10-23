@@ -18,20 +18,35 @@ test('official resources navigation reads real descriptors without installing or
     const part = await fetch('/api/v1/operations/' + op.id + '/parts/0', { method: 'PUT', headers: { 'X-CSRF-Token': me.csrf_token }, body: bytes });
     if (!part.ok) throw new Error('resource_part_failed'); const done = await write('/operations/' + op.id + '/complete', {});
     const stat = (await (await fetch('/api/v1/files/' + done.file_id)).json()).data;
-    const descriptor = await write('/resource-descriptors', { space_id: space.id, file_ref: stat.ref, kind: 'template', display_name: 'Reference template' }, 'resource-ui-original');
-    return { id: descriptor.descriptor_id as string, ref: descriptor.file_ref as string };
+    const name = 'Reference template ' + Date.now();
+    const descriptor = await write('/resource-descriptors', { space_id: space.id, file_ref: stat.ref, kind: 'template', display_name: name }, 'resource-ui-original');
+    return { id: descriptor.descriptor_id as string, ref: descriptor.file_ref as string, name };
   });
   const writes: string[] = [], bodies: string[] = [];
   page.on('request', request => { const path = new URL(request.url()).pathname; if (path.includes('/resource-descriptors') && request.method() !== 'GET') writes.push(path); if (path.endsWith('/content')) bodies.push(path); });
   await page.getByRole('navigation', { name: '工作区导航' }).getByRole('button', { name: '资源库', exact: true }).click();
   await expect(page).toHaveURL(/#\/resources$/);
   const resources = page.getByRole('region', { name: '资源库', exact: true });
-  await expect(resources.getByRole('heading', { name: 'Reference template', exact: true })).toBeVisible();
-  await expect(resources.getByText('模板 · 未检查', { exact: true })).toBeVisible();
-  const trigger = resources.getByRole('button', { name: '查看资源描述 Reference template', exact: true });
+  await expect(resources.getByRole('heading', { name: original.name, exact: true })).toBeVisible();
+  await expect(resources.getByText('未检查', { exact: true })).toBeVisible();
+  await resources.getByRole('button', { name: '资源大图网格', exact: true }).click();
+  await expect(resources.locator('.resource-grid-card')).toHaveCount(1);
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: path.join(process.env.DRIVEBRIDGE_EVIDENCE_ARTIFACTS!, `resource-grid-${width}.png`), animations: 'disabled' });
+  }
+  await resources.getByRole('button', { name: '资源详情列表', exact: true }).click();
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const trigger = resources.getByRole('button', { name: '查看资源描述 ' + original.name, exact: true });
   await trigger.click(); const detail = resources.getByRole('region', { name: '固定资源描述', exact: true });
   await expect(detail.getByText(original.ref, { exact: true })).toBeVisible();
   await expect(detail.getByText(/未检查，不代表内容安全/)).toBeVisible();
+  await detail.getByRole('button', { name: '预览固定版本', exact: true }).click();
+  const preview = page.getByRole('dialog', { name: original.name, exact: true });
+  await expect(preview).toBeVisible();
+  await expect(preview.getByText('固定资源信息', { exact: true })).toBeVisible();
+  await preview.getByRole('button', { name: '关闭', exact: true }).click();
   for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 900 }); await detail.scrollIntoViewIfNeeded();
     await page.screenshot({ path: path.join(process.env.DRIVEBRIDGE_EVIDENCE_ARTIFACTS!, `resource-detail-${width}.png`), animations: 'disabled' });
@@ -99,7 +114,7 @@ test('official resources navigation reads real descriptors without installing or
   try {
     const bob = await context.newPage(); await bob.goto('/'); await bob.getByRole('link', { name: '使用账号登录' }).click(); await bob.getByRole('link', { name: '以 Bob 登录' }).click();
     await bob.goto('/#/resources');
-    await expect(bob.getByText(/当前范围与筛选下没有可见资源描述/)).toBeVisible();
+    await expect(bob.getByText('还没有登记资源', { exact: true })).toBeVisible();
     const response = await bob.request.get('/api/v1/resource-descriptors/' + original.id); expect(response.status()).toBe(404);
   } finally { await context.close(); }
 });

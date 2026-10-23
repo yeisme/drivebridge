@@ -57,7 +57,7 @@ export function DesktopWorkspace({ bridge, boundSourceId }: { bridge?: DesktopEn
   }, [bridge, attempt]);
   const title = page === 'knowledge' ? '本机知识库' : '桌面能力说明';
   const reader = bridge?.listNotes && bridge.searchNotes && bridge.readDocument && bridge.readLinks
-    ? { listNotes: bridge.listNotes, searchNotes: bridge.searchNotes, readDocument: bridge.readDocument, readLinks: bridge.readLinks }
+    ? { listNotes: bridge.listNotes, searchNotes: bridge.searchNotes, readDocument: bridge.readDocument, readLinks: bridge.readLinks, syncStatus: bridge.syncStatus, syncDiff: bridge.syncDiff, listSyncConflicts: bridge.listSyncConflicts }
     : undefined;
   return <WorkspaceShell mobile={mobile} collapsed={collapsed} focused={false}>
     {!mobile && <aside className="sidebar shrink-0 overflow-hidden border-0 p-0 group-data-[collapsed=true]/shell:p-0">

@@ -1,3 +1,5 @@
+import type { NotebookMode } from "./notebook-state";
+
 export interface NotebookScope { actor: string; space: string; source: string }
 export interface NotebookPreferences {
   splitRatio: number;
@@ -8,11 +10,12 @@ export interface NotebookPreferences {
   readingWidth: "narrow" | "standard" | "wide";
   fontSize: number;
   motion: "system" | "reduced";
+  modeByNote: Record<string, NotebookMode>;
 }
 type PreferenceStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 export const defaultNotebookPreferences = (): NotebookPreferences => ({
   splitRatio: 0.5, leftOpen: true, rightOpen: true, leftWidth: 208, rightWidth: 224,
-  readingWidth: "standard", fontSize: 16, motion: "system",
+  readingWidth: "standard", fontSize: 16, motion: "system", modeByNote: {},
 });
 
 export function notebookPreferenceKey(scope: NotebookScope): string | undefined {
@@ -30,6 +33,8 @@ function sanitize(value: unknown): NotebookPreferences {
     const n = input[key];
     return typeof n === "number" && Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : defaults[key] as number;
   };
+  const modes = input.modeByNote && typeof input.modeByNote === "object" && !Array.isArray(input.modeByNote) ? input.modeByNote as Record<string, unknown> : {};
+  const modeByNote = Object.fromEntries(Object.entries(modes).filter(([, mode]) => mode === "reading" || mode === "live" || mode === "source").slice(-50)) as Record<string, NotebookMode>;
   return {
     splitRatio: number("splitRatio", 0.25, 0.75),
     leftWidth: number("leftWidth", 180, 360),
@@ -39,6 +44,7 @@ function sanitize(value: unknown): NotebookPreferences {
     rightOpen: typeof input.rightOpen === "boolean" ? input.rightOpen : defaults.rightOpen,
     readingWidth: input.readingWidth === "narrow" || input.readingWidth === "wide" ? input.readingWidth : "standard",
     motion: input.motion === "reduced" ? "reduced" : "system",
+    modeByNote,
   };
 }
 
