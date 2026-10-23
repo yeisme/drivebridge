@@ -252,7 +252,7 @@ func (s *Service) LookupNotebookPage(ctx context.Context, p Principal, id, key s
 	return out, err
 }
 
-func notebookIdentity(p Principal, space, key, date string) (string, error) {
+func notebookIdentity(p Principal, space, key, date, directory string) (string, error) {
 	if e := collectionChangeKey(key); e != nil {
 		return "", e
 	}
@@ -262,6 +262,9 @@ func notebookIdentity(p Principal, space, key, date string) (string, error) {
 			return "", code("invalid_request")
 		}
 		key = "daily:" + date
+		if directory != "" {
+			key += ":" + directory
+		}
 	} else {
 		key = "request:" + key
 	}
@@ -304,7 +307,11 @@ func (s *Service) notebookCreationView(ctx context.Context, p Principal, row Not
 }
 
 func (s *Service) LookupNotebookCreation(ctx context.Context, p Principal, space string, q contract.NotebookCreateLookup) (contract.NotebookCreation, error) {
-	identity, e := notebookIdentity(p, space, q.IdempotencyKey, q.DailyDate)
+	directory, e := notebookDirectoryPath(q.DirectoryPath)
+	if e != nil {
+		return contract.NotebookCreation{}, e
+	}
+	identity, e := notebookIdentity(p, space, q.IdempotencyKey, q.DailyDate, directory)
 	if e != nil {
 		return contract.NotebookCreation{}, e
 	}
@@ -325,7 +332,11 @@ func (s *Service) LookupNotebookCreation(ctx context.Context, p Principal, space
 // Resume accepts only an existing identity. It never invents another target or
 // accepts replacement content after an unknown publication result.
 func (s *Service) ResumeNotebookCreation(ctx context.Context, p Principal, space string, q contract.NotebookCreateLookup) (contract.NotebookCreation, error) {
-	identity, e := notebookIdentity(p, space, q.IdempotencyKey, q.DailyDate)
+	directory, e := notebookDirectoryPath(q.DirectoryPath)
+	if e != nil {
+		return contract.NotebookCreation{}, e
+	}
+	identity, e := notebookIdentity(p, space, q.IdempotencyKey, q.DailyDate, directory)
 	if e != nil {
 		return contract.NotebookCreation{}, e
 	}
@@ -336,7 +347,31 @@ func (s *Service) ResumeNotebookCreation(ctx context.Context, p Principal, space
 	if e = s.DB.WithContext(ctx).Where("identity = ? AND owner = ? AND tenant_id = ? AND space_id = ?", identity, p.UserID, p.TenantID, space).First(&row).Error; e != nil {
 		return contract.NotebookCreation{}, resourceReadError(e)
 	}
-	return s.CreateNotebookPage(ctx, p, space, contract.NotebookCreate{SpaceID: space, Title: row.Title, ParentFileID: row.ParentFileID, Icon: row.Icon, DailyDate: q.DailyDate}, q.IdempotencyKey)
+	return s.CreateNotebookPage(ctx, p, space, contract.NotebookCreate{SpaceID: space, Title: row.Title, DirectoryPath: row.DirectoryPath, ParentFileID: row.ParentFileID, Icon: row.Icon, DailyDate: q.DailyDate}, q.IdempotencyKey)
+}
+
+func notebookDirectoryPath(value string) (string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", nil
+	}
+	return cleanPath(value)
+}
+
+func notebookPhysicalTitle(value string) (string, error) {
+	if strings.ContainsAny(value, "/\\") {
+		return "", code("invalid_request")
+	}
+	for _, suffix := range []string{".markdown", ".md"} {
+		if len(value) > len(suffix) && strings.EqualFold(value[len(value)-len(suffix):], suffix) {
+			value = strings.TrimSpace(value[:len(value)-len(suffix)])
+			break
+		}
+	}
+	if value == "" {
+		return "", code("invalid_request")
+	}
+	return value, nil
 }
 
 func (s *Service) CreateNotebookPage(ctx context.Context, p Principal, space string, q contract.NotebookCreate, key string) (contract.NotebookCreation, error) {
@@ -345,7 +380,12 @@ func (s *Service) CreateNotebookPage(ctx context.Context, p Principal, space str
 		return empty, code("invalid_request")
 	}
 	q.SpaceID = space
-	identity, e := notebookIdentity(p, space, key, q.DailyDate)
+	directory, e := notebookDirectoryPath(q.DirectoryPath)
+	if e != nil {
+		return empty, e
+	}
+	q.DirectoryPath = directory
+	identity, e := notebookIdentity(p, space, key, q.DailyDate, directory)
 	if e != nil {
 		return empty, e
 	}
@@ -360,6 +400,12 @@ func (s *Service) CreateNotebookPage(ctx context.Context, p Principal, space str
 		q.Icon = "calendar"
 	}
 	q.Title = strings.TrimSpace(q.Title)
+	if directory != "" {
+		q.Title, e = notebookPhysicalTitle(q.Title)
+		if e != nil {
+			return empty, e
+		}
+	}
 	if !notebookIcon(q.Icon) || !utf8.ValidString(q.Title) || utf8.RuneCountInString(q.Title) < 1 || utf8.RuneCountInString(q.Title) > 120 {
 		return empty, code("invalid_request")
 	}
@@ -378,15 +424,33 @@ func (s *Service) CreateNotebookPage(ctx context.Context, p Principal, space str
 		if e := s.notebookParentOn(tx, p, space, "", q.ParentFileID); e != nil {
 			return e
 		}
+		var existing NotebookCreationIntent
+		lookupErr := tx.Where("identity = ? AND owner = ? AND tenant_id = ? AND space_id = ?", identity, p.UserID, p.TenantID, space).First(&existing).Error
+		if lookupErr == nil {
+			if existing.Digest != digest {
+				return code("idempotency_conflict")
+			}
+			row = existing
+			return nil
+		}
+		if !errors.Is(lookupErr, gorm.ErrRecordNotFound) {
+			return code("database_unavailable")
+		}
 		id := ID()
 		target := "笔记/" + id + ".md"
 		if q.DailyDate != "" {
 			target = "日记/" + q.DailyDate + ".md"
 		}
+		if directory != "" {
+			target = path.Join(directory, q.Title+".md")
+		}
 		if e := s.allowOn(tx, p, space, target, "write"); e != nil {
 			return e
 		}
-		candidate := NotebookCreationIntent{ID: id, Identity: identity, Owner: p.UserID, TenantID: p.TenantID, SpaceID: space, Digest: digest, Title: q.Title, Path: target, ParentFileID: q.ParentFileID, Icon: q.Icon, CreatedAt: time.Now().UTC()}
+		if e := pathAvailable(tx, p.dataOwner(), space, target, ""); e != nil {
+			return e
+		}
+		candidate := NotebookCreationIntent{ID: id, Identity: identity, Owner: p.UserID, TenantID: p.TenantID, SpaceID: space, Digest: digest, Title: q.Title, DirectoryPath: directory, Path: target, ParentFileID: q.ParentFileID, Icon: q.Icon, CreatedAt: time.Now().UTC()}
 		if e := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&candidate).Error; e != nil {
 			return code("database_unavailable")
 		}

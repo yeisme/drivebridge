@@ -22,15 +22,17 @@ type NotebookPageReceipt struct {
 }
 
 type NotebookCreate struct {
-	SpaceID      string `json:"space_id" jsonschema:"minLength=1"`
-	Title        string `json:"title" jsonschema:"maxLength=120"`
-	ParentFileID string `json:"parent_file_id"`
-	Icon         string `json:"icon" jsonschema:"enum=file,enum=book,enum=calendar,enum=idea,enum=project"`
-	DailyDate    string `json:"daily_date"`
+	SpaceID       string `json:"space_id" jsonschema:"minLength=1"`
+	Title         string `json:"title" jsonschema:"maxLength=120"`
+	DirectoryPath string `json:"directory_path"`
+	ParentFileID  string `json:"parent_file_id"`
+	Icon          string `json:"icon" jsonschema:"enum=file,enum=book,enum=calendar,enum=idea,enum=project"`
+	DailyDate     string `json:"daily_date"`
 }
 
 type NotebookCreateLookup struct {
 	IdempotencyKey string `json:"idempotency_key"`
+	DirectoryPath  string `json:"directory_path"`
 	DailyDate      string `json:"daily_date"`
 }
 

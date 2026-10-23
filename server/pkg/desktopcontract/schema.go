@@ -25,6 +25,8 @@ func Schemas() map[string]*jsonschema.Schema {
 		"SourcePage": r.Reflect(SourcePage{}), "ReadingStatePage": r.Reflect(ReadingStatePage{}),
 	}
 	schemas["EmptyRequest"] = r.Reflect(EmptyRequest{})
+	schemas["DesktopSyncConflictResolveInput"] = r.Reflect(DesktopSyncConflictResolveInput{})
+	schemas["DesktopEditorDraftInput"] = r.Reflect(DesktopEditorDraftInput{})
 	schemas["ExportSourceInput"] = r.Reflect(ExportSourceInput{})
 	schemas["ReadingMutationResult"] = lookupSchema(r.Reflect(ReadingMutationResult{}), "state")
 	schemas["DesktopCapabilities"] = r.Reflect(DesktopCapabilities{})
@@ -67,6 +69,8 @@ func Fixtures() map[string]any {
 		"ReadingStatePage": ReadingStatePage{Items: []ReadingState{state}, ObservedAt: now},
 	}
 	fixtures["EmptyRequest"] = EmptyRequest{}
+	fixtures["DesktopSyncConflictResolveInput"] = DesktopSyncConflictResolveInput{File: "notes/example.md", KeepLocal: true, Yes: true}
+	fixtures["DesktopEditorDraftInput"] = DesktopEditorDraftInput{ObjectID: "note-fixture", Revision: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Body: "draft"}
 	fixtures["ExportSourceInput"] = ExportSourceInput{TargetRef: pinax}
 	fixtures["ReadingMutationResult"] = ReadingMutationResult{}
 	fixtures["DesktopCapabilities"] = DesktopCapabilities{SchemaVersion: Version, Available: []string{}}

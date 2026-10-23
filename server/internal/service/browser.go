@@ -27,37 +27,8 @@ type BrowserEntry struct {
 
 func (s *Service) browserRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/browser", s.wrap("browser.list", s.browseDirectory))
-	mux.HandleFunc("POST /api/v1/directories", s.wrap("directories.create", func(w http.ResponseWriter, r *http.Request, p Principal) error {
-		var q Directory
-		if err := decode(r, &q); err != nil {
-			return err
-		}
-		if _, err := cleanPath(q.Path); err != nil {
-			return err
-		}
-		if _, err := s.space(p, q.SpaceID); err != nil {
-			return err
-		}
-		if err := s.allow(p, q.SpaceID, q.Path, "write"); err != nil {
-			return err
-		}
-		s.mu.Lock()
-		defer s.mu.Unlock()
-		if err := pathAvailable(s.DB, p.dataOwner(), q.SpaceID, q.Path, ""); err != nil {
-			return err
-		}
-		q.ID, q.Owner = ID(), p.dataOwner()
-		if err := s.DB.Transaction(func(tx *gorm.DB) error {
-			if e := teamWritable(tx, q.SpaceID); e != nil {
-				return e
-			}
-			return tx.Create(&q).Error
-		}); err != nil {
-			return code("name_conflict")
-		}
-		respond(w, q)
-		return nil
-	}))
+	mux.HandleFunc("POST /api/v1/directories", s.wrap("directories.create", s.createDirectoryHTTP))
+	mux.HandleFunc("POST /api/v1/directories/lookup", s.wrapObserved("directories.create_lookup", s.lookupDirectoryHTTP, false))
 	mux.HandleFunc("POST /api/v1/directories/copy", s.wrap("directories.copy", func(w http.ResponseWriter, r *http.Request, p Principal) error {
 		var q DirectoryCopyRequest
 		if err := decode(r, &q); err != nil {

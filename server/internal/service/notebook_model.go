@@ -18,15 +18,16 @@ type NotebookPageMetadata struct {
 // Durable intent links the existing upload operation to its metadata. No
 // credentials or document body are duplicated in this journal.
 type NotebookCreationIntent struct {
-	ID           string `gorm:"primaryKey"`
-	Identity     string `gorm:"not null;uniqueIndex"`
-	Owner        string
-	TenantID     string
-	SpaceID      string
-	Digest       string
-	Title        string
-	Path         string
-	ParentFileID string
-	Icon         string
-	CreatedAt    time.Time
+	ID            string `gorm:"primaryKey"`
+	Identity      string `gorm:"not null;uniqueIndex"`
+	Owner         string
+	TenantID      string
+	SpaceID       string
+	Digest        string
+	Title         string
+	DirectoryPath string
+	Path          string
+	ParentFileID  string
+	Icon          string
+	CreatedAt     time.Time
 }

@@ -33,6 +33,15 @@ func IPCMethods() []IPCMethod {
 		{Name: "listTags", HTTPMethod: "GET", Path: "/v1/desktop/sources/{source_id}/tags", TargetField: "source_id", RequestSchema: "pinax.reader.tags.request.v1alpha1", ResponseSchema: "pinax.reader.tags.v1alpha1"},
 		{Name: "readGraph", HTTPMethod: "GET", Path: "/v1/desktop/sources/{source_id}/graph", TargetField: "source_id", RequestSchema: "pinax.reader.graph.request.v1alpha1", ResponseSchema: "pinax.reader.graph.v1alpha1"},
 		{Name: "findDaily", HTTPMethod: "GET", Path: "/v1/desktop/sources/{source_id}/journals/daily", TargetField: "source_id", RequestSchema: "pinax.reader.daily.request.v1alpha1", ResponseSchema: "pinax.reader.daily.v1alpha1"},
+		{Name: "readEditorSource", HTTPMethod: "GET", Path: "/v1/desktop/sources/{source_id}/writer/editor-source", TargetField: "source_id", RequestSchema: "pinax.writer.editor_source.request.v1alpha1", ResponseSchema: "pinax.writer.editor_source.v1alpha1"},
+		{Name: "proposeEditorDraft", HTTPMethod: "POST", Path: "/v1/desktop/sources/{source_id}/writer/editor:propose", TargetField: "source_id", RequestSchema: "DesktopEditorDraftInput", ResponseSchema: "pinax.projection.v1"},
+		{Name: "syncStatus", HTTPMethod: "GET", Path: "/v1/desktop/sources/{source_id}/sync/status", TargetField: "source_id", RequestSchema: "pinax.sync.status.request.v1", ResponseSchema: "pinax.projection.v1"},
+		{Name: "syncDiff", HTTPMethod: "POST", Path: "/v1/desktop/sources/{source_id}/sync:diff", TargetField: "source_id", RequestSchema: "pinax.sync.diff.request.v1", ResponseSchema: "pinax.projection.v1"},
+		{Name: "syncPush", HTTPMethod: "POST", Path: "/v1/desktop/sources/{source_id}/sync:push", TargetField: "source_id", RequestSchema: "pinax.sync.push.request.v1", ResponseSchema: "pinax.projection.v1", Idempotent: true},
+		{Name: "syncPull", HTTPMethod: "POST", Path: "/v1/desktop/sources/{source_id}/sync:pull", TargetField: "source_id", RequestSchema: "pinax.sync.pull.request.v1", ResponseSchema: "pinax.projection.v1", Idempotent: true},
+		{Name: "listSyncConflicts", HTTPMethod: "GET", Path: "/v1/desktop/sources/{source_id}/sync/conflicts", TargetField: "source_id", RequestSchema: "pinax.sync.conflicts.list.request.v1", ResponseSchema: "pinax.projection.v1"},
+		{Name: "diffSyncConflict", HTTPMethod: "GET", Path: "/v1/desktop/sources/{source_id}/sync/conflicts:diff", TargetField: "source_id", RequestSchema: "pinax.sync.conflicts.diff.request.v1", ResponseSchema: "pinax.projection.v1"},
+		{Name: "resolveSyncConflict", HTTPMethod: "POST", Path: "/v1/desktop/sources/{source_id}/sync/conflicts:resolve", TargetField: "source_id", RequestSchema: "DesktopSyncConflictResolveInput", ResponseSchema: "pinax.projection.v1", Idempotent: true},
 		{Name: "listReadingState", HTTPMethod: "GET", Path: "/v1/desktop/reading-state", RequestSchema: "PageQuery", ResponseSchema: "ReadingStatePage"},
 		{Name: "updateReadingState", HTTPMethod: "PUT", Path: "/v1/desktop/reading-state", RequestSchema: "UpdateReadingState", ResponseSchema: "ReadingState", Idempotent: true},
 		{Name: "lookupReadingMutation", HTTPMethod: "POST", Path: "/v1/desktop/reading-state/lookup", RequestSchema: "LookupReadingMutation", ResponseSchema: "ReadingMutationResult"},
@@ -50,6 +59,26 @@ func IPCMethods() []IPCMethod {
 }
 
 type EmptyRequest struct{}
+
+// DesktopSyncConflictResolveInput deliberately excludes Pinax's merged_path.
+// A renderer may choose only owner-defined conflict outcomes; a host-side
+// bounded input contract can be added later when merge content has its own
+// proposal and ticket semantics.
+type DesktopSyncConflictResolveInput struct {
+	File       string `json:"file" jsonschema:"minLength=1,maxLength=1024"`
+	KeepLocal  bool   `json:"keep_local"`
+	KeepRemote bool   `json:"keep_remote"`
+	Yes        bool   `json:"yes"`
+}
+
+// DesktopEditorDraftInput is the renderer-safe subset of a writer proposal.
+// The host derives the owner change, fixed note reference and approval context;
+// renderer code never supplies a vault path, bearer or operation identity.
+type DesktopEditorDraftInput struct {
+	ObjectID string `json:"object_id" jsonschema:"minLength=1,maxLength=256"`
+	Revision string `json:"revision" jsonschema:"pattern=^sha256:[a-f0-9]{64}$"`
+	Body     string `json:"body" jsonschema:"maxLength=65536"`
+}
 
 // ExportSourceInput is renderer-safe; main alone supplies native selection and
 // destination revision after the user completes the OS dialog.

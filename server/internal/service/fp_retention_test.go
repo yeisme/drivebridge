@@ -32,17 +32,20 @@ func TestFPRetentionGuardsIdentity(t *testing.T) {
 	h, _ := login(t, f, "alice")
 	_, c := agent(t, h, "", "read,write")
 	op := fpUploadBytes(t, c, h.space.ID, "held.txt", "hold-src", []byte("held-bytes"))
-	first := fpHold(t, c, op.FileID, op.VersionID, "fixed_delivery", op.ID, time.Now().Add(time.Hour).UTC().Format(time.RFC3339), "hold-key")
+	// The expiry is part of the idempotency fingerprint; a lost-response
+	// replay must reuse the original request rather than recompute a new time.
+	expires := time.Now().Add(time.Hour).UTC().Format(time.RFC3339)
+	first := fpHold(t, c, op.FileID, op.VersionID, "fixed_delivery", op.ID, expires, "hold-key")
 	if first.HoldID == "" || first.Revision != 1 || first.State != "active" {
 		t.Fatalf("hold creation wrong: %+v", first)
 	}
 	// Lost creation response: replay returns the same hold.
-	replay := fpHold(t, c, op.FileID, op.VersionID, "fixed_delivery", op.ID, time.Now().Add(time.Hour).UTC().Format(time.RFC3339), "hold-key")
+	replay := fpHold(t, c, op.FileID, op.VersionID, "fixed_delivery", op.ID, expires, "hold-key")
 	if replay.HoldID != first.HoldID || replay.Revision != first.Revision {
 		t.Fatalf("replay created a second hold: %+v vs %+v", replay, first)
 	}
 	// Same key, different business fingerprint.
-	if _, e := c.CreateRetentionHold(context.Background(), sdk.RetentionHoldRequest{FileID: op.FileID, VersionID: op.VersionID, Purpose: "legal_hold", SourceRef: op.ID, ExpiresAt: time.Now().Add(time.Hour).UTC().Format(time.RFC3339)}, "hold-key"); e == nil || e.Error() != "idempotency_conflict" {
+	if _, e := c.CreateRetentionHold(context.Background(), sdk.RetentionHoldRequest{FileID: op.FileID, VersionID: op.VersionID, Purpose: "legal_hold", SourceRef: op.ID, ExpiresAt: expires}, "hold-key"); e == nil || e.Error() != "idempotency_conflict" {
 		t.Fatalf("fingerprint drift must be idempotency_conflict, got %v", e)
 	}
 	// Unknown purposes and foreign sources are refused up front.

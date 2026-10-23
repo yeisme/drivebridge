@@ -134,6 +134,8 @@ func RequestSchemas() map[string]*jsonschema.Schema {
 		"CreateGrantRequest":             create,
 		"PatchGrantRequest":              patch,
 		"PatchOrganizationRequest":       organization,
+		"DirectoryCreate":                r.Reflect(DirectoryCreate{}),
+		"DirectoryCreateLookup":          r.Reflect(DirectoryCreateLookup{}),
 		"NotebookCreate":                 r.Reflect(NotebookCreate{}),
 		"NotebookCreateLookup":           r.Reflect(NotebookCreateLookup{}),
 		"NotebookPagePatch":              r.Reflect(NotebookPagePatch{}),
