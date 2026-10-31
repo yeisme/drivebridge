@@ -9,7 +9,18 @@ func (s *Service) CreateAgentOperator(space, name, prefix, scopes, connection st
 	if s.DB.First(&sp, "id = ?", space).Error != nil {
 		return Agent{}, "", code("not_found")
 	}
-	return s.createAgent(Principal{UserID: sp.Owner}, name, space, prefix, scopes, connection, days)
+	p := Principal{UserID: sp.Owner}
+	// Under governance a space belongs to a data owner, which is a user's own id only for accounts that existed at
+	// bootstrap. Issue as the user whose active membership in the space's tenant holds that data owner: the same
+	// principal bindContext builds for that user's own requests, and the owner the agent token authenticates as.
+	if s.governanceActive() {
+		var m Membership
+		if s.DB.First(&m, "tenant_id = ? AND data_owner = ? AND status = ?", s.spaceTenant(sp), sp.Owner, "active").Error != nil {
+			return Agent{}, "", code("forbidden")
+		}
+		p = Principal{UserID: m.UserID, TenantID: m.TenantID, DataOwner: m.DataOwner}
+	}
+	return s.createAgent(p, name, space, prefix, scopes, connection, days)
 }
 
 // ListAgents reports every agent's lifecycle metadata; hashes never leave
