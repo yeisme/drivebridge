@@ -7,6 +7,7 @@ test("compact Finder and insights fit content widths in both themes", async ({pa
   await page.goto("/");
   await page.getByRole("link", {name:"使用账号登录"}).click();
   await page.getByRole("link", {name:"以 Alice 登录"}).click();
+  await page.goto("/#/drives");
   await expect(page.getByRole("button",{name:/^打开网盘 /}).first()).toBeVisible();
   await page.getByRole("button", {name:/^打开网盘 /}).first().click();
   const drive = new URL(page.url()).hash;
@@ -72,10 +73,11 @@ test("touch Finder controls retain 44px targets without page overflow", async ({
     await page.goto(`http://127.0.0.1:${process.env.DRIVEBRIDGE_TEST_PORT||31878}/`);
     await page.getByRole("link",{name:"使用账号登录"}).click();
     await page.getByRole("link",{name:"以 Alice 登录"}).click();
-    await page.getByRole("button",{name:/^打开网盘 /}).first().click();
+    await expect(page.locator(".finder")).toBeVisible();
     for(const width of [390,957]) {
       await page.setViewportSize({width,height:963});
-      const controls=await page.locator('.finder-actions button:visible, .finder-toolbar button:visible, .finder-toolbar a:visible').evaluateAll(nodes=>nodes.map(el=>({label:el.getAttribute("aria-label")||el.textContent,height:el.getBoundingClientRect().height,width:el.getBoundingClientRect().width})));
+      await expect(page.locator(".finder")).toBeVisible();
+      const controls=await page.locator('.finder-actions button:visible, .finder-toolbar button:visible, .finder-toolbar a:visible').evaluateAll(nodes=>nodes.map(el=>({label:el.getAttribute("aria-label")||el.textContent,height:el.getBoundingClientRect().height,width:el.getBoundingClientRect().width})).filter(c=>c.height>0&&c.width>0));
       for(const control of controls) {
         expect(control.height,control.label||"").toBeGreaterThanOrEqual(44);
         expect(control.width,control.label||"").toBeGreaterThanOrEqual(44);

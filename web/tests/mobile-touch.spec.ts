@@ -12,7 +12,7 @@ test("touch navigation switches pages and closes the full menu after selection",
     await page.getByRole("button", { name: "登录", exact: true }).tap();
     const nav = page.getByRole("navigation", { name: "手机主导航" });
     await expect(nav).toBeVisible();
-    for (const [label, route] of [["我的", "settings"], ["Agent", "agents"], ["任务", "tasks"], ["文件", "files"], ["首页", "home"]]) {
+    for (const [label, route] of [["我的", "settings"], ["AI 投递", "inbox"], ["文件", "files"], ["最近", "home"]]) {
       const button = nav.getByRole("button", { name: label, exact: true });
       await button.tap();
       await expect(button).toHaveAttribute("aria-current", "page");

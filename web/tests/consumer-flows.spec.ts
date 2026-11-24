@@ -87,13 +87,13 @@ function mockTypedSurfaces(page: Page, ids: { spaceId: string; fileId: string; v
       }),
     });
   });
-  void page.route("**/api/v1/file-collections", async (route) => {
+  void page.route("**/api/v1/file-collections?*", async (route) => {
     if (route.request().method() === "POST")
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ data: { collection_id: "coll-fx-1", revision: 1 } }) });
-    else await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ data: [] }) });
+    else await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ data: new URL(route.request().url()).searchParams.get("space_id") === ids.spaceId ? [{ collection_id: "coll-fx-1", space_id: ids.spaceId, name: "Fixed consumer collection" }] : [] }) });
   });
   void page.route("**/api/v1/file-collections/coll-fx-1/snapshots", async (route) => {
-    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ data: { snapshot_id: "snap-fx-1", item_count: 1 } }) });
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ data: { collection_id: "coll-fx-1", observed_at: "2026-11-03T00:00:00Z", items: [{ snapshot_id: "a".repeat(48), collection_revision: 1, created_at: "2026-11-03T00:00:00Z" }] } }) });
   });
   void page.route("**/api/v1/organization-plans**", async (route) => {
     const executing = new URL(route.request().url()).pathname.endsWith("/execute");
@@ -109,7 +109,7 @@ function mockTypedSurfaces(page: Page, ids: { spaceId: string; fileId: string; v
         data: {
           plan_id: "plan-fx-1",
           revision: confirming ? 2 : 1,
-          phase: confirming ? "authorized" : "previewed",
+          phase: confirming ? "confirmed" : "planned",
           risk: "policy_scoped",
           approval_required: false,
           policy_revision: 4,
@@ -127,7 +127,7 @@ function mockTypedSurfaces(page: Page, ids: { spaceId: string; fileId: string; v
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({ data: [{ id: ids.shareId, name: "固定交付一批", mode: "fixed", audience: "user", path: "/", expires_at: "", revoked: false, allow_download: true }] }),
+        body: JSON.stringify({ data: [{ id: ids.shareId, revision: 1, name: "固定交付一批", mode: "fixed", audience: "user", path: "/", expires_at: "", revoked: false, allow_download: true }] }),
       });
   });
   void page.route("**/api/v1/shares/*/delivery-manifests**", async (route) => {
@@ -183,12 +183,10 @@ function mockTypedSurfaces(page: Page, ids: { spaceId: string; fileId: string; v
 test("every center degrades honestly on a deployment without the typed surfaces", async ({ page }) => {
   await login(page);
   // Simulate a legacy deployment at the network layer: the frozen contract
-  // had unimplemented actions answer 400 invalid_request on the lookup
-  // probe, which closes the capability gate honestly. The current backend
-  // implements every action (lookup answers found:false), so the legacy
-  // shape must be mocked rather than relied upon.
+  // reports an explicit unsupported action on the read-only lookup probe.
+  // A malformed request is a contract error and must not imply absence.
   await page.route("**/api/v1/operations/lookup", async (route) => {
-    await route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ error: { code: "invalid_request" } }) });
+    await route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ error: { code: "unsupported_action" } }) });
   });
   await page.goto("#/flows");
   // Centers whose contract actions this deployment does not accept state the
@@ -252,8 +250,8 @@ test("upload recovery to cloud query to organize preview to fixed delivery to ve
   // fresh preview and never auto-reconfirms.
   await page.getByRole("tab", { name: "整理中心" }).click();
   await page.getByLabel("目录前缀").fill("docs/");
-  await page.getByRole("button", { name: "物化快照" }).click();
-  await expect(page.getByText(/快照已固定/)).toBeVisible();
+  await page.getByRole("button", { name: "固定所选文件" }).click();
+  await expect(page.getByText(/已固定 1 个文件版本/)).toBeVisible();
   // The policy read runs against the REAL backend: a fresh space has no
   // policy, which must surface as first-use guidance, not an error banner
   // (drift D8).
@@ -265,7 +263,10 @@ test("upload recovery to cloud query to organize preview to fixed delivery to ve
 
   // 固定交付：缺项 disables publishing with the recovery entry.
   await page.getByRole("tab", { name: "交付与讨论" }).click();
-  await selectChoice(page.getByLabel("选择分享"), { label: "固定交付一批" });
+  await page.getByRole("button", { name: "读取分享与集合来源" }).click();
+  await selectChoice(page.getByLabel("选择分享"), ids.shareId);
+  await selectChoice(page.getByLabel("交付来源集合"), "coll-fx-1");
+  await selectChoice(page.getByLabel("交付固定快照"), "a".repeat(48));
   await page.getByRole("button", { name: "准备清单" }).click();
   await expect(page.getByText(/交付缺 1 项/)).toBeVisible();
   await expect(page.getByRole("button", { name: "发布完整清单" })).toBeDisabled();

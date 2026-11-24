@@ -21,7 +21,7 @@ test('real upload advances head while history recovers original sidecar receipt 
     return { space: space.id as string, file: result.file_id as string, version: result.version_id as string };
   });
   await page.reload(); await page.getByRole('button', { name: '打开网盘 Property history fixture', exact: true }).click();
-  await page.getByRole('button', { name: '详情 history.png', exact: true }).click(); await page.getByRole('button', { name: '查看文件属性', exact: true }).click();
+  await page.getByRole('button', { name: '详情 history.png', exact: true }).click(); await page.getByRole('complementary', { name: '预览文件列表与信息' }).getByRole('button', { name: '信息', exact: true }).click(); await page.getByRole('button', { name: '查看文件属性', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: '固定版本文件属性', exact: true });
   await dialog.getByRole('button', { name: '读取固定版本属性' }).click(); await dialog.getByRole('button', { name: '说明 设置值' }).click(); await dialog.getByRole('textbox', { name: '说明 新值' }).fill('Only the original version');
   const path = '/api/v1/files/' + original.file + '/properties'; let writes = 0, key = '';
@@ -46,7 +46,7 @@ test('real upload advances head while history recovers original sidecar receipt 
   expect(newer.status).toBe('completed'); expect(newer.file_id).toBe(original.file); expect(newer.version_id).not.toBe(original.version);
   const current = (await (await page.request.get('/api/v1/files?space_id=' + original.space)).json()).data.find((row: { id: string }) => row.id === original.file); expect(current.version_id).toBe(newer.version_id);
   await page.reload(); await page.getByRole('button', { name: '详情 history.png', exact: true }).click();
-  await page.getByRole('button', { name: '查看文件属性', exact: true }).click(); await dialog.getByRole('button', { name: '读取固定版本属性' }).click(); await expect(dialog.getByText('caption · 当前值：未设置', { exact: true })).toBeVisible(); await dialog.getByRole('button', { name: '关闭', exact: true }).click();
+  await page.getByRole('complementary', { name: '预览文件列表与信息' }).getByRole('button', { name: '信息', exact: true }).click(); await page.getByRole('button', { name: '查看文件属性', exact: true }).click(); await dialog.getByRole('button', { name: '读取固定版本属性' }).click(); await expect(dialog.getByText('caption · 当前值：未设置', { exact: true })).toBeVisible(); await dialog.getByRole('button', { name: '关闭', exact: true }).click();
   await page.getByRole('button', { name: '版本记录（2）', exact: true }).click();
   const history = page.getByRole('button', { name: '查看历史属性与回执 ' + original.version, exact: true }); await history.click();
   await expect(dialog.getByRole('button', { name: '查询原属性回执' })).toBeVisible(); await expect(dialog.getByRole('button', { name: '读取固定版本属性' })).toHaveCount(0);

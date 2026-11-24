@@ -9,8 +9,8 @@ const routes = ['overview', 'files', 'knowledge', 'resources', 'collections', 'p
 const stableText: Record<string, string> = {
   overview: '当前观察没有可展示的最近文件。',
   knowledge: '当前来源没有可阅读的 Markdown 文件。',
-  resources: '当前范围与筛选下没有可见资源描述；原文件和集合不会自动变成已登记资源。',
-  collections: '当前授权空间没有集合。',
+  resources: '还没有登记资源',
+  collections: '当前授权空间没有集合。使用上方入口创建集合，原文件仍保留在原目录。',
   properties: '当前空间尚无属性定义。',
   search: '输入检索条件后开始查询，尚未读取搜索结果。',
   agents: '当前视图暂无 Agent',
@@ -44,8 +44,17 @@ test('capture the actual personal workspace route coverage without treating fall
   page.on('pageerror', error => errors.push(error.message));
   await page.goto('/');
   await page.getByRole('link', { name: '使用账号登录' }).click();
-  await page.getByRole('link', { name: '以 Alice 登录' }).click();
+  // A new fixture OIDC subject keeps empty-state acceptance independent of other specs.
+  const approval = new URL((await page.getByRole('link', { name: '以 Alice 登录' }).getAttribute('href'))!, page.url());
+  approval.searchParams.set('user', 'visual-' + crypto.randomUUID());
+  await page.goto(approval.href);
   await expect(page.getByRole('heading', { name: '我的网盘', exact: true })).toBeVisible();
+  await page.evaluate(async () => {
+    const me = (await (await fetch('/api/v1/me')).json()).data;
+    const response = await fetch('/api/v1/spaces', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': me.csrf_token }, body: JSON.stringify({ name: 'Visual baseline', connection_id: 'platform' }) });
+    if (!response.ok) throw new Error('visual_space_failed');
+  });
+  await page.reload();
   for (const theme of (full ? ['light', 'dark'] : ['light']) as ('light' | 'dark')[]) {
   await page.emulateMedia({ colorScheme: theme, reducedMotion: 'reduce' });
   for (const width of full ? [320, 390, 768, 1280, 1440, 1920] : [1440, 390]) {

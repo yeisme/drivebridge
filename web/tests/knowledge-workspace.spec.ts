@@ -84,6 +84,9 @@ test("knowledge route lists actual uploaded Markdown and opens the same fixed ve
   const otherNotebook = other.getByLabel("笔记工作台", { exact: true });
   await otherNotebook.getByRole("button", { name: "快速打开", exact: true }).click();
   await other.getByRole("dialog", { name: "快速打开", exact: true }).getByRole("button", { name: "knowledge.md", exact: true }).click();
+  // Display mode is an intentional shared preference; select reading explicitly
+  // before asserting rendered content in the second tab.
+  await otherNotebook.getByRole("button", { name: "阅读", exact: true }).click();
   await expect(otherNotebook.getByRole("heading", { name: "保存后的知识库" })).toBeVisible();
   await otherNotebook.getByRole("button", { name: "源码", exact: true }).click();
   await otherNotebook.getByRole("textbox", { name: "Markdown 源码" }).fill("# 另一个标签页的已保存版本");

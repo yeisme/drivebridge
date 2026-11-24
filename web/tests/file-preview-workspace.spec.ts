@@ -4,8 +4,7 @@ async function openWorkspace(page: Page) {
   await page.goto('/');
   await page.getByRole('link', { name: '使用账号登录' }).click();
   await page.getByRole('link', { name: '以 Alice 登录' }).click();
-  await expect(page.getByRole('heading', { name: '我的网盘', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: /^打开网盘 / }).first().click();
+  await expect(page.getByRole('region', { name: '文件浏览', exact: true })).toBeVisible();
 }
 
 async function upload(page: Page, name: string) {

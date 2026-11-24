@@ -29,6 +29,7 @@ test("green workspace separates drive selection, supports folding and key identi
     }
   });
   await page.reload();
+  await page.goto("/#/drives");
   await expect(
     page.getByRole("button", { name: "打开网盘 项目素材" }),
   ).toBeVisible();
@@ -37,6 +38,8 @@ test("green workspace separates drive selection, supports folding and key identi
     path: path.join(artifacts, "green-drive-home.png"),
   });
   await page.getByRole("button", { name: "打开网盘 项目素材" }).click();
+  await expect(page.getByRole("complementary", { name: "目录树" })).toHaveCount(0);
+  await page.getByRole("button", { name: "展开目录树" }).click();
   await expect(
     page.getByRole("complementary", { name: "目录树" }),
   ).toBeVisible();
@@ -44,22 +47,16 @@ test("green workspace separates drive selection, supports folding and key identi
   await expect(page.getByRole("complementary", { name: "目录树" })).toHaveCount(
     0,
   );
-  await page.getByRole("button", { name: "展开目录树" }).click();
   await page.getByRole("button", { name: "折叠侧边栏", exact: true }).click();
   await expect(page.locator(".app")).toHaveClass(/sidebar-collapsed/);
-  await expect(page.locator('.sidebar .nav-item[aria-label="资源态势"]')).toBeVisible();
   await page.screenshot({
     path: path.join(artifacts, "shell-collapsed-rail.png"),
   });
   await page.getByRole("button", { name: "展开侧边栏", exact: true }).click();
-  await page.getByRole("button", { name: "Agent", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Agent", exact: true })).toHaveAttribute(
-    "aria-expanded",
-    "false",
-  );
-  await expect(page.getByRole("button", { name: "Agent 管理", exact: true })).toBeHidden();
-  await page.getByRole("button", { name: "Agent", exact: true }).click();
+  await page.getByRole("button", { name: "更多空间功能", exact: true }).click();
   await expect(page.getByRole("button", { name: "Agent 管理", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "更多空间功能", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Agent 管理", exact: true })).toBeHidden();
   await page.goto("/#/analytics");
   await expect(page.getByRole("heading", { name: "资源态势", exact: true })).toBeVisible();
   await expect(page.getByRole("tab", { name: "容量", exact: true })).toHaveAttribute(
@@ -99,7 +96,7 @@ test("green workspace separates drive selection, supports folding and key identi
   await expect(
     page.getByRole("columnheader", { name: "所属团队" }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "我的网盘", exact: true }).click();
+  await page.goto("/#/drives");
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(
     page.getByRole("button", { name: "打开网盘 项目素材" }),

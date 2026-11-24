@@ -1,3 +1,4 @@
+import { loginFreshUser } from './helpers/identity';
 import { expect, test } from '@playwright/test';
 import path from 'node:path';
 
@@ -6,9 +7,7 @@ test('real task and submission lists preserve fixed identity with responsive rev
   test.setTimeout(150_000);
   const artifacts = process.env.DRIVEBRIDGE_EVIDENCE_ARTIFACTS!;
   expect(artifacts).toBeTruthy();
-  await page.goto('/');
-  await page.getByRole('link', { name: '使用账号登录' }).click();
-  await page.getByRole('link', { name: '以 Alice 登录' }).click();
+  await loginFreshUser(page, 'task-inbox');
   const fixture = await page.evaluate(async () => {
     const me = (await (await fetch('/api/v1/me')).json()).data;
     const human = { 'Content-Type': 'application/json', 'X-CSRF-Token': me.csrf_token };
@@ -106,10 +105,10 @@ test('real task and submission lists preserve fixed identity with responsive rev
       }
     }
   }
-  const touchContext = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, reducedMotion: 'no-preference', colorScheme: 'dark' });
+  const touchContext = await browser.newContext({ storageState: await page.context().storageState(), viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, reducedMotion: 'no-preference', colorScheme: 'dark' });
   try {
     const touch = await touchContext.newPage();
-    await touch.goto('/'); await touch.getByRole('link', { name: '使用账号登录' }).tap(); await touch.getByRole('link', { name: '以 Alice 登录' }).tap();
+    await touch.goto('/');
     await touch.getByRole('heading', { name: '我的网盘', exact: true }).waitFor();
     await touch.goto('/#/tasks');
     const trigger = touch.getByRole('button', { name: '查看原操作详情 ' + fixture.records[0].op, exact: true });

@@ -15,7 +15,7 @@ test("inbox deep link survives login and reload and is reachable in mobile navig
   await expect(page.getByRole("list", { name: "产物收件箱" })).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
   const tabs = page.getByRole("navigation", { name: "手机主导航" });
-  await expect(tabs.getByRole("button", { name: "任务", exact: true })).toHaveAttribute("aria-current", "page");
+  await expect(tabs.getByRole("button", { name: "AI 投递", exact: true })).toHaveAttribute("aria-current", "page");
   await tabs.getByRole("button", { name: "文件", exact: true }).click();
   await page.getByRole("button", { name: "打开全部导航" }).click();
   const dialog = page.getByRole("dialog", { name: "全部导航" });

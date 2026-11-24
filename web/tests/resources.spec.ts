@@ -22,11 +22,14 @@ test('official resources navigation reads real descriptors without installing or
     const descriptor = await write('/resource-descriptors', { space_id: space.id, file_ref: stat.ref, kind: 'template', display_name: name }, 'resource-ui-original');
     return { id: descriptor.descriptor_id as string, ref: descriptor.file_ref as string, name };
   });
+  await page.reload();
   const writes: string[] = [], bodies: string[] = [];
   page.on('request', request => { const path = new URL(request.url()).pathname; if (path.includes('/resource-descriptors') && request.method() !== 'GET') writes.push(path); if (path.endsWith('/content')) bodies.push(path); });
   await page.getByRole('navigation', { name: '工作区导航' }).getByRole('button', { name: '资源库', exact: true }).click();
   await expect(page).toHaveURL(/#\/resources$/);
   const resources = page.getByRole('region', { name: '资源库', exact: true });
+  await resources.getByRole('combobox', { name: '资源空间', exact: true }).click();
+  await page.getByRole('option', { name: 'Resource fixture', exact: true }).click();
   await expect(resources.getByRole('heading', { name: original.name, exact: true })).toBeVisible();
   await expect(resources.getByText('未检查', { exact: true })).toBeVisible();
   await resources.getByRole('button', { name: '资源大图网格', exact: true }).click();

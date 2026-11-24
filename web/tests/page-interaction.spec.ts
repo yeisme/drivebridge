@@ -12,7 +12,8 @@ test("other workspace pages expose next actions and filters", async ({ page }) =
   await expect(page.getByRole("button", { name: "去网盘上传", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "待处理产物", exact: true }).click();
   await expect(page.getByRole("button", { name: "查看传输记录", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Agent 管理", exact: true }).click();
+  await page.getByRole("button", { name: "个人设置", exact: true }).click();
+  await page.getByRole("button", { name: /AI 助手授权管理/ }).click();
   await page.getByRole("tab", { name: "旧版机器人授权", exact: true }).click();
   await expect(page.getByRole("button", { name: "授权机器人", exact: true })).toBeVisible();
   await expect(page.getByLabel("机器人状态")).toBeVisible();

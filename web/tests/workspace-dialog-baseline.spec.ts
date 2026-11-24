@@ -29,7 +29,9 @@ test('stable creation and search dialogs have explicit desktop and mobile eviden
         ['storage-add', 'storage', '连接存储', '连接存储', '连接名称'],
       ]) {
         await page.goto('/#/' + route);
-        const trigger = page.getByRole('button', { name: triggerName, exact: true });
+        const trigger = route === 'resources'
+          ? page.getByRole('region', { name: '资源库', exact: true }).locator('header').getByRole('button', { name: triggerName, exact: true })
+          : page.getByRole('button', { name: triggerName, exact: true });
         await expect(trigger).toBeEnabled(); await trigger.focus(); await page.keyboard.press('Enter');
         const dialog = page.getByRole('dialog', { name: title, exact: true });
         await expect(dialog.getByRole('textbox', { name: readyLabel, exact: true })).toBeEnabled();

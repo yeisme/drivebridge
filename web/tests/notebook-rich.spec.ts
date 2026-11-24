@@ -17,9 +17,13 @@ test('fixed Markdown safely renders math and diagrams and rebuilds authorized re
   });
   await page.reload();
   await page.getByRole('button', { name: '打开网盘 Rich notebook fixture', exact: true }).click();
-  await page.locator('input[type=file]').setInputFiles({ name: 'target.md', mimeType: 'text/markdown', buffer: Buffer.from('# Target\n\nFixed referenced note.') });
+  const chooser = page.waitForEvent('filechooser');
+  await page.getByRole('button', { name: '上传文件', exact: true }).click();
+  await (await chooser).setFiles({ name: 'target.md', mimeType: 'text/markdown', buffer: Buffer.from('# Target\n\nFixed referenced note.') });
   await expect(page.getByRole('button', { name: '详情 target.md', exact: true })).toBeVisible();
-  await page.locator('input[type=file]').setInputFiles({ name: 'rich.md', mimeType: 'text/markdown', buffer: Buffer.from('# 阅读与关系\n\n公式 $E=mc^2$。\n\n$$\\frac{a}{b}$$\n\n[关联笔记](target.md#target)\n\n```mermaid\nflowchart LR\n A[固定版本] --> B[人工确认]\n```\n\n```mermaid\n%%{init: {"securityLevel":"loose"}}%%\nflowchart LR\n A --> B\n```') });
+  const nextChooser = page.waitForEvent('filechooser');
+  await page.getByRole('button', { name: '上传文件', exact: true }).click();
+  await (await nextChooser).setFiles({ name: 'rich.md', mimeType: 'text/markdown', buffer: Buffer.from('# 阅读与关系\n\n公式 $E=mc^2$。\n\n$$\\frac{a}{b}$$\n\n[关联笔记](target.md#target)\n\n```mermaid\nflowchart LR\n A[固定版本] --> B[人工确认]\n```\n\n```mermaid\n%%{init: {"securityLevel":"loose"}}%%\nflowchart LR\n A --> B\n```') });
   await expect(page.getByRole('button', { name: '详情 rich.md', exact: true })).toBeVisible();
   await page.goto('/#/knowledge');
   await page.getByRole('combobox', { name: '知识库文件来源' }).click();

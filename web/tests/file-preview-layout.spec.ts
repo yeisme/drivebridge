@@ -59,6 +59,7 @@ test('fixed-version preview preserves body and usable information controls acros
         await expect(sidebar).toBeVisible();
         expect(await sidebar.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
         await expect(sidebar.getByRole('button', { name: '关闭信息栏', exact: true })).toBeFocused();
+        await sidebar.getByRole('button', { name: '信息', exact: true }).click();
         await sidebar.getByRole('button', { name: '文件标识与引用', exact: true }).click();
         await expect(sidebar).toContainText(file.version_id);
         await page.screenshot({ path: path.join(artifacts, `preview-information-${theme}-${width}.png`), animations: 'disabled' });
@@ -68,7 +69,7 @@ test('fixed-version preview preserves body and usable information controls acros
         await expect(dialog).toBeVisible();
       } else {
         await expect(sidebar).toBeVisible();
-        expect((await sidebar.boundingBox())!.width).toBe(360);
+        expect((await sidebar.boundingBox())!.width).toBe(288);
         expect((await stage.boundingBox())!.width).toBeGreaterThanOrEqual(640);
       }
       expect(await body!.evaluate(element => element.isConnected)).toBe(true);
@@ -78,6 +79,7 @@ test('fixed-version preview preserves body and usable information controls acros
     await page.setViewportSize({ width, height: 900 });
     const information = dialog.getByRole('complementary', { name: '预览文件列表与信息' });
     if (width < 1280) await dialog.getByRole('button', { name: '展开信息栏', exact: true }).click();
+    await information.getByRole('button', { name: '信息', exact: true }).click();
     const versions = information.getByRole('button', { name: '版本记录（1）', exact: true });
     await versions.click(); await expect(information.getByRole('button', { name: '下载此版本', exact: true })).toBeVisible();
     await page.screenshot({ path: path.join(artifacts, `preview-versions-${width}.png`), animations: 'disabled' });

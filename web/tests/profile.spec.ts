@@ -66,7 +66,8 @@ test('selects an owned image as a persistent avatar and clears without deleting 
  const name='头像验收空间';
  await page.evaluate(async name=>{const me=(await(await fetch('/api/v1/me')).json()).data;const response=await fetch('/api/v1/spaces',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':me.csrf_token},body:JSON.stringify({name,connection_id:'platform'})});if(!response.ok)throw new Error('Fixture space creation failed');},name);
  await page.reload();await page.getByRole('button',{name:'打开网盘 '+name}).click();
- await page.locator('input[type=file]').first().setInputFiles({name:'profile-avatar.png',mimeType:'image/png',buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jw1sAAAAASUVORK5CYII=','base64')});
+ const chooser = page.waitForEvent('filechooser');await page.getByRole('button',{name:'上传文件',exact:true}).click();
+ await (await chooser).setFiles({name:'profile-avatar.png',mimeType:'image/png',buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jw1sAAAAASUVORK5CYII=','base64')});
  await expect(page.getByRole('button',{name:/profile-avatar.png/}).first()).toBeVisible();
  await page.getByRole('button',{name:'个人设置',exact:true}).click();const settings=page.getByTestId('personal-settings');const picker=settings.getByRole('combobox',{name:'选择头像'});
  await picker.fill('profile-avatar');await page.getByRole('option',{name:'profile-avatar.png',exact:true}).click();await settings.getByRole('button',{name:'保存资料'}).click();await expect(settings.getByRole('img',{name:'我的头像'})).toBeVisible();await page.reload();await expect(settings.getByRole('img',{name:'我的头像'})).toBeVisible();

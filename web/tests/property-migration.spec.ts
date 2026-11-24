@@ -17,8 +17,13 @@ test('sidecar property migration previews confirms and recovers the original exe
     const bytes = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+X2ioAAAAASUVORK5CYII='), ch => ch.charCodeAt(0));
     const sha256 = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), value => value.toString(16).padStart(2, '0')).join('');
     const op = await write('/uploads', 'POST', { space_id: space.id, path: 'migration.png', size_bytes: bytes.length, sha256 }, 'migration-upload');
-    const part = await fetch('/api/v1/operations/' + op.id + '/parts/0', { method: 'PUT', headers: { 'X-CSRF-Token': me.csrf_token }, body: bytes }); if (!part.ok) throw new Error('migration_fixture_part');
-    const done = await write('/operations/' + op.id + '/complete', 'POST', {}, 'migration-complete');
+    // Content deduplication can complete the original operation at creation.
+    let done = op;
+    if (op.status !== 'completed') {
+      const part = await fetch('/api/v1/operations/' + op.id + '/parts/0', { method: 'PUT', headers: { 'X-CSRF-Token': me.csrf_token }, body: bytes });
+      if (!part.ok) throw new Error('migration_fixture_part_' + part.status);
+      done = await write('/operations/' + op.id + '/complete', 'POST', {}, 'migration-complete');
+    }
     if (enabled) await write('/files/' + done.file_id + '/properties', 'PATCH', { base_version_id: done.version_id, definition_revision: 1, expected_revision: 0, updates: { old: '12.50' }, remove_keys: [] }, 'migration-value');
     return { space: space.id as string, file: done.file_id as string, version: done.version_id as string };
   }, enabled);

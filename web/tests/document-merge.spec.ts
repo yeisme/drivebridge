@@ -88,10 +88,11 @@ test("two real tabs manually rebase pinned versions, retain repeated-conflict dr
   await expect(notebook.getByLabel("未保存")).toBeVisible();
   for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 900 });
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   }
   // Move head after the dialog pinned its remote revision: CAS must reject,
   // rather than silently rebasing or replacing the user's merge.
+  await other.getByRole("button", { name: "阅读", exact: true }).click();
   await expect(other.getByRole("heading", { name: "Remote", exact: true })).toBeVisible();
   await other.getByRole("button", { name: "源码", exact: true }).click();
   const newerBody = "# Newer\n\nThird retained body.";
@@ -115,6 +116,7 @@ test("two real tabs manually rebase pinned versions, retain repeated-conflict dr
   expect(published.request().postDataJSON()).toEqual({ base_version_id: newer.version_id, text: finalBody });
   expect(published.request().headers()["idempotency-key"]).not.toBe(mergeKey);
   const saved = (await published.json()).data;
+  await notebook.getByRole("button", { name: "阅读", exact: true }).click();
   await expect(notebook.getByRole("heading", { name: "Combined", exact: true })).toBeVisible();
   await expect(notebook.getByLabel("未保存")).toHaveCount(0);
   const bodies = await page.evaluate(async ({ file, versions }) => {

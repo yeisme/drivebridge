@@ -73,3 +73,39 @@ test('fails closed with a precise message when Web Locks is unavailable', async 
   expect(writes).toEqual([]);
   expect(space).toBeTruthy();
 });
+
+test('supports folder and Markdown note creation on plain-HTTP LAN origins where isSecureContext is false', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(window, 'isSecureContext', { configurable: true, get: () => false });
+    Object.defineProperty(Navigator.prototype, 'locks', { configurable: true, writable: true, value: undefined });
+  });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto('/');
+  await page.getByRole('link', { name: '使用账号登录' }).click();
+  await page.getByRole('link', { name: '以 Alice 登录' }).click();
+  const space = await page.evaluate(async () => {
+    const me = (await (await fetch('/api/v1/me')).json()).data;
+    const response = await fetch('/api/v1/spaces', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': me.csrf_token },
+      body: JSON.stringify({ name: 'Knowledge LAN HTTP', connection_id: 'platform' }),
+    });
+    if (!response.ok) throw new Error('Fixture space creation failed');
+    return (await response.json()).data.id as string;
+  });
+  await page.reload();
+  await page.getByRole('button', { name: '打开网盘 Knowledge LAN HTTP', exact: true }).click();
+  await page.locator('.sidebar').getByRole('button', { name: '知识库', exact: true }).click();
+  await page.getByRole('combobox', { name: '知识库文件来源' }).click();
+  await page.getByRole('option', { name: 'Knowledge LAN HTTP', exact: true }).click();
+  await page.getByText('目录与筛选').click();
+  await page.getByRole('button', { name: '新建目录', exact: true }).click();
+  await page.getByRole('textbox', { name: '目录名称' }).fill('lan-notes');
+  await page.getByRole('button', { name: '确认创建', exact: true }).click();
+  await expect(page.getByText('当前目录：lan-notes', { exact: true })).toBeVisible();
+  await page.locator('section[aria-label="知识库"] > details').getByRole('button', { name: '新建笔记', exact: true }).click();
+  await page.getByRole('textbox', { name: '笔记标题' }).fill('内网笔记');
+  await page.getByRole('button', { name: '确认创建', exact: true }).click();
+  await expect(page.getByRole('heading', { name: '内网笔记', exact: true })).toBeVisible();
+  expect(space).toBeTruthy();
+});

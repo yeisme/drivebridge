@@ -14,7 +14,7 @@ test('official file detail reviews Agent label subsets without replacing manual 
   const self=await fetch('/api/v1/label-suggestions/'+proposals[0]+'/decision',{method:'POST',credentials:'omit',headers:{...headers,'Idempotency-Key':'self-accept'},body:JSON.stringify({expected_revision:1,base_version_id:file.version_id,decision:'accept',labels:['new-label']})});
   return{file:file.id as string,version:file.version_id as string,first:proposals[0],second:proposals[1],selfStatus:self.status};
  });expect(fixture.selfStatus).toBe(401);
- async function open(){await page.getByRole('button',{name:'详情 suggestion.md',exact:true}).click();await page.getByRole('button',{name:'审阅 Agent 标签建议',exact:true}).click();}
+ async function open(){await page.getByRole('button',{name:'详情 suggestion.md',exact:true}).click();await page.getByRole('complementary',{name:'预览文件列表与信息'}).getByRole('button',{name:'信息',exact:true}).click();await page.getByRole('button',{name:'审阅 Agent 标签建议',exact:true}).click();}
  await open();const panel=page.getByRole('region',{name:'固定版本标签建议',exact:true});const first=panel.getByRole('article',{name:'标签建议 '+fixture.first,exact:true});
  await expect(first.getByRole('button',{name:'采纳所选标签'})).toBeDisabled();await first.getByRole('checkbox',{name:'new-label',exact:true}).check();await first.getByRole('button',{name:'采纳所选标签'}).click();
  let key='',body='',writes=0;await page.route(`**/api/v1/label-suggestions/${fixture.first}/decision`,async route=>{writes++;key=route.request().headers()['idempotency-key'];body=route.request().postData()||'';const response=await route.fetch();if(response.status()!==200)throw new Error('fixture_decision_failed');await route.abort('failed');});

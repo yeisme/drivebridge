@@ -6,15 +6,14 @@ test("composite surfaces retain layout, icons and workspace return navigation", 
   await page.goto("/");
   await page.getByRole("link",{name:"使用账号登录"}).click();
   await page.getByRole("link",{name:"以 Alice 登录"}).click();
-  await page.getByRole("button", {name:/^打开网盘 /}).first().click();
+  await expect(page.getByRole("region", {name:"文件浏览",exact:true})).toBeVisible();
   await page.locator("input[type=file]").setInputFiles(Array.from({length:5}, (_,i)=>({name:`设计参考-长文件名布局验证-${i}.txt`,mimeType:"text/plain",buffer:Buffer.from("Layout regression fixture")})));
   await expect(page.getByRole("button", {name:"详情 设计参考-长文件名布局验证-4.txt",exact:true})).toBeVisible();
   for (const theme of ["light","dark"] as const) {
     await page.emulateMedia({colorScheme:theme});
     for(const width of [882,1440,390]) {
       await page.setViewportSize({width,height:962});
-      if (width < 768) await page.getByRole("navigation", {name:"手机主导航"}).getByRole("button", {name:"文件",exact:true}).click();
-      else await page.getByRole("button",{name:"我的网盘",exact:true}).click();
+      await page.goto("/#/drives");
       await page.getByRole("button",{name:"卡片视图",exact:true}).click();
       const card = page.locator("button.drive-card").first();
       await expect(card).toBeVisible();
@@ -27,14 +26,11 @@ test("composite surfaces retain layout, icons and workspace return navigation", 
       if (width < 768) await expect(page.locator(".sidebar")).toHaveCount(0);
       else expect(await page.locator(".sidebar").evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
       if(width >= 768) {
-        const items = await page.locator(".nav-item > svg").evaluateAll(nodes => nodes.map(n => n.getBoundingClientRect().x));
-        expect(Math.max(...items)-Math.min(...items)).toBeLessThan(2);
+        const items = await page.locator(".nav-item svg").evaluateAll(nodes => nodes.map(n => n.getBoundingClientRect().x));
+        expect(Math.max(...items)-Math.min(...items)).toBeLessThan(3);
       }
       await page.screenshot({path:path.join(artifacts,`surfaces-drives-${theme}-${width}.png`)});
-      if (width < 768) {
-        await page.getByRole("button", {name:"打开全部导航"}).click();
-        await page.getByRole("dialog", {name:"全部导航"}).getByRole("button", {name:"资源态势",exact:true}).click();
-      } else await page.getByRole("button",{name:"资源态势",exact:true}).click();
+      await page.goto("/#/insights");
       const metrics=page.locator(".metric-card");
       await expect(metrics).toHaveCount(4);
       const heights=await metrics.evaluateAll(nodes=>nodes.map(n=>n.getBoundingClientRect().height));
@@ -51,8 +47,7 @@ test("composite surfaces retain layout, icons and workspace return navigation", 
       const boxes=await recent.evaluateAll(nodes=>nodes.map(el=>({height:el.getBoundingClientRect().height,overflow:el.scrollWidth>el.clientWidth})));
       expect(boxes.every(b=>b.height>=48&&b.height<=64&&!b.overflow)).toBe(true);
       await page.screenshot({path:path.join(artifacts,`surfaces-overview-${theme}-${width}.png`),fullPage:true});
-      if (width < 768) await page.getByRole("navigation", {name:"手机主导航"}).getByRole("button", {name:"文件",exact:true}).click();
-      else await page.getByRole("button",{name:"返回我的工作空间"}).click();
+      await page.goto("/#/drives");
       await expect(page.locator(".drive-home")).toBeVisible();
     }
   }

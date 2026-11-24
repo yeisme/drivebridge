@@ -1,13 +1,12 @@
 import { test, expect, type Page } from "@playwright/test";
 import fs from "node:fs";
+import { selectChoice } from "./helpers/select";
 import path from "node:path";
 async function login(page: Page, user = "Alice") {
   await page.goto("/");
   await page.getByRole("link", { name: "使用账号登录" }).click();
   await page.getByRole("link", { name: `以 ${user} 登录` }).click();
-  await expect(page.getByRole("heading", { name: "我的网盘", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "我的网盘", exact: true }).click();
-  await page.getByRole("button", { name: /^打开网盘 / }).first().click();
+  await expect(page.getByRole("region", { name: "文件浏览", exact: true })).toBeVisible();
 }
 const folder =
   process.env.DRIVEBRIDGE_EVIDENCE_ARTIFACTS ||
@@ -27,10 +26,11 @@ test("real login, drag/drop, versioning, scoped Agent and cross-user isolation",
   await expect(
     page.getByRole("button", { name: new RegExp(name) }).first(),
   ).toBeVisible();
+  await page.getByRole("button", { name: "展开目录树", exact: true }).click();
   await expect(
     page.getByRole("complementary", { name: "目录树", exact: true }).getByText("对象存储（S3 兼容）", { exact: true }),
   ).toBeVisible();
-  const me = await (await page.request.get("/api/v1/me")).json();
+  const _me = await (await page.request.get("/api/v1/me")).json();
   // Installable web app: the manifest ships with the built assets and stays
   // reachable from the deployed origin.
   await expect(page.locator('link[rel="manifest"]')).toHaveCount(1);
@@ -44,6 +44,7 @@ test("real login, drag/drop, versioning, scoped Agent and cross-user isolation",
   const file = listing.data.find((f: any) => f.path === name);
   expect(Boolean(file)).toBe(true);
   await page.getByRole("button", { name: new RegExp("详情 " + name) }).click();
+  await page.getByRole("complementary", { name: "预览文件列表与信息" }).getByRole("button", { name: "信息", exact: true }).click();
   await expect(
     page.getByText("所属存储：对象存储（S3 兼容） · 仅传输"),
   ).toBeVisible();
@@ -99,6 +100,7 @@ test("real login, drag/drop, versioning, scoped Agent and cross-user isolation",
   await page.screenshot({
     path: path.join(folder, "desktop-files.png"),
   });
+  await page.getByRole("button", { name: "更多空间功能", exact: true }).click();
   await page.getByRole("button", { name: "Agent 管理", exact: true }).click();
   await page.getByRole("tab", { name: "旧版机器人授权", exact: true }).click();
   await page.getByRole("button", { name: "授权机器人", exact: true }).click();
@@ -151,10 +153,12 @@ test("real login, drag/drop, versioning, scoped Agent and cross-user isolation",
   ).toBe(404);
   await bob.close();
   await page.getByRole("button", { name: "我的网盘", exact: true }).click();
-  await page.getByRole("button", { name: /^打开网盘 / }).first().click();
   await page.getByRole("button", { name: new RegExp("详情 " + name) }).click();
+  await page.getByRole("complementary", { name: "预览文件列表与信息" }).getByRole("button", { name: "信息", exact: true }).click();
   await page.getByRole("button", { name: "移入回收站" }).click();
   await page.getByRole("button", { name: "回收站", exact: true }).click();
+  const trashSpace = page.getByRole("combobox", { name: "选择空间", exact: true });
+  await selectChoice(trashSpace, spaces.data[0].id);
   await expect(
     page.getByRole("button", { name: "恢复 " + name, exact: true }),
   ).toBeVisible();
@@ -164,7 +168,7 @@ test("real login, drag/drop, versioning, scoped Agent and cross-user isolation",
   ).toHaveCount(0);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole("navigation", { name: "手机主导航" }).getByRole("button", { name: "文件", exact: true }).click();
-  await page.getByRole("button", { name: /^打开网盘 / }).first().click();
+  await expect(page.getByRole("region", { name: "文件浏览", exact: true })).toBeVisible();
   await page.screenshot({
     path: path.join(folder, "mobile-files.png"),
   });
@@ -227,6 +231,7 @@ test("file provenance, pinned copy and result navigation", async ({
     page.getByRole("button", { name: "详情 " + name, exact: true }),
   ).toBeVisible();
   await page.getByRole("button", { name: "详情 " + name, exact: true }).click();
+  await page.getByRole("complementary", { name: "预览文件列表与信息" }).getByRole("button", { name: "信息", exact: true }).click();
   await page.getByRole("button", { name: "文件标识与引用", exact: true }).click();
   await expect(
     page.getByText("来源：drivebridge-client", { exact: true }),

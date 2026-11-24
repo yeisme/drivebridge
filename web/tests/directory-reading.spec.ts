@@ -2,6 +2,62 @@ import {test, expect} from "@playwright/test";
 import path from "node:path";
 import { selectFinderView } from "./helpers/finder-view";
 
+test("directory pages show 50 entries and preserve offsets when moving backwards", async ({page}) => {
+  await page.goto("/");
+  await page.getByRole("link", {name: "使用账号登录"}).click();
+  await page.getByRole("link", {name: "以 Alice 登录"}).click();
+  await expect(page.getByRole("heading", {name: "我的网盘", exact: true})).toBeVisible();
+  const spaceID = await page.evaluate(async () => {
+    const me = (await (await fetch("/api/v1/me")).json()).data;
+    const headers = {"Content-Type": "application/json", "X-CSRF-Token": me.csrf_token};
+    const created = await fetch("/api/v1/spaces", {method: "POST", headers, body: JSON.stringify({name: "Paging acceptance", connection_id: "platform"})});
+    if (!created.ok) throw new Error("Fixture space failed");
+    const space = (await created.json()).data;
+    for (let i = 0; i < 105; i++) {
+      const response = await fetch("/api/v1/directories", {method: "POST", headers, body: JSON.stringify({space_id: space.id, path: `page-${String(i).padStart(3, "0")}`})});
+      if (!response.ok) throw new Error("Fixture directory failed");
+    }
+    return space.id as string;
+  });
+  const offsets: string[] = [];
+  page.on("request", request => {
+    const url = new URL(request.url());
+    // Finder's sorted page differs from tree and cover observations.
+    if (url.pathname === "/api/v1/browser" && url.searchParams.get("space_id") === spaceID && url.searchParams.has("cursor") && url.searchParams.has("sort")) {
+      expect(url.searchParams.get("limit")).toBe("50");
+      offsets.push(url.searchParams.get("cursor") || "");
+    }
+  });
+  await page.reload();
+  await page.getByRole("button", {name: "打开网盘 Paging acceptance", exact: true}).click();
+  const folders = page.locator(".finder").getByRole("button", {name: /^打开文件夹 page-/});
+  const pagination = page.locator(".finder-pagination");
+  await expect(folders).toHaveCount(50);
+  await expect(folders.first()).toHaveAccessibleName("打开文件夹 page-000");
+  await expect(pagination).toContainText("第 1 页 · 共 105 项");
+  await expect(pagination.getByRole("button", {name: "上一页"})).toBeDisabled();
+  // Initial workspace hydration can refresh the same read-only first page.
+  expect(offsets.length).toBeGreaterThan(0);
+  expect(offsets.every(cursor => cursor === "")).toBe(true);
+  offsets.length = 0;
+  await pagination.getByRole("button", {name: "下一页"}).click();
+  await expect(folders.first()).toHaveAccessibleName("打开文件夹 page-050");
+  await expect(folders).toHaveCount(50);
+  await expect(pagination).toContainText("第 2 页 · 共 105 项");
+  await pagination.getByRole("button", {name: "下一页"}).click();
+  await expect(folders).toHaveCount(5);
+  await expect(folders.first()).toHaveAccessibleName("打开文件夹 page-100");
+  await expect(pagination).toContainText("第 3 页 · 共 105 项");
+  await expect(pagination.getByRole("button", {name: "下一页"})).toBeDisabled();
+  await pagination.getByRole("button", {name: "上一页"}).click();
+  await expect(folders.first()).toHaveAccessibleName("打开文件夹 page-050");
+  await expect(folders).toHaveCount(50);
+  await pagination.getByRole("button", {name: "上一页"}).click();
+  await expect(folders.first()).toHaveAccessibleName("打开文件夹 page-000");
+  await expect(pagination).toContainText("第 1 页 · 共 105 项");
+  expect(offsets).toEqual(["50", "100", "50", ""]);
+});
+
 test("directory list/detail and cards preserve routes, selection and read access", async ({page}) => {
   await page.goto("/");
   await page.getByRole("link",{name:"使用账号登录"}).click();

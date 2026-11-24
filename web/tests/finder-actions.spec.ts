@@ -43,8 +43,10 @@ test("Finder context menus create nested folders and text files without overwrit
   await blank.locator(".finder-name").dblclick();
   const quicklook=page.locator(".quicklook-dialog");
   await expect(quicklook.getByRole("complementary",{name:"预览文件列表与信息"})).toBeVisible();
-  await expect(quicklook.getByRole("navigation",{name:"当前文件列表"}).getByRole("button")).toHaveCount(2);
-  await quicklook.getByRole("navigation",{name:"当前文件列表"}).getByRole("button").first().click();
+  await quicklook.getByRole("button",{name:"展开 项目",exact:true}).click();
+  await quicklook.getByRole("button",{name:"展开 项目/资料",exact:true}).click();
+  await expect(quicklook.getByRole("list",{name:"workspace 目录树"}).locator(".preview-tree-file")).toHaveCount(2);
+  await quicklook.getByRole("list",{name:"workspace 目录树"}).locator(".preview-tree-file").first().click();
   const firstTitle=await quicklook.locator("header h2").textContent();
   await page.keyboard.press("ArrowDown");
   await expect(quicklook.locator("header h2")).not.toHaveText(firstTitle!);

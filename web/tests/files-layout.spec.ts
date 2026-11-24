@@ -35,8 +35,14 @@ test('file browser preserves reading area, directory navigation and desktop pref
   await expect(browser.getByRole('button', { name: '打开文件夹 资料', exact: true })).toBeVisible();
   const notice = page.getByRole('button', { name: '关闭通知', exact: true });
   if (await notice.isVisible()) await notice.click();
+  const dirNotice = page.getByRole('button', { name: '关闭目录提示', exact: true });
+  if (await dirNotice.isVisible()) await dirNotice.click();
   const desktopTree = page.getByRole('complementary', { name: '目录树', exact: true });
+  await expect(desktopTree).toBeHidden();
+  await browser.getByRole('button', { name: '展开目录树', exact: true }).click();
   await expect(desktopTree).toBeVisible();
+  await browser.getByRole('button', { name: '折叠目录树', exact: true }).click();
+  await expect(desktopTree).toBeHidden();
   const preference = await page.evaluate(() => localStorage.getItem('drivebridge:tree-collapsed'));
 
   for (const theme of ['light', 'dark'] as const) {
@@ -45,7 +51,7 @@ test('file browser preserves reading area, directory navigation and desktop pref
       await page.setViewportSize({ width, height: 900 });
       await expect(browser).toBeVisible();
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-      expect(await browser.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+      await expect.poll(() => browser.evaluate(element => element.scrollWidth <= element.clientWidth), { message: `File browser overflow at ${width}` }).toBe(true);
       // Modal sheets make the background inaccessible by design; use its DOM
       // locator only for geometry while the drawer owns the accessibility tree.
       const files = page.locator('.finder-body .finder-scroll');
@@ -87,7 +93,7 @@ test('file browser preserves reading area, directory navigation and desktop pref
         await browser.getByRole('navigation', { name: '目录路径' }).getByRole('button', { name: '全部文件', exact: true }).click();
         await expect(browser.locator('.finder-file')).toHaveCount(2);
       } else {
-        await expect(desktopTree).toBeVisible();
+        await expect(desktopTree).toBeHidden();
         const checkbox = browser.getByRole('checkbox', { name: '选择 reference.md', exact: true });
         await checkbox.focus();
         await expect(checkbox).toHaveCSS('opacity', '1');

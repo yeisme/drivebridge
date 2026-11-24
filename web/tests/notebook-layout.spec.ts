@@ -19,7 +19,9 @@ test('ordinary notebook keeps reading space, controls and fixed identities acros
     return (await response.json()).data.id as string;
   });
   await page.reload();
-  await page.getByRole('button', { name: '打开网盘 Notebook layout fixture', exact: true }).click();
+  const openBtn = page.getByRole('button', { name: '打开网盘 Notebook layout fixture', exact: true });
+  await openBtn.click();
+  await expect(openBtn).toHaveAttribute('aria-current', 'location');
   await page.locator('input[type=file]').setInputFiles({ name: 'reading.md', mimeType: 'text/markdown', buffer: Buffer.from('# 阅读布局验收\n\n普通 Markdown 的固定版本正文。\n\n## 项目资料\n\n来源与筛选是目录操作，不占据主要阅读区域。\n\n- 一个条目\n- 另一个条目\n\n## 下一步\n\n保存必须经过差异确认。') });
   await expect(page.getByRole('button', { name: '详情 reading.md', exact: true })).toBeVisible();
   const file = (await (await page.request.get('/api/v1/files?space_id=' + encodeURIComponent(space))).json()).data.find((row: { path: string }) => row.path === 'reading.md');
@@ -50,7 +52,8 @@ test('ordinary notebook keeps reading space, controls and fixed identities acros
       const outline = notebook.getByRole('button', { name: '文档大纲', exact: true });
       await expect(outline).toHaveAttribute('aria-expanded', 'false');
       await expect(notebook.getByRole('navigation', { name: '文档大纲' })).toBeHidden();
-      expect((await notebook.getByRole('heading', { name: '阅读布局验收', exact: true }).boundingBox())!.y).toBeLessThanOrEqual(400);
+      const geometry = await doc.evaluate(el => Array.from(el.querySelectorAll('header, [role=group], nav, summary')).slice(0, 8).map(node => ({ name: node.getAttribute('aria-label') || node.tagName, y: node.getBoundingClientRect().y, height: node.getBoundingClientRect().height })));
+      expect((await notebook.getByRole('heading', { name: '阅读布局验收', exact: true }).boundingBox())!.y, JSON.stringify({ width, geometry })).toBeLessThanOrEqual(400);
       if (width < 768) {
         for (const button of await notebook.getByRole('toolbar', { name: '笔记工具栏' }).getByRole('button').all()) {
           const box = (await button.boundingBox())!;

@@ -30,7 +30,7 @@ test('reference property requires current target visibility while original recei
     return { file: image.file_id as string, version: image.version_id as string, target: target.file_id as string, ref: (await stat.json()).data.ref as string };
   });
   await page.reload(); await page.getByRole('button', { name: '打开网盘 Reference property fixture', exact: true }).click();
-  async function open(detail = true) { if (detail) await page.getByRole('button', { name: '详情 reference.png', exact: true }).click(); await page.getByRole('button', { name: '查看文件属性', exact: true }).click(); }
+  async function open(detail = true) { if (detail) await page.getByRole('button', { name: '详情 reference.png', exact: true }).click(); await page.getByRole('complementary', { name: '预览文件列表与信息' }).getByRole('button', { name: '信息', exact: true }).click(); await page.getByRole('button', { name: '查看文件属性', exact: true }).click(); }
   const dialog = page.getByRole('dialog', { name: '固定版本文件属性', exact: true });
   const path = '/api/v1/files/' + fixture.file + '/properties';
   async function mutation(path: string, body: unknown = {}, method = 'POST', key = '') {

@@ -15,7 +15,7 @@ test('dragging a selected file into a folder moves its durable path', async ({ p
   const source = page.locator('.finder-file', { hasText: name });
   const target = page.locator('.finder-folder', { hasText: folder });
   await expect(source).toBeVisible(); await expect(target).toBeVisible();
-  await source.dragTo(target);
+  await source.locator('.finder-name').dragTo(target.locator('.finder-name'));
   await expect(source).toHaveCount(0);
   await target.dblclick();
   await expect(page.getByRole('checkbox', { name: '选择 ' + folder + '/' + name, exact: true })).toBeVisible();

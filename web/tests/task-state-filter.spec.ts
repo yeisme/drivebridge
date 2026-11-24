@@ -1,7 +1,8 @@
+import { loginFreshUser } from './helpers/identity';
 import { expect,test } from '@playwright/test';
 test.use({trace:'off',video:'off',screenshot:'off'});
 test('real operation history keeps scoped display state through reload without changing work',async({page,browser})=>{
- await page.goto('/');await page.getByRole('link',{name:'使用账号登录'}).click();await page.getByRole('link',{name:'以 Alice 登录'}).click();await expect(page.getByRole('heading',{name:'我的网盘',exact:true})).toBeVisible();
+ await loginFreshUser(page, 'task-state');
  await page.evaluate(async()=>{const me=(await(await fetch('/api/v1/me')).json()).data;const response=await fetch('/api/v1/spaces',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':me.csrf_token},body:JSON.stringify({name:'Task preference fixture',connection_id:'platform'})});if(!response.ok)throw new Error('fixture_space_failed');});
  await page.reload();await page.getByRole('button',{name:'打开网盘 Task preference fixture',exact:true}).click();await page.locator('input[type=file]').setInputFiles({name:'task-preference.txt',mimeType:'text/plain',buffer:Buffer.from('synthetic operation fixture')});await expect(page.getByRole('button',{name:'详情 task-preference.txt',exact:true})).toBeVisible();
  const original=await page.evaluate(async()=>{const ops=(await(await fetch('/api/v1/operations')).json()).data;const op=ops.find((o:{path:string;status:string})=>o.path==='task-preference.txt'&&o.status==='completed');if(!op)throw new Error('fixture_operation_missing');return{id:op.id as string,status:op.status as string,version:op.version_id as string};});

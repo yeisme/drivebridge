@@ -1,12 +1,13 @@
+import { loginFreshUser } from './helpers/identity';
 import { expect, test } from '@playwright/test';
 test.use({ trace: 'off', video: 'off', screenshot: 'off' });
 test('trash distinguishes pending and failed reads, then manually recovers real owner rows', async ({ page }) => {
-  await page.goto('/'); await page.getByRole('link', { name: '使用账号登录' }).click(); await page.getByRole('link', { name: '以 Alice 登录' }).click();
-  await expect(page.getByRole('heading', { name: '我的网盘', exact: true })).toBeVisible();
+  await loginFreshUser(page, 'trash-read');
   const drive = page.getByRole('button', { name: /^打开网盘 / }).first(); await drive.click();
   const name = 'trash-state-' + Date.now() + '.txt';
   await page.locator('input[type=file]').setInputFiles({ name, mimeType: 'text/plain', buffer: Buffer.from('Disposable trash read state') });
   await page.getByRole('button', { name: '详情 ' + name, exact: true }).click();
+  await page.getByRole('complementary', { name: '预览文件列表与信息' }).getByRole('button', { name: '信息', exact: true }).click();
   await page.getByRole('button', { name: '移入回收站', exact: true }).click();
   let release!: () => void;
   const pending = new Promise<void>(resolve => { release = resolve; });

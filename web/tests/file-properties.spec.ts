@@ -16,7 +16,7 @@ test('official file detail sidecar uses fixed-version original receipts and expl
     const files = (await (await fetch('/api/v1/files?space_id=' + space)).json()).data; const file = files.find((f: { path: string }) => f.path === 'sidecar.png'); if (!file) throw new Error('fixture_file_missing'); return { file: file.id as string, version: file.version_id as string };
   }, space);
   const path = '/api/v1/files/' + target.file + '/properties', endpoint = '**' + path;
-  async function open(detail = true) { if (detail) await page.getByRole('button', { name: '详情 sidecar.png', exact: true }).click(); await page.getByRole('button', { name: '查看文件属性', exact: true }).click(); }
+  async function open(detail = true) { if (detail) await page.getByRole('button', { name: '详情 sidecar.png', exact: true }).click(); await page.getByRole('complementary', { name: '预览文件列表与信息' }).getByRole('button', { name: '信息', exact: true }).click(); await page.getByRole('button', { name: '查看文件属性', exact: true }).click(); }
   const dialog = page.getByRole('dialog', { name: '固定版本文件属性', exact: true });
   async function set(label: string, value: string) { await dialog.getByRole('button', { name: label + ' 设置值', exact: true }).click(); await dialog.getByLabel(label + ' 新值', { exact: true }).fill(value); }
   await open(); const bodyRequests: string[] = []; page.on('request', request => { if (new URL(request.url()).pathname.endsWith('/content')) bodyRequests.push(request.url()); });

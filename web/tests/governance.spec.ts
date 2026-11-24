@@ -7,7 +7,7 @@ async function login(page: Page, admin: boolean) {
     .locator("#login-key")
     .fill("dbu_" + (admin ? "22" : "11").repeat(48));
   await page.getByRole("button", { name: "登录", exact: true }).click();
-  await expect(page.getByLabel("切换租户")).toBeVisible();
+  await expect(page.getByRole("button", { name: "工作区选项", exact: true })).toBeVisible();
 }
 
 test("partial and interrupted receipts preserve results without replaying the request", async ({page}) => {
@@ -42,14 +42,17 @@ test("partial and interrupted receipts preserve results without replaying the re
   expect(writes).toBe(0);
 });
 
-test("an approved exact request waits for the requester to explicitly execute", async ({browser}) => {
+test("an approved exact request waits for the requester to explicitly execute", async ({browser, page: owner}) => {
   test.skip(!test.info().config.configFile?.includes("governance"), "Requires governance fixture");
-  const ownerContext=await browser.newContext(), adminContext=await browser.newContext();
-  const owner=await ownerContext.newPage(), admin=await adminContext.newPage();
+  const adminContext=await browser.newContext();
+  const admin=await adminContext.newPage();
   try {
     await login(owner,false);
     await owner.getByRole("button",{name:"打开网盘 e2e-key-user personal",exact:true}).click();
-    await owner.locator("input[type=file]").setInputFiles({name:"explicit-approval.txt",mimeType:"text/plain",buffer:Buffer.from("Keep until explicit execution")});
+    await expect(owner.locator(".finder-list")).toHaveAttribute("aria-busy", "false");
+    const chooser = owner.waitForEvent("filechooser");
+    await owner.getByRole("button", {name:"上传文件", exact:true}).click();
+    await (await chooser).setFiles({name:"explicit-approval.txt",mimeType:"text/plain",buffer:Buffer.from("Keep until explicit execution")});
     await expect(owner.getByRole("button",{name:"详情 explicit-approval.txt",exact:true})).toBeVisible();
     const spaces=(await(await owner.request.get("/api/v1/spaces")).json()).data;
     const target=spaces.find((s:{name:string})=>s.name==="e2e-key-user personal");
@@ -77,7 +80,7 @@ test("an approved exact request waits for the requester to explicitly execute", 
     const trashed=(await(await owner.request.get(`/api/v1/files?space_id=${target.id}&trash=true`)).json()).data;
     expect(trashed.some((f:{path:string})=>f.path==="explicit-approval.txt")).toBe(true);
     await expect(admin.getByRole("button",{name:"确认执行清单",exact:true})).toHaveCount(0);
-  } finally { await ownerContext.close();await adminContext.close(); }
+  } finally { await adminContext.close(); }
 });
 test("governance read-only access, owner approval and notifications", async ({
   browser,

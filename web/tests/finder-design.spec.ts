@@ -331,7 +331,7 @@ test("shared drive design: hosted, focused and local layouts", async ({
     ).toBeDisabled();
     await page.keyboard.press("Escape");
     await expect(
-      page.getByText("当前网盘仅供浏览", { exact: true }),
+      page.getByText("当前网盘仅供浏览 · 移动文件需要编辑权限，请在「管理与授权」中申请", { exact: true }),
     ).toBeVisible();
     await page.screenshot({
       path: path.join(artifacts, "after-local-readonly.png"),

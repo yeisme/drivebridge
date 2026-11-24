@@ -118,7 +118,9 @@ test("Finder file-only workspace, folders, image preview, fixed sharing and revo
     .click();
   await page.getByRole("menuitem", { name: "撤销分享", exact: true }).click();
   await page.getByRole("button", { name: "确认撤销分享" }).click();
-  await shared.reload();
+  // The receiver removes the bearer fragment; reopening the original link tests revocation.
+  await shared.goto("about:blank");
+  await shared.goto(link);
   await expect(shared.getByRole("alert")).toContainText("失效");
   await guest.close();
   await page.getByRole("button", { name: "我的网盘", exact: true }).click();

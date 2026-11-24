@@ -26,8 +26,10 @@ test("recycle bin supports retention, selection and batch restore", async ({
   ]);
   await expect(page.getByRole("button", { name: new RegExp(a) }).first()).toBeVisible();
   await page.getByRole("button", { name: new RegExp("详情 " + a) }).click();
+  await page.getByRole("complementary", { name: "预览文件列表与信息" }).getByRole("button", { name: "信息", exact: true }).click();
   await page.getByRole("button", { name: "移入回收站" }).click();
   await page.getByRole("button", { name: new RegExp("详情 " + b) }).click();
+  await page.getByRole("complementary", { name: "预览文件列表与信息" }).getByRole("button", { name: "信息", exact: true }).click();
   await page.getByRole("button", { name: "移入回收站" }).click();
   await page.getByRole("button", { name: "回收站", exact: true }).click();
   await expect(page.getByLabel("回收站自动清理天数")).toBeVisible();

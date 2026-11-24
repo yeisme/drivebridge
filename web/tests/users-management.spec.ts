@@ -33,6 +33,8 @@ test("user directory filters, key metadata and account lifecycle use real servic
       const modal = page.getByRole("dialog", { name, exact: true });
       await expect(modal).toBeVisible();
       await modal.getByLabel("输入目标用户名确认", { exact: true }).fill("团队成员");
+      const takeover = modal.getByRole("checkbox", { name: "由我接管这些职责并继续", exact: true });
+      if (await takeover.isVisible()) await takeover.check();
       await modal.getByRole("button", { name: "确认" + name, exact: true }).click();
       await expect(modal).toHaveCount(0);
     };
@@ -57,6 +59,9 @@ test("user directory filters, key metadata and account lifecycle use real servic
     await confirm("恢复归档");
     await selectChoice(page.getByLabel("筛选账号状态"),"frozen");
     await expect(row).toContainText("已冻结");
+    // Return the shared demo persona to active after proving archive recovery.
+    await row.getByRole("button", { name: "解冻", exact: true }).click();
+    await confirm("解冻账号");
   } finally { await other.close(); }
   const artifacts = process.env.DRIVEBRIDGE_EVIDENCE_ARTIFACTS || "temp/browser-artifacts";
   await page.getByLabel("搜索用户或团队").fill("");

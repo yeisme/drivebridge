@@ -67,12 +67,13 @@ test("ordinary Markdown notebook opens fixed content with nested navigation and 
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog", { name: "快速打开", exact: true })).toHaveCount(0);
   await expect(workspace).toBeVisible();
-  // ResizeObserver owns the inner workspace breakpoint. Wait for its commit
-  // before toggling, rather than using an aria state from the previous width.
-  await expect(workspace.getByRole("complementary", { name: "笔记信息侧栏", exact: true })).toBeVisible();
+  // The notebook uses its own container width; the outer preview sidebar is closed.
+  await workspace.getByRole("button", { name: "笔记信息", exact: true }).click();
+  const desktopInformation = page.getByRole("dialog", { name: "笔记信息", exact: true });
+  await expect(desktopInformation).toBeVisible();
   await expect(page.getByRole("region", { name: "笔记关系能力", exact: true }).getByRole("button", { name: "重建此版本关系索引", exact: true })).toBeVisible();
   await page.screenshot({ path: path.join(artifacts, "notebook-relations-1440.png"), animations: "disabled" });
-  await workspace.getByRole("button", { name: "笔记信息", exact: true }).click();
+  await desktopInformation.getByRole("button", { name: "关闭", exact: true }).click();
   await page.setViewportSize({ width: 390, height: 900 });
   await expect(workspace.getByRole("complementary", { name: "笔记目录侧栏", exact: true })).toHaveCount(0);
   await workspace.getByRole("button", { name: "笔记信息", exact: true }).click();

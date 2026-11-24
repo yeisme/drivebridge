@@ -28,6 +28,7 @@ test("large preview, isolated interactive HTML, collapsible information and file
   await page.getByRole("button", { name: "详情 interactive.html", exact: true }).click();
   const iframe = page.locator(".html-stage iframe");
   await expect(iframe).toHaveAttribute("sandbox", "");
+  await page.getByRole("button", { name: "最大化预览", exact: true }).click();
   const initial = (await iframe.boundingBox())!;
   expect(initial.height).toBeGreaterThan(600);
   await page.getByRole("button", { name: "收起信息栏" }).click();
@@ -50,11 +51,11 @@ test("large preview, isolated interactive HTML, collapsible information and file
   await expect(inside.locator("#counter")).toHaveText("0");
   await page.screenshot({ path: path.join(artifacts, "preview-expanded-interactive.png") });
   await page.getByRole("button", { name: "展开信息栏" }).click();
-  const previewCount = await page.locator(".quicklook-files > button").count();
-  await page.getByRole("textbox", { name: "搜索预览文件" }).fill("notes");
-  await expect(page.locator(".quicklook-files > button")).toHaveCount(1);
-  await page.getByRole("button", { name: "定位当前文件" }).click();
-  await expect(page.locator(".quicklook-files > button")).toHaveCount(previewCount);
+  const previewCount = await page.locator(".preview-tree-file").count();
+  await page.getByRole("textbox", { name: "搜索工作区文件" }).fill("notes");
+  await expect(page.locator(".preview-tree-file")).toHaveCount(1);
+  await page.getByRole("textbox", { name: "搜索工作区文件" }).fill("");
+  await expect(page.locator(".preview-tree-file")).toHaveCount(previewCount);
   await page.setViewportSize({ width: 390, height: 844 });
   // Narrow mode starts with information closed, independently of desktop preference.
   await expect(page.getByRole("complementary", { name: "预览文件列表与信息" })).toBeHidden();
