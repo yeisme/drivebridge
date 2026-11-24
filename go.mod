@@ -1,6 +1,6 @@
 module github.com/yeisme/drivebridge
 
-go 1.26.9
+go 1.26.10
 
 require (
 	github.com/glebarez/sqlite v1.11.0
@@ -10,6 +10,7 @@ require (
 	github.com/rogpeppe/go-internal v1.15.0
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
+	github.com/yeisme/cli-kit v0.0.0-00010101000000-000000000000
 	gorm.io/gorm v1.31.1
 )
 
@@ -126,7 +127,7 @@ require (
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/gofrs/flock v0.13.0
 	github.com/google/uuid v1.6.0 // indirect
-	github.com/invopop/jsonschema v0.13.0 // indirect
+	github.com/invopop/jsonschema v0.13.0
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/jzelinskie/whirlpool v0.0.0-20201016144138-0675e54bb004 // indirect
@@ -147,13 +148,13 @@ require (
 	github.com/shirou/gopsutil/v4 v4.26.6 // indirect
 	github.com/skratchdot/open-golang v0.0.0-20200116055534-eef842397966 // indirect
 	github.com/spf13/cast v1.10.0 // indirect
-	github.com/spf13/pflag v1.0.10 // indirect
+	github.com/spf13/pflag v1.0.10
 	github.com/tklauser/go-sysconf v0.4.0 // indirect
 	github.com/tklauser/numcpus v0.12.0 // indirect
 	github.com/unknwon/goconfig v1.0.0 // indirect
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
 	github.com/yeisme/drivebridge-server v0.0.0
-	github.com/yeisme/pinax v0.3.0
+	github.com/yeisme/pinax v0.3.1
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	golang.org/x/crypto v0.57.0 // indirect
@@ -172,5 +173,7 @@ require (
 	modernc.org/memory v1.11.0 // indirect
 	modernc.org/sqlite v1.53.0 // indirect
 )
+
+replace github.com/yeisme/cli-kit => ../../shared/cli-kit
 
 replace github.com/yeisme/drivebridge-server => ./server
