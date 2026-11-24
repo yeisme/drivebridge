@@ -87,7 +87,14 @@ type BindingLookupResult struct {
 	Receipt *BindingMutationReceipt `json:"receipt" jsonschema:"nullable"`
 }
 
-func validReaderScopes(scopes []ReaderScope) bool {
+// ValidReaderScopes reports whether scopes form a contract-valid reader set:
+// only known reader scopes, no duplicates, at most four, and always including
+// reader.metadata so every bound source stays discoverable in the session.
+//
+// Consumers that decide which scopes a session may hold (binding preview, guard
+// install, guard lease) must reuse this predicate instead of keeping a weaker
+// local rule, otherwise an undefined scope becomes grantable authority.
+func ValidReaderScopes(scopes []ReaderScope) bool {
 	if len(scopes) == 0 || len(scopes) > 4 {
 		return false
 	}
@@ -106,6 +113,8 @@ func validReaderScopes(scopes []ReaderScope) bool {
 	// Every bound source remains discoverable within the approved session.
 	return seen[ScopeMetadata]
 }
+
+func validReaderScopes(scopes []ReaderScope) bool { return ValidReaderScopes(scopes) }
 
 func (p BindingPreview) Validate() error {
 	if !validID(p.PreviewID) || !validDigest(p.PreviewDigest) || len(p.DisplayName) == 0 || len(p.DisplayName) > 256 || p.ExpectedGuardRevision > maxSafeRevision || !validReaderScopes(p.Scopes) || p.ObservedAt.IsZero() || !p.ExpiresAt.After(p.ObservedAt) || p.ExpiresAt.Sub(p.ObservedAt) > 5*time.Minute {

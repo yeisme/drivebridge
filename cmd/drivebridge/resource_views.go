@@ -106,7 +106,10 @@ func resourceRead(c *cli, kind, verb string) *cobra.Command {
 		next := resourceScope(cmd, "drivebridge "+kind+" list")
 		failure := func(code, message string) error {
 			env := map[string]any{"spec_version": "1.0", "mode": c.mode.name(), "command": driveCommand(kind + "." + verb), "status": "failed", "error": map[string]string{"code": code, "field": kind + "-id", "message": message, "suggestion": next}, "actions": []map[string]string{{"name": "discover", "command": next}}}
-			if c.mode.JSON || c.mode.Events {
+			if c.mode.Events {
+				stream := c.stream(kind + "." + verb)
+				stream.emit("error", map[string]any{"status": env["status"], "error": env["error"], "actions": env["actions"]})
+			} else if c.mode.JSON {
 				_ = json.NewEncoder(cmd.OutOrStdout()).Encode(env)
 			} else if c.mode.Agent {
 				fmt.Fprintf(cmd.OutOrStdout(), "spec_version=1.0\nmode=agent\ncommand=%s\nstatus=failed\nerror.code=%s\nerror.field=%s-id\naction.discover=%s\n", env["command"], code, kind, next)

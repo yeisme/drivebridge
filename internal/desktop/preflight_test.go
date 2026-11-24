@@ -48,7 +48,7 @@ func TestDesktopSessionPreflightBlockedWithoutVaultWrites(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if view.Validate() != nil || view.Decision != "blocked" || view.Reason != "managed_scope_unverifiable" || len(view.Scopes) != 1 || view.Scopes[0] != desktopcontract.ScopeMetadata {
+	if view.Validate() != nil || view.Decision != "blocked" || view.Reason != "managed_scope_unverifiable" || len(view.Scopes) != 4 || view.Scopes[0] != desktopcontract.ScopeMetadata || view.Scopes[1] != desktopcontract.ScopeBody || view.Scopes[2] != desktopcontract.ScopeRelations || view.Scopes[3] != desktopcontract.ScopeAssets {
 		t.Fatal("unsafe preview")
 	}
 	if err := p.ConfirmBlocked(confirmation(view)); err == nil || err.Error() != "managed_scope_unverifiable" {

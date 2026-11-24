@@ -254,6 +254,24 @@ export interface components {
             revision: string;
             uri: string;
         };
+        ReadReadingState: {
+            target_ref: {
+                /** @enum {string} */
+                kind: "file";
+                instance_id: string;
+                space_id: string;
+                file_id: string;
+                version_id: string;
+            } | {
+                /** @enum {string} */
+                kind: "pinax";
+                instance_id: string;
+                source_id: string;
+                object_id: string;
+                revision: string;
+                uri: string;
+            };
+        };
         ReadingMutationResult: {
             found: boolean;
             state: {

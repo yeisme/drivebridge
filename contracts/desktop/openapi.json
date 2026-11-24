@@ -1962,6 +1962,103 @@
           "uri"
         ]
       },
+      "ReadReadingState": {
+        "properties": {
+          "target_ref": {
+            "oneOf": [
+              {
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "file"
+                    ]
+                  },
+                  "instance_id": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "minLength": 1
+                  },
+                  "space_id": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "minLength": 1
+                  },
+                  "file_id": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "minLength": 1
+                  },
+                  "version_id": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "minLength": 1
+                  }
+                },
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "kind",
+                  "instance_id",
+                  "space_id",
+                  "file_id",
+                  "version_id"
+                ]
+              },
+              {
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "pinax"
+                    ]
+                  },
+                  "instance_id": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "minLength": 1
+                  },
+                  "source_id": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "minLength": 1
+                  },
+                  "object_id": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "minLength": 1
+                  },
+                  "revision": {
+                    "type": "string",
+                    "pattern": "^sha256:[a-f0-9]{64}$"
+                  },
+                  "uri": {
+                    "type": "string",
+                    "maxLength": 1024,
+                    "minLength": 1,
+                    "pattern": "^pinax://note/"
+                  }
+                },
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "kind",
+                  "instance_id",
+                  "source_id",
+                  "object_id",
+                  "revision",
+                  "uri"
+                ]
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "target_ref"
+        ]
+      },
       "ReadingMutationResult": {
         "if": {
           "properties": {

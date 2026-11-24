@@ -13,10 +13,11 @@ vi.mock('./security', () => ({ APP_URL: 'drivebridge-app://app/', appResource: v
 vi.mock('electron', () => ({
   get app() { return fixture.app; }, get powerMonitor() { return fixture.power; },
   BrowserWindow: class { constructor() { return fixture.window; } },
-  dialog: { showOpenDialog: fixture.dialog },
+  dialog: { showOpenDialog: fixture.dialog, showErrorBox: vi.fn() },
+  Menu: { buildFromTemplate: vi.fn(value => value), setApplicationMenu: vi.fn() },
   ipcMain: { handle: (name: string, handler: (...args: any[]) => Promise<any>) => fixture.handlers.set(name, handler), removeHandler: (name: string) => fixture.handlers.delete(name) },
   protocol: { registerSchemesAsPrivileged: vi.fn() },
-  session: { fromPartition: () => ({ setPermissionRequestHandler: vi.fn(), setPermissionCheckHandler: vi.fn(), on: vi.fn(), protocol: { handle: vi.fn(async () => {}) } }) },
+  session: { fromPartition: () => ({ setPermissionRequestHandler: vi.fn(), setPermissionCheckHandler: vi.fn(), on: vi.fn(), webRequest: { onBeforeRequest: vi.fn() }, protocol: { handle: vi.fn(async () => {}) } }) },
 }));
 beforeEach(() => {
   vi.resetModules(); fixture.handlers.clear(); fixture.start.mockReset(); fixture.dialog.mockReset();
@@ -24,7 +25,7 @@ beforeEach(() => {
   fixture.app = Object.assign(new EventEmitter(), { enableSandbox: vi.fn(), requestSingleInstanceLock: vi.fn(() => true), whenReady: vi.fn(async () => {}), getAppPath: () => '/synthetic-app', isPackaged: false, quit: vi.fn() });
   fixture.power = new EventEmitter();
   const frame = { url: 'drivebridge-app://app/' };
-  const contents = Object.assign(new EventEmitter(), { mainFrame: frame, isDestroyed: () => false, setWindowOpenHandler: vi.fn() });
+  const contents = Object.assign(new EventEmitter(), { id: 1, send: vi.fn(), mainFrame: frame, isDestroyed: () => false, setWindowOpenHandler: vi.fn() });
   fixture.window = Object.assign(new EventEmitter(), { webContents: contents, isDestroyed: () => false, show: vi.fn(), loadURL: vi.fn(async () => {}) });
 });
 it('quits installer event launches before acquiring the lock, opening a window or starting a host', async () => {
@@ -43,18 +44,19 @@ it.each(['dialog', 'preview'])('suspend during %s fences the late result and res
   let release!: () => void;
   const pending = new Promise<void>(resolve => { release = resolve; });
   fixture.dialog.mockImplementation(async () => { if (stage === 'dialog') await pending; return { canceled: false, filePaths: ['/synthetic-vault'] }; });
-  const host = { alive: true, close: vi.fn(async () => {}), preview: vi.fn(async () => { if (stage === 'preview') await pending; return { decision: 'blocked' }; }) };
+  const available = ['chooseVault', 'confirmBinding', 'listNotes', 'searchNotes', 'readDocument', 'readLinks', 'releaseProtection'];
+  const host = { alive: true, close: vi.fn(async () => {}), capabilities: vi.fn(async () => ({ schema_version: 'drivebridge.desktop.v1alpha1', available })), bindSource: vi.fn(async () => { if (stage === 'preview') await pending; return { decision: 'blocked' }; }) };
   fixture.start.mockResolvedValue(host);
   await import('./main'); await vi.waitFor(() => expect(fixture.handlers.has('desktop:chooseVault')).toBe(true));
   const event = { sender: fixture.window.webContents, senderFrame: fixture.window.webContents.mainFrame };
   const capabilities = fixture.handlers.get('desktop:capabilities')!;
-  expect((await capabilities(event, {})).data.available).toEqual(['chooseVault']);
+  expect((await capabilities(event, {})).data.available).toEqual(available);
   const result = fixture.handlers.get('desktop:chooseVault')!(event, {});
-  await vi.waitFor(() => expect(stage === 'dialog' ? fixture.dialog : host.preview).toHaveBeenCalledTimes(1));
+  await vi.waitFor(() => expect(stage === 'dialog' ? fixture.dialog : host.bindSource).toHaveBeenCalledTimes(1));
   fixture.power.emit('suspend');
   expect((await capabilities(event, {})).data.available).toEqual([]);
   release(); expect((await result).error.code).toBe('desktop_session_invalid');
-  expect(host.preview).toHaveBeenCalledTimes(stage === 'dialog' ? 0 : 1);
+  expect(host.bindSource).toHaveBeenCalledTimes(stage === 'dialog' ? 0 : 1);
   fixture.power.emit('resume'); expect((await capabilities(event, {})).data.available).toEqual([]);
   expect((await fixture.handlers.get('desktop:chooseVault')!(event, {})).error.code).toBe('owner_unavailable');
   const quitting = { preventDefault: vi.fn() }; fixture.app.emit('before-quit', quitting);

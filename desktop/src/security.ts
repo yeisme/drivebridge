@@ -4,7 +4,7 @@ import { resolve, relative, isAbsolute, extname } from 'node:path';
 export const APP_URL = 'drivebridge-app://app/';
 export const CSP = [
   "default-src 'none'", "script-src 'self'", "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob:", "font-src 'self'", "connect-src 'self'",
+  "img-src 'self' data: blob: drivebridge-asset:", "font-src 'self'", "connect-src 'self' drivebridge-asset:",
   "worker-src 'self' blob:", "media-src 'self' blob:", "object-src 'none'",
   "base-uri 'none'", "form-action 'none'", "frame-src 'none'", "frame-ancestors 'none'",
 ].join('; ');

@@ -32,6 +32,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/desktop/bindings/register-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["registerVault"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/desktop/bindings/preview": {
         parameters: {
             query?: never;
@@ -362,6 +378,22 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["resolveSyncConflict"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/desktop/reading-state/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["readReadingState"];
         delete?: never;
         options?: never;
         head?: never;
@@ -750,6 +782,24 @@ export interface components {
             object_id: string;
             revision: string;
             uri: string;
+        };
+        ReadReadingState: {
+            target_ref: {
+                /** @enum {string} */
+                kind: "file";
+                instance_id: string;
+                space_id: string;
+                file_id: string;
+                version_id: string;
+            } | {
+                /** @enum {string} */
+                kind: "pinax";
+                instance_id: string;
+                source_id: string;
+                object_id: string;
+                revision: string;
+                uri: string;
+            };
         };
         ReadingMutationResult: {
             found: boolean;
@@ -2036,6 +2086,142 @@ export interface operations {
                 content: {
                     "application/json": {
                         data: components["schemas"]["SourcePage"];
+                    };
+                };
+            };
+            /** @description Safe owner error; no private paths or upstream payload. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["DesktopError"];
+                    };
+                };
+            };
+            /** @description Safe owner error; no private paths or upstream payload. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["DesktopError"];
+                    };
+                };
+            };
+            /** @description Safe owner error; no private paths or upstream payload. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["DesktopError"];
+                    };
+                };
+            };
+            /** @description Safe owner error; no private paths or upstream payload. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["DesktopError"];
+                    };
+                };
+            };
+            /** @description Safe owner error; no private paths or upstream payload. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["DesktopError"];
+                    };
+                };
+            };
+            /** @description Safe owner error; no private paths or upstream payload. */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["DesktopError"];
+                    };
+                };
+            };
+            /** @description Safe owner error; no private paths or upstream payload. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["DesktopError"];
+                    };
+                };
+            };
+            /** @description Safe owner error; no private paths or upstream payload. */
+            416: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["DesktopError"];
+                    };
+                };
+            };
+            /** @description Safe owner error; no private paths or upstream payload. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["DesktopError"];
+                    };
+                };
+            };
+            /** @description Safe owner error; no private paths or upstream payload. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["DesktopError"];
+                    };
+                };
+            };
+        };
+    };
+    registerVault: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmptyRequest"];
+            };
+        };
+        responses: {
+            /** @description Owner result; not a runtime availability claim. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["BindingPreview"];
                     };
                 };
             };
@@ -4953,6 +5139,142 @@ export interface operations {
                 content: {
                     "application/json": {
                         data: components["schemas"]["pinax.projection.v1"];
+                    };
+                };
+            };
+            /** @description Safe owner error; no private paths or upstream payload. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["DesktopError"];
+                    };
+                };
+            };
+            /** @description Safe owner error; no private paths or upstream payload. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["DesktopError"];
+                    };
+                };
+            };
+            /** @description Safe owner error; no private paths or upstream payload. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["DesktopError"];
+                    };
+                };
+            };
+            /** @description Safe owner error; no private paths or upstream payload. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["DesktopError"];
+                    };
+                };
+            };
+            /** @description Safe owner error; no private paths or upstream payload. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["DesktopError"];
+                    };
+                };
+            };
+            /** @description Safe owner error; no private paths or upstream payload. */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["DesktopError"];
+                    };
+                };
+            };
+            /** @description Safe owner error; no private paths or upstream payload. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["DesktopError"];
+                    };
+                };
+            };
+            /** @description Safe owner error; no private paths or upstream payload. */
+            416: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["DesktopError"];
+                    };
+                };
+            };
+            /** @description Safe owner error; no private paths or upstream payload. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["DesktopError"];
+                    };
+                };
+            };
+            /** @description Safe owner error; no private paths or upstream payload. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: components["schemas"]["DesktopError"];
+                    };
+                };
+            };
+        };
+    };
+    readReadingState: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReadReadingState"];
+            };
+        };
+        responses: {
+            /** @description Owner result; not a runtime availability claim. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ReadingMutationResult"];
                     };
                 };
             };

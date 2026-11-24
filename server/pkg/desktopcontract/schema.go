@@ -20,7 +20,8 @@ func Schemas() map[string]*jsonschema.Schema {
 	schemas := map[string]*jsonschema.Schema{
 		"KnowledgeSource": r.Reflect(KnowledgeSource{}), "ReadingRef": r.Reflect(ReadingRef{}),
 		"FileRef": r.Reflect(FileRef{}), "PinaxRef": r.Reflect(PinaxRef{}),
-		"ReadingState": r.Reflect(ReadingState{}), "UpdateReadingState": update,
+		"ReadReadingState": r.Reflect(ReadReadingState{}),
+		"ReadingState":     r.Reflect(ReadingState{}), "UpdateReadingState": update,
 		"LookupReadingMutation": r.Reflect(LookupReadingMutation{}), "PageQuery": r.Reflect(PageQuery{}),
 		"SourcePage": r.Reflect(SourcePage{}), "ReadingStatePage": r.Reflect(ReadingStatePage{}),
 	}
@@ -68,6 +69,7 @@ func Fixtures() map[string]any {
 		"PageQuery":             PageQuery{}, "SourcePage": SourcePage{Items: []KnowledgeSource{source}, ObservedAt: now},
 		"ReadingStatePage": ReadingStatePage{Items: []ReadingState{state}, ObservedAt: now},
 	}
+	fixtures["ReadReadingState"] = ReadReadingState{TargetRef: pinax}
 	fixtures["EmptyRequest"] = EmptyRequest{}
 	fixtures["DesktopSyncConflictResolveInput"] = DesktopSyncConflictResolveInput{File: "notes/example.md", KeepLocal: true, Yes: true}
 	fixtures["DesktopEditorDraftInput"] = DesktopEditorDraftInput{ObjectID: "note-fixture", Revision: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Body: "draft"}

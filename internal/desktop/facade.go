@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"regexp"
+	"strings"
 	"sync"
 	"time"
 
@@ -30,6 +31,11 @@ type facade struct {
 	slot                 chan struct{}
 	done                 chan struct{}
 	once                 sync.Once
+	ctx                  context.Context
+	ownerMu              sync.Mutex
+	readers              map[string]*readerProcess
+	assetMu              sync.Mutex
+	assets               map[string]assetHandle
 }
 
 func startFacade(parent context.Context, binary ownerBinary) (*facade, error) {
@@ -41,6 +47,12 @@ func startFacade(parent context.Context, binary ownerBinary) (*facade, error) {
 }
 
 func startFacadeWithToken(parent context.Context, binary ownerBinary, token string) (*facade, error) {
+	return startFacadeWithAdmission(parent, binary, token, nil)
+}
+
+// startFacadeWithAdmission builds the loopback facade around a host-held owner
+// admission. A nil admission keeps the deny-only preflight.
+func startFacadeWithAdmission(parent context.Context, binary ownerBinary, token string, admission Admission) (*facade, error) {
 	if !fixedDigest("sha256:" + token) {
 		return nil, errors.New("desktop_session_invalid")
 	}
@@ -55,7 +67,7 @@ func startFacadeWithToken(parent context.Context, binary ownerBinary, token stri
 		return nil, errors.New("owner_unavailable")
 	}
 	ctx, cancel := context.WithCancel(parent)
-	f := &facade{preflight: NewPreflight(), binary: binary, token: token, host: listener.Addr().String(), address: "http://" + listener.Addr().String(), cancel: cancel, slot: make(chan struct{}, 1), done: make(chan struct{})}
+	f := &facade{preflight: NewPreflightWithAdmission(admission), binary: binary, token: token, host: listener.Addr().String(), address: "http://" + listener.Addr().String(), cancel: cancel, slot: make(chan struct{}, 1), done: make(chan struct{}), ctx: ctx, readers: map[string]*readerProcess{}}
 	f.server = &http.Server{Handler: http.HandlerFunc(f.handle), ReadHeaderTimeout: 3 * time.Second, ReadTimeout: 5 * time.Second, WriteTimeout: 25 * time.Second, IdleTimeout: 5 * time.Second, MaxHeaderBytes: 8 * 1024, BaseContext: func(net.Listener) context.Context { return ctx }}
 	go func() { defer close(f.done); _ = f.server.Serve(listener) }()
 	go func() {
@@ -72,6 +84,10 @@ func (f *facade) Close() {
 	f.once.Do(func() {
 		f.cancel()
 		f.preflight.Close()
+		f.assetMu.Lock()
+		clear(f.assets)
+		f.assetMu.Unlock()
+		f.closeReaders("")
 		ctx, cancel := context.WithTimeout(context.Background(), 7*time.Second)
 		defer cancel()
 		if f.server.Shutdown(ctx) != nil {
@@ -88,18 +104,44 @@ func (f *facade) handle(w http.ResponseWriter, r *http.Request) {
 		facadeError(w, "desktop_session_invalid")
 		return
 	}
-	if r.URL.RawQuery != "" || r.URL.ForceQuery || r.URL.RawPath != "" {
+	// Only declared read routes accept a query; each handler validates its fields.
+	editorSource := r.URL.Path == "/v1/desktop/sources"
+	if r.Method == "GET" {
+		for _, suffix := range []string{"/writer/editor-source", "/notes", "/search"} {
+			if _, ok := decodeEditorRoute(r.URL.Path, suffix); ok {
+				editorSource = true
+			}
+		}
+		if _, _, _, ok := readerDocumentRoute(r.URL.Path); ok {
+			editorSource = true
+		}
+	}
+	if r.URL.ForceQuery || r.URL.RawPath != "" || (r.URL.RawQuery != "" && !editorSource) {
 		facadeError(w, "request_invalid")
 		return
 	}
 	switch {
+	case r.Method == "GET" && strings.HasPrefix(r.URL.Path, "/v1/desktop/assets/"):
+		f.readAsset(w, r, strings.TrimPrefix(r.URL.Path, "/v1/desktop/assets/"))
 	case r.Method == "GET" && r.URL.Path == "/v1/desktop/capabilities":
 		if r.ContentLength != 0 || len(r.TransferEncoding) != 0 {
 			facadeError(w, "request_invalid")
 			return
 		}
-		// Confirmation and content reads are not usable until guard admission.
-		facadeData(w, desktopcontract.DesktopCapabilities{SchemaVersion: desktopcontract.Version, Available: []string{"capabilities", "chooseVault"}})
+		available := []string{"capabilities", "chooseVault"}
+		f.preflight.mu.Lock()
+		if f.preflight.admission != nil && !f.preflight.closed {
+			if _, ok := f.preflight.admission.(sourceCatalog); ok {
+				available = append(available, "registerVault", "listSources", "readReadingState", "updateReadingState", "lookupReadingMutation")
+			}
+			available = append(available, "confirmBinding", "listNotes", "searchNotes", "readDocument", "readLinks", "releaseProtection")
+		}
+		f.preflight.mu.Unlock()
+		facadeData(w, desktopcontract.DesktopCapabilities{SchemaVersion: desktopcontract.Version, Available: available})
+	case r.Method == "POST" && (r.URL.Path == "/v1/desktop/reading-state/read" || r.URL.Path == "/v1/desktop/reading-state/lookup") || r.Method == "PUT" && r.URL.Path == "/v1/desktop/reading-state":
+		f.readingState(w, r)
+	case r.Method == "GET" && r.URL.Path == "/v1/desktop/sources":
+		f.listSources(w, r)
 	case r.Method == "POST" && r.URL.Path == "/v1/desktop/bindings/preview":
 		var input desktopcontract.NativeSelection
 		if decodeFacadeRequest(w, r, &input, []string{"native_selection_id"}) != nil || !facadeKey.MatchString(input.NativeSelectionID) {
@@ -143,17 +185,111 @@ func (f *facade) handle(w http.ResponseWriter, r *http.Request) {
 			facadeError(w, "request_invalid")
 			return
 		}
-		// No mutation is accepted or persisted. A denied confirmation cannot
-		// become a receipt, even if its caller supplies a valid original key.
-		err := f.preflight.ConfirmBlocked(input)
-		if err == nil {
-			facadeError(w, "guard_unavailable")
+		// Confirmation is only a mutation when the host holds an owner admission
+		// seam. Without one it stays an explicit refusal: a denied confirmation
+		// can never become a receipt, even with a valid original key.
+		receipt, err := f.preflight.Confirm(input, r.Header.Get("Idempotency-Key"))
+		if err != nil {
+			facadeError(w, err.Error())
 			return
 		}
-		facadeError(w, err.Error())
+		facadeData(w, receipt)
+	case r.Method == "PATCH" && r.URL.Path != "":
+		id, ok := bindingVisibilityPath(r.URL.Path)
+		if !ok {
+			facadeError(w, "desktop_contract_unsupported")
+			return
+		}
+		var input desktopcontract.SetSourceVisibility
+		if decodeFacadeRequest(w, r, &input, []string{"expected_revision", "hidden"}) != nil {
+			facadeError(w, "request_invalid")
+			return
+		}
+		view, err := f.preflight.SetVisibility(id, input)
+		if err != nil {
+			facadeError(w, err.Error())
+			return
+		}
+		facadeData(w, view)
+	case r.Method == "POST" && r.URL.Path != "":
+		if id, ok := decodeEditorRoute(r.URL.Path, "/writer/editor:propose"); ok {
+			f.proposeEditorDraft(r.Context(), w, r, id)
+			return
+		}
+		id, ok := bindingReleasePath(r.URL.Path)
+		if !ok {
+			facadeError(w, "desktop_contract_unsupported")
+			return
+		}
+		if len(r.Header.Values("Idempotency-Key")) != 1 || !facadeKey.MatchString(r.Header.Get("Idempotency-Key")) {
+			facadeError(w, "request_invalid")
+			return
+		}
+		var input desktopcontract.ReleaseProtection
+		if decodeFacadeRequest(w, r, &input, []string{"expected_revision", "confirmed"}) != nil {
+			facadeError(w, "request_invalid")
+			return
+		}
+		receipt, err := f.preflight.Release(id, input, r.Header.Get("Idempotency-Key"))
+		if err != nil {
+			facadeError(w, err.Error())
+			return
+		}
+		f.closeReaders(receipt.Binding.SourceID)
+		facadeData(w, receipt)
+	case r.Method == "GET" && r.URL.Path != "":
+		if source, object, action, ok := readerDocumentRoute(r.URL.Path); ok {
+			if action == "document" {
+				f.readDocument(r.Context(), w, r, source, object)
+			} else {
+				f.readLinks(r.Context(), w, r, source, object)
+			}
+			return
+		}
+		if id, ok := decodeEditorRoute(r.URL.Path, "/search"); ok {
+			f.searchNotes(r.Context(), w, r, id)
+			return
+		}
+		if id, ok := decodeEditorRoute(r.URL.Path, "/notes"); ok {
+			f.listNotes(r.Context(), w, r, id)
+			return
+		}
+		if id, ok := decodeEditorRoute(r.URL.Path, "/writer/editor-source"); ok {
+			f.readEditorSource(r.Context(), w, r, id)
+			return
+		}
+		facadeError(w, "desktop_contract_unsupported")
 	default:
 		facadeError(w, "desktop_contract_unsupported")
 	}
+}
+
+// bindingVisibilityPath matches PATCH /v1/desktop/bindings/{binding_id} exactly:
+// one opaque segment, no trailing segments and no empty identity.
+func bindingVisibilityPath(target string) (string, bool) {
+	const prefix = "/v1/desktop/bindings/"
+	if !strings.HasPrefix(target, prefix) {
+		return "", false
+	}
+	id := strings.TrimPrefix(target, prefix)
+	if id == "" || strings.Contains(id, "/") || !facadeKey.MatchString(id) {
+		return "", false
+	}
+	return id, true
+}
+
+// bindingReleasePath matches POST /v1/desktop/bindings/{binding_id}/release.
+func bindingReleasePath(target string) (string, bool) {
+	const prefix = "/v1/desktop/bindings/"
+	const suffix = "/release"
+	if !strings.HasPrefix(target, prefix) || !strings.HasSuffix(target, suffix) {
+		return "", false
+	}
+	id := strings.TrimSuffix(strings.TrimPrefix(target, prefix), suffix)
+	if id == "" || strings.Contains(id, "/") || !facadeKey.MatchString(id) {
+		return "", false
+	}
+	return id, true
 }
 
 func (f *facade) inspectOwner(ctx context.Context, view desktopcontract.BindingPreview) desktopcontract.BindingPreview {
@@ -161,12 +297,12 @@ func (f *facade) inspectOwner(ctx context.Context, view desktopcontract.BindingP
 	pending, ok := f.preflight.previews[view.PreviewID]
 	f.preflight.mu.Unlock()
 	if !ok || pending.selection.recheck() != nil {
-		view.Reason = "owner_unavailable"
+		view.Decision, view.Reason = "blocked", "owner_unavailable"
 		return view
 	}
 	child, err := startMetadataProcess(ctx, f.binary, pending.selection.path)
 	if err != nil {
-		view.Reason = "owner_unavailable"
+		view.Decision, view.Reason = "blocked", "owner_unavailable"
 		return view
 	}
 	client, err := pinaxclient.New(pinaxclient.Config{BaseURL: child.ready.Address, Token: child.bearer, Timeout: 3 * time.Second})
@@ -179,7 +315,7 @@ func (f *facade) inspectOwner(ctx context.Context, view desktopcontract.BindingP
 	}
 	closeErr := child.Close()
 	if err != nil || closeErr != nil || pending.selection.recheck() != nil {
-		view.Reason = "owner_unavailable"
+		view.Decision, view.Reason = "blocked", "owner_unavailable"
 	}
 	// Do not return owner display names, paths, diagnostics, or session tokens.
 	// Success leaves the original guard refusal intact.
@@ -198,6 +334,9 @@ var facadeKey = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`)
 // unknown fields. encoding/json's permissive last-key-wins behavior is not
 // suitable for confirmation or private selection identities.
 func decodeFacadeRequest(w http.ResponseWriter, r *http.Request, target any, fields []string) error {
+	return decodeFacadeOptionalRequest(w, r, target, fields, nil)
+}
+func decodeFacadeOptionalRequest(w http.ResponseWriter, r *http.Request, target any, fields, optional []string) error {
 	fail := func() error { return errors.New("request_invalid") }
 	content, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	if err != nil || content != "application/json" || len(r.Header.Values("Content-Type")) != 1 || len(r.Header.Values("Content-Encoding")) != 0 {
@@ -216,6 +355,9 @@ func decodeFacadeRequest(w http.ResponseWriter, r *http.Request, target any, fie
 	for _, field := range fields {
 		allowed[field] = true
 	}
+	for _, field := range optional {
+		allowed[field] = true
+	}
 	seen := map[string]bool{}
 	for decoder.More() {
 		key, err := decoder.Token()
@@ -232,8 +374,10 @@ func decodeFacadeRequest(w http.ResponseWriter, r *http.Request, target any, fie
 			return fail()
 		}
 	}
-	if len(seen) != len(fields) {
-		return fail()
+	for _, field := range fields {
+		if !seen[field] {
+			return fail()
+		}
 	}
 	if _, err := decoder.Token(); err != nil {
 		return fail()

@@ -58,7 +58,7 @@ export function decodeHostEvent(frame: Uint8Array): HostEvent {
 }
 
 export function encodeHostRequest(value: HostBootstrap | HostSelection | HostCancel): Buffer {
-  const valid = 'action' in value ? value.action === 'select' ? validators.HostSelection(value) : validators.HostCancel(value) : validators.HostBootstrap(value);
+  const valid = 'action' in value ? value.action !== 'cancel' ? validators.HostSelection(value) : validators.HostCancel(value) : validators.HostBootstrap(value);
   if (!valid) return fail();
   const result = Buffer.from(JSON.stringify(value) + '\n');
   if (result.length > MAX_FRAME) return fail();
@@ -98,7 +98,7 @@ export class HostExchange {
   expect(request: HostSelection | HostCancel): void {
     if (this.#state !== 'ready' || this.#pending.size >= 32 || this.#pending.has(request.request_id)) return fail();
     encodeHostRequest(request);
-    this.#pending.set(request.request_id, request.action === 'select' ? 'selection' : 'cancelled');
+    this.#pending.set(request.request_id, request.action !== 'cancel' ? 'selection' : 'cancelled');
   }
   accept(event: HostEvent): void {
     try {

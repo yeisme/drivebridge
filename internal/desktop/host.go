@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/invopop/jsonschema"
+	"github.com/yeisme/drivebridge-server/pkg/desktopcontract"
 )
 
 const HostVersion = "drivebridge.desktop.host.v1alpha1"
@@ -24,10 +25,12 @@ type HostBootstrap struct {
 	Bearer         string `json:"bearer" jsonschema:"pattern=^[a-f0-9]{64}$"`
 	BinaryDigest   string `json:"binary_digest" jsonschema:"pattern=^sha256:[a-f0-9]{64}$"`
 	ManifestDigest string `json:"manifest_digest" jsonschema:"pattern=^sha256:[a-f0-9]{64}$"`
+	StatePath      string `json:"state_path,omitempty" jsonschema:"minLength=1,maxLength=32768"`
+	StateAction    string `json:"state_action,omitempty" jsonschema:"enum=create,enum=migrate"`
 }
 type HostSelection struct {
 	SchemaVersion string `json:"schema_version" jsonschema:"enum=drivebridge.desktop.host.v1alpha1"`
-	Action        string `json:"action" jsonschema:"enum=select"`
+	Action        string `json:"action" jsonschema:"enum=select,enum=register"`
 	RequestID     string `json:"request_id" jsonschema:"minLength=1,maxLength=128"`
 	NativePath    string `json:"native_path" jsonschema:"minLength=1,maxLength=32768"`
 }
@@ -45,6 +48,7 @@ type HostEvent struct {
 	RequestID     string `json:"request_id,omitempty"`
 	SelectionID   string `json:"selection_id,omitempty"`
 	Code          string `json:"code,omitempty"`
+	StateRef      string `json:"state_ref,omitempty"`
 }
 
 // HostSchemas is a separate private host contract export. It is intentionally
@@ -58,6 +62,26 @@ func HostSchemas() map[string]*jsonschema.Schema {
 // DriveBridge executable path supplied by the CLI composition root. Only the
 // fixed sibling pinax binary may be started, never a frame-specified command.
 func ServeHost(ctx context.Context, input io.ReadCloser, output io.WriteCloser, executable string) error {
+	return ServeHostWithAdmission(ctx, input, output, executable, nil)
+}
+
+// ServeHostWithAdmission is ServeHost plus a lazy owner admission factory. The
+// factory runs only after the private bootstrap has been validated, so a host
+// without a trusted bootstrap never discovers owner state, and a host that cannot
+// open its owner state falls back to deny-only instead of inventing a guard.
+func ServeHostWithAdmission(ctx context.Context, input io.ReadCloser, output io.WriteCloser, executable string, open func() (Admission, func(), error)) error {
+	return ServeHostWithState(ctx, input, output, executable, func(_ HostBootstrap) (Admission, func(), string, error) {
+		if open == nil {
+			return nil, nil, "", nil
+		}
+		admission, close, err := open()
+		return admission, close, "", err
+	})
+}
+
+// ServeHostWithState accepts an owner state only through the trusted bootstrap.
+// A rejected state never falls back to another state or creates one implicitly.
+func ServeHostWithState(ctx context.Context, input io.ReadCloser, output io.WriteCloser, executable string, open func(HostBootstrap) (Admission, func(), string, error)) error {
 	if ctx == nil {
 		return errors.New("desktop_session_invalid")
 	}
@@ -113,7 +137,34 @@ func ServeHost(ctx context.Context, input io.ReadCloser, output io.WriteCloser, 
 		return errors.New("desktop_session_invalid")
 	}
 	var bootstrap HostBootstrap
-	if first.err != nil || closedHostJSON(first.data, &bootstrap, []string{"schema_version", "session_nonce", "bearer", "binary_digest", "manifest_digest"}) != nil || bootstrap.SchemaVersion != HostVersion || len(bootstrap.SessionNonce) < 16 || len(bootstrap.SessionNonce) > 128 || !facadeKey.MatchString(bootstrap.SessionNonce) || !fixedDigest("sha256:"+bootstrap.Bearer) || !fixedDigest(bootstrap.BinaryDigest) || !fixedDigest(bootstrap.ManifestDigest) {
+	fields := []string{"schema_version", "session_nonce", "bearer", "binary_digest", "manifest_digest"}
+	var present map[string]json.RawMessage
+	if json.Unmarshal(first.data, &present) == nil {
+		if _, ok := present["state_path"]; ok {
+			fields = append(fields, "state_path")
+		}
+		if _, ok := present["state_action"]; ok {
+			fields = append(fields, "state_action")
+		}
+	}
+	if first.err != nil || closedHostJSON(first.data, &bootstrap, fields) != nil || bootstrap.SchemaVersion != HostVersion || len(bootstrap.SessionNonce) < 16 || len(bootstrap.SessionNonce) > 128 || !facadeKey.MatchString(bootstrap.SessionNonce) || !fixedDigest("sha256:"+bootstrap.Bearer) || !fixedDigest(bootstrap.BinaryDigest) || !fixedDigest(bootstrap.ManifestDigest) {
+		return failure()
+	}
+	if bootstrap.StateAction != "" && bootstrap.StateAction != "create" && bootstrap.StateAction != "migrate" {
+		return failure()
+	}
+	if bootstrap.StatePath != "" {
+		path := bootstrap.StatePath
+		if !filepath.IsAbs(path) || filepath.Clean(path) != path {
+			return failure()
+		}
+		if bootstrap.StateAction == "create" {
+			path = filepath.Dir(path)
+		}
+		if _, err := directoryIdentity(path); err != nil {
+			return failure()
+		}
+	} else if len(fields) > 5 {
 		return failure()
 	}
 	name := "pinax"
@@ -121,12 +172,31 @@ func ServeHost(ctx context.Context, input io.ReadCloser, output io.WriteCloser, 
 		name += ".exe"
 	}
 	binary := ownerBinary{path: filepath.Join(filepath.Dir(executable), name), sha256: bootstrap.BinaryDigest, manifestDigest: bootstrap.ManifestDigest}
-	f, err := startFacadeWithToken(ctx, binary, bootstrap.Bearer)
+	// Owner state is discovered only after the bootstrap frame validated: the
+	// frame, not a renderer request or an inherited flag, is what makes discovery
+	// legitimate. A factory refusal stays deny-only rather than failing the host.
+	var admission Admission
+	var stateRef string
+	var releaseAdmission func()
+	if open != nil {
+		opened, release, ref, openErr := open(bootstrap)
+		if ref != "" && !fixedDigest(ref) {
+			return failure()
+		}
+		stateRef = ref
+		if openErr == nil && opened != nil {
+			admission, releaseAdmission = opened, release
+		}
+	}
+	if releaseAdmission != nil {
+		defer releaseAdmission()
+	}
+	f, err := startFacadeWithAdmission(ctx, binary, bootstrap.Bearer, admission)
 	if err != nil {
 		return failure()
 	}
 	defer f.Close()
-	if emit(HostEvent{Type: "ready", SessionNonce: bootstrap.SessionNonce, Address: f.address}) != nil {
+	if emit(HostEvent{Type: "ready", SessionNonce: bootstrap.SessionNonce, Address: f.address, StateRef: stateRef}) != nil {
 		return errors.New("desktop_host_closed")
 	}
 	for {
@@ -148,12 +218,18 @@ func ServeHost(ctx context.Context, input io.ReadCloser, output io.WriteCloser, 
 				return failure()
 			}
 			switch action.Action {
-			case "select":
+			case "select", "register":
 				var request HostSelection
 				if closedHostJSON(next.data, &request, []string{"schema_version", "action", "request_id", "native_path"}) != nil || request.SchemaVersion != HostVersion || !facadeKey.MatchString(request.RequestID) {
 					return failure()
 				}
-				ticket, err := f.preflight.Select(request.NativePath)
+				var ticket desktopcontract.NativeSelection
+				var err error
+				if action.Action == "register" {
+					ticket, err = f.registerSource(ctx, request.NativePath)
+				} else {
+					ticket, err = f.preflight.Select(request.NativePath)
+				}
 				event := HostEvent{Type: "selection", RequestID: request.RequestID, SelectionID: ticket.NativeSelectionID}
 				if err != nil {
 					event.Type = "error"

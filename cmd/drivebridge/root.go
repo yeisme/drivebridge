@@ -63,6 +63,31 @@ func (c *cli) resolve(cmd *cobra.Command) (config.File, config.Effective, error)
 	return file, effective, nil
 }
 
+// ownerStatePath resolves the configured state directory with the same file,
+// environment and default precedence as normal commands but with no flags at
+// all: the desktop surface deliberately has no flag surface, so owner state can
+// only come from configuration that predates the process.
+func ownerStatePath() (string, bool) {
+	home, err := os.UserConfigDir()
+	if err != nil {
+		return "", false
+	}
+	var file config.File
+	if path := config.Discover(""); path != "" {
+		loaded, loadErr := config.Load(path)
+		if loadErr != nil {
+			return "", false
+		}
+		file = loaded
+	}
+	effective := config.ResolveAll(file, nil, map[string]string{
+		"state":         filepath.Join(home, "drivebridge"),
+		"rclone_config": filepath.Join(home, "rclone", "rclone.conf"),
+	})
+	state := effective.Values["state"]
+	return state, state != ""
+}
+
 // flagNames maps configuration keys to their command-line flag names.
 var flagNames = map[string]string{
 	"aigora_url":        "aigora-url",

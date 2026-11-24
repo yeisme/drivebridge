@@ -163,6 +163,16 @@
     "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "uri": "pinax://note/note_fixture?v=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
   },
+  "ReadReadingState": {
+    "target_ref": {
+      "kind": "pinax",
+      "instance_id": "instance-fixture",
+      "source_id": "source-fixture",
+      "object_id": "note_fixture",
+      "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "uri": "pinax://note/note_fixture?v=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  },
   "ReadingMutationResult": {
     "found": false,
     "state": null

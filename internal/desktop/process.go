@@ -45,6 +45,38 @@ func startMetadataProcess(ctx context.Context, binary ownerBinary, vault string)
 
 // Shortened budgets are private test inputs, never caller-controlled protocol.
 func startMetadataProcessWithin(ctx context.Context, binary ownerBinary, vault string, readyBudget, drainBudget time.Duration) (*readerProcess, error) {
+	return startSessionProcessWithin(ctx, binary, vault, []string{"reader.metadata"}, true, readyBudget, drainBudget)
+}
+
+// ownerScopes is the closed owner scope vocabulary a host session may request.
+var ownerScopes = map[string]bool{"reader.metadata": true, "reader.body": true, "reader.relations": true, "reader.assets": true, "writer.capture": true, "writer.editor": true, "writer.organizer": true}
+
+func ownerWriterScope(scopes []string) bool {
+	for _, scope := range scopes {
+		switch scope {
+		case "writer.capture", "writer.editor", "writer.organizer":
+			return true
+		}
+	}
+	return false
+}
+
+// startOwnerSession opens one explicitly scoped owner session. A write scope must
+// declare readonly=false and a reader-only session can never enable mutation, so
+// a host can never reach a write route through a metadata session.
+func startOwnerSession(ctx context.Context, binary ownerBinary, vault string, scopes []string, readonly bool) (*readerProcess, error) {
+	return startSessionProcessWithin(ctx, binary, vault, scopes, readonly, 15*time.Second, 5*time.Second)
+}
+
+func startSessionProcessWithin(ctx context.Context, binary ownerBinary, vault string, scopes []string, readonly bool, readyBudget, drainBudget time.Duration) (*readerProcess, error) {
+	if len(scopes) == 0 || ownerWriterScope(scopes) == readonly {
+		return nil, errors.New("session_request_invalid")
+	}
+	for _, scope := range scopes {
+		if !ownerScopes[scope] {
+			return nil, errors.New("session_request_invalid")
+		}
+	}
 	if ctx == nil || readyBudget <= 0 || readyBudget > 15*time.Second || drainBudget <= 0 || drainBudget > 5*time.Second {
 		return nil, errors.New("session_request_invalid")
 	}
@@ -69,7 +101,7 @@ func startMetadataProcessWithin(ctx context.Context, binary ownerBinary, vault s
 	if err != nil {
 		return nil, err
 	}
-	frame, err := json.Marshal(localsession.Bootstrap{SchemaVersion: localsession.BootstrapVersion, SessionNonce: nonce, Bearer: bearer, BindingID: binding, VaultRoot: vault, Scopes: []string{"reader.metadata"}, Readonly: true})
+	frame, err := json.Marshal(localsession.Bootstrap{SchemaVersion: localsession.BootstrapVersion, SessionNonce: nonce, Bearer: bearer, BindingID: binding, VaultRoot: vault, Scopes: scopes, Readonly: readonly})
 	if err != nil || len(frame)+1 > localsession.MaxFrameBytes {
 		return nil, errors.New("session_request_invalid")
 	}
@@ -144,7 +176,7 @@ func startMetadataProcessWithin(ctx context.Context, binary ownerBinary, vault s
 			received <- result{err: errors.New("session_ready_invalid")}
 			return
 		}
-		event, err := localsession.DecodeReady(scanner.Bytes(), nonce, binding, binary.manifestDigest, true)
+		event, err := localsession.DecodeReady(scanner.Bytes(), nonce, binding, binary.manifestDigest, readonly)
 		received <- result{event: event, err: err}
 		if err != nil {
 			return

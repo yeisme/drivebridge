@@ -88,6 +88,10 @@ type UpdateReadingState struct {
 	ClearPosition    *bool      `json:"clear_position,omitempty"`
 }
 
+type ReadReadingState struct {
+	TargetRef ReadingRef `json:"target_ref"`
+}
+
 type LookupReadingMutation struct {
 	IdempotencyKey string `json:"idempotency_key" jsonschema:"minLength=1,maxLength=128,pattern=^[A-Za-z0-9][A-Za-z0-9._:-]*$"`
 }

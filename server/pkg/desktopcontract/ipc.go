@@ -21,6 +21,7 @@ func IPCMethods() []IPCMethod {
 	methods := []IPCMethod{
 		{Name: "capabilities", HTTPMethod: "GET", Path: "/v1/desktop/capabilities", RequestSchema: "EmptyRequest", ResponseSchema: "DesktopCapabilities"},
 		{Name: "listSources", HTTPMethod: "GET", Path: "/v1/desktop/sources", RequestSchema: "PageQuery", ResponseSchema: "SourcePage"},
+		{Name: "registerVault", HTTPMethod: "POST", Path: "/v1/desktop/bindings/register-preview", RequestSchema: "EmptyRequest", ResponseSchema: "BindingPreview", NativeSelection: true},
 		{Name: "chooseVault", HTTPMethod: "POST", Path: "/v1/desktop/bindings/preview", RequestSchema: "EmptyRequest", ResponseSchema: "BindingPreview", NativeSelection: true},
 		{Name: "confirmBinding", HTTPMethod: "POST", Path: "/v1/desktop/bindings", RequestSchema: "ConfirmBinding", ResponseSchema: "BindingMutationReceipt", Idempotent: true},
 		{Name: "lookupBindingMutation", HTTPMethod: "POST", Path: "/v1/desktop/bindings/lookup", RequestSchema: "BindingMutationLookup", ResponseSchema: "BindingLookupResult"},
@@ -42,6 +43,7 @@ func IPCMethods() []IPCMethod {
 		{Name: "listSyncConflicts", HTTPMethod: "GET", Path: "/v1/desktop/sources/{source_id}/sync/conflicts", TargetField: "source_id", RequestSchema: "pinax.sync.conflicts.list.request.v1", ResponseSchema: "pinax.projection.v1"},
 		{Name: "diffSyncConflict", HTTPMethod: "GET", Path: "/v1/desktop/sources/{source_id}/sync/conflicts:diff", TargetField: "source_id", RequestSchema: "pinax.sync.conflicts.diff.request.v1", ResponseSchema: "pinax.projection.v1"},
 		{Name: "resolveSyncConflict", HTTPMethod: "POST", Path: "/v1/desktop/sources/{source_id}/sync/conflicts:resolve", TargetField: "source_id", RequestSchema: "DesktopSyncConflictResolveInput", ResponseSchema: "pinax.projection.v1", Idempotent: true},
+		{Name: "readReadingState", HTTPMethod: "POST", Path: "/v1/desktop/reading-state/read", RequestSchema: "ReadReadingState", ResponseSchema: "ReadingMutationResult"},
 		{Name: "listReadingState", HTTPMethod: "GET", Path: "/v1/desktop/reading-state", RequestSchema: "PageQuery", ResponseSchema: "ReadingStatePage"},
 		{Name: "updateReadingState", HTTPMethod: "PUT", Path: "/v1/desktop/reading-state", RequestSchema: "UpdateReadingState", ResponseSchema: "ReadingState", Idempotent: true},
 		{Name: "lookupReadingMutation", HTTPMethod: "POST", Path: "/v1/desktop/reading-state/lookup", RequestSchema: "LookupReadingMutation", ResponseSchema: "ReadingMutationResult"},

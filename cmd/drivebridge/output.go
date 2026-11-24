@@ -1,11 +1,14 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/yeisme/drivebridge/internal/bridge"
 )
@@ -155,13 +158,14 @@ func flattenFacts(data any, prefix string, depth int) []string {
 type eventStream struct {
 	mode       outputMode
 	command    string
+	runID      string
 	seq        int
 	live       bool
 	progressed bool
 }
 
 func (c *cli) stream(command string) *eventStream {
-	e := &eventStream{mode: c.mode, command: command}
+	e := &eventStream{mode: c.mode, command: command, runID: newRunID()}
 	if c.mode.Events {
 		e.live = true
 		e.emit("start", map[string]any{"spec_version": "1.0"})
@@ -169,9 +173,17 @@ func (c *cli) stream(command string) *eventStream {
 	return e
 }
 
+func newRunID() string {
+	buf := make([]byte, 16)
+	if _, err := rand.Read(buf); err == nil {
+		return "run-" + hex.EncodeToString(buf)
+	}
+	return fmt.Sprintf("run-%d", time.Now().UnixNano())
+}
+
 func (e *eventStream) emit(kind string, fields map[string]any) {
 	e.seq++
-	event := map[string]any{"type": kind, "seq": e.seq, "command": driveCommand(e.command)}
+	event := map[string]any{"type": kind, "seq": e.seq, "command": driveCommand(e.command), "run_id": e.runID}
 	for k, v := range fields {
 		event[k] = v
 	}

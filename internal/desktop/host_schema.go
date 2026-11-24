@@ -9,7 +9,7 @@ func (HostEvent) JSONSchema() *jsonschema.Schema {
 	r := jsonschema.Reflector{Anonymous: true, DoNotReference: true}
 	event := r.Reflect(plain{})
 	pointer := func(value uint64) *uint64 { return &value }
-	fields := []string{"schema_version", "type", "session_nonce", "address", "request_id", "selection_id", "code"}
+	fields := []string{"schema_version", "type", "session_nonce", "address", "request_id", "selection_id", "code", "state_ref"}
 	version, _ := event.Properties.Get("schema_version")
 	version.Enum = []any{HostVersion}
 	for _, name := range []string{"request_id", "selection_id", "session_nonce"} {
@@ -23,6 +23,8 @@ func (HostEvent) JSONSchema() *jsonschema.Schema {
 	address, _ := event.Properties.Get("address")
 	address.MaxLength = pointer(64)
 	address.Pattern = `^http://127\.0\.0\.1:[1-9][0-9]*$`
+	stateRef, _ := event.Properties.Get("state_ref")
+	stateRef.Pattern = `^sha256:[a-f0-9]{64}$`
 	code, _ := event.Properties.Get("code")
 	code.Enum = []any{"desktop_host_invalid", "native_selection_invalid"}
 	for _, branch := range []struct {
@@ -50,6 +52,9 @@ func (HostEvent) JSONSchema() *jsonschema.Schema {
 		allowed := map[string]bool{"schema_version": true, "type": true}
 		for _, name := range branch.required {
 			allowed[name] = true
+		}
+		if branch.kind == "ready" {
+			allowed["state_ref"] = true
 		}
 		if branch.kind == "error" {
 			allowed["request_id"] = true

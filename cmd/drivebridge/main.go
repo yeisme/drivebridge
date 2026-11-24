@@ -94,6 +94,7 @@ func newRootCommand(c *cli) *cobra.Command {
 		"preset":       newPresetCommand(c),
 		"storage":      newStorageCommand(c),
 		"remote":       newRemoteCommand(c),
+		"workspace":    newWorkspaceCommand(c),
 		"space":        newSpaceCommand(c),
 		"connection":   newConnectionCommand(c),
 		"bind":         newBindCommand(c),

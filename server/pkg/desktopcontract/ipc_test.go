@@ -31,7 +31,7 @@ func TestDesktopIPCMethodsAreFixedAndPlanned(t *testing.T) {
 			t.Fatal("export accepts private input")
 		}
 	}
-	if len(seen) != 32 {
+	if len(seen) != 34 || !seen["readReadingState"] {
 		t.Fatal("incomplete catalog")
 	}
 	if _, err := Encode("ipc"); err != nil {
