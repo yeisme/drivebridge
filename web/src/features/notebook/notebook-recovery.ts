@@ -1,3 +1,5 @@
+import { ensureLanBrowserCompat } from "../../lib/tab-lock";
+
 export type NotebookRecoveryReason =
   | "storage_unavailable"
   | "lock_unavailable"
@@ -100,16 +102,16 @@ function parseStored<T>(slot: string, parse: Parser<T>) {
   return raw === null ? null : parse(raw);
 }
 
-function secureOriginReason() {
+function ensureLanOriginLocks() {
   const hostname = typeof location === "undefined" ? "" : location.hostname;
-  const local = hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]";
-  if (typeof window !== "undefined" && !window.isSecureContext && !local) return new NotebookRecoveryError("insecure_context");
-  return null;
+  const local = hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]" || hostname === "";
+  if (typeof window !== "undefined" && (window.isSecureContext === false || !local)) {
+    ensureLanBrowserCompat();
+  }
 }
 
 function lockRequest<T>(slot: string, signal: AbortSignal | undefined, callback: () => T | Promise<T>): Promise<T> {
-  const originReason = secureOriginReason();
-  if (originReason) return Promise.reject(originReason);
+  ensureLanOriginLocks();
   if (typeof navigator === "undefined" || !navigator.locks || typeof navigator.locks.request !== "function") return Promise.reject(new NotebookRecoveryError("lock_unavailable"));
   let entered = false;
   try {
@@ -156,8 +158,7 @@ export function notebookRecoveryMessage(reason: NotebookRecoveryReason | "unknow
 }
 
 export async function inspectNotebookRecovery<T>(slot: string, parse: Parser<T>) {
-  const originReason = secureOriginReason();
-  if (originReason) throw originReason;
+  ensureLanOriginLocks();
   if (typeof navigator === "undefined" || !navigator.locks || typeof navigator.locks.request !== "function") throw new NotebookRecoveryError("lock_unavailable");
   const value = parseStored(slot, parse);
   storageProbe(slot);

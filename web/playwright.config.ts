@@ -21,6 +21,7 @@ const webDir = process.env.DRIVEBRIDGE_WEB_DIR
   : path.resolve(import.meta.dirname, "dist");
 export default defineConfig({
   testDir: "tests",
+  outputDir: process.env.DRIVEBRIDGE_EVIDENCE_ARTIFACTS ? path.join(process.env.DRIVEBRIDGE_EVIDENCE_ARTIFACTS, "browser-test-results") : "test-results",
   timeout: 60000,
   workers: 1,
   reporter: "list",

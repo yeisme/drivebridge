@@ -8,6 +8,10 @@ import { SidebarFooter } from "./app/SidebarFooter";
 import { RouteBoundary } from "./app/RouteBoundary";
 import { CommandSearch } from "./app/CommandSearch";
 import { MobileNavigationDrawer } from "./app/MobileNavigationDrawer";
+import { TransferDock } from "./app/TransferDock";
+import { chooseDefaultDriveSpace } from "./app/default-space";
+import { buildDirectTokenInviteUrl, extractUrlLoginToken, formatInviteShareText } from "./app/url-token";
+import { humanFileKind } from "./lib/file-display";
 import { useMobileViewport } from "./app/useMobileViewport";
 import { useSidebarPreference } from "./app/useSidebarPreference";
 import { useNavGroups } from "./app/useNavGroups";
@@ -40,7 +44,7 @@ import { PreviewDirectoryTree } from "./features/files/PreviewDirectoryTree";
 import { createPreviewWorkspaceState, previewKey, previewReducer } from "./features/files/preview-state";
 import { TrashPage } from "./features/trash/TrashPage";
 import { restorableSelection } from "./features/trash/selection";
-import { MediaPreview } from "./Media";
+import { ImageFormatConvertForm, isConvertibleImageFile, MediaPreview } from "./Media";
 import { canOpenMarkdownNotebook } from "./features/notebook/notebook-capability";
 import { RobotSetup } from "./RobotSetup";
 import { CapacityPanel } from "./CapacityView";
@@ -86,7 +90,6 @@ import {
   Check,
   LoaderCircle,
   X,
-  ChevronRight,
   ShieldCheck,
   KeyRound,
   ArrowLeft,
@@ -122,6 +125,7 @@ import {
 import { backendOf, capabilityText } from "./storage";
 import {
   pendingNavigationTasks,
+  visibleConsumerNavGroups,
   visibleNavGroups,
 } from "./nav-groups";
 import type {
@@ -166,6 +170,7 @@ const navigation: [Page, string, React.ReactNode][] = [
 function App() {
   const mobile = useMobileViewport();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [transferDockOpen, setTransferDockOpen] = useState(false);
   const [commandSearchOpen, setCommandSearchOpen] = useState(false);
   const searchReturnFocus = useRef<HTMLElement | null>(null);
   const openCommandSearch = () => { searchReturnFocus.current = document.activeElement as HTMLElement; setCommandSearchOpen(true); };
@@ -197,6 +202,7 @@ function App() {
     [issueNames, setIssueNames] = useState(""),
     [issueDays, setIssueDays] = useState(""),
     [issueAdmin, setIssueAdmin] = useState(false),
+    [issueOneTime, setIssueOneTime] = useState(true),
     [revokeTarget, setRevokeTarget] = useState<UserKeyRow | null>(null),
     [loading, setLoading] = useState(true),
     [spaces, setSpaces] = useState<Space[]>([]),
@@ -226,7 +232,17 @@ function App() {
     [driveConnection, setDriveConnection] = useState("");
   useEffect(() => {if(!notice)return;const timer=setTimeout(()=>setNotice(""),5000);return()=>clearTimeout(timer);},[notice]);
   useEffect(() => {if(!error)return;const timer=setTimeout(()=>setError(""),12000);return()=>clearTimeout(timer);},[error]);
-  useEffect(() => {setError("");setNotice("");},[page,space]);
+  const prevScope = useRef({ page, space });
+  useEffect(() => {
+    if (prevScope.current.page !== page) {
+      setError("");
+      setNotice("");
+    } else if (prevScope.current.space && prevScope.current.space !== space) {
+      setError("");
+      setNotice("");
+    }
+    prevScope.current = { page, space };
+  }, [page, space]);
   const [demoPersona,setDemoPersona] = useState("admin");
   const [routeHash, setRouteHash] = useState(() => location.hash);
   const [knowledgeDirty, setKnowledgeDirty] = useState(false);
@@ -236,7 +252,7 @@ function App() {
   useRouteLeaveGuard(propertyDirty, "放弃未保存的文件属性草稿并离开？");
   const driveFocused = page === "files" && new URLSearchParams(routeHash.split("?")[1] || "").get("view") === "drive";
   const teamDetail = page === "teams" && /^#\/teams\/[^/?]+/.test(routeHash);
-  useEffect(() => {const change=()=>{setRouteHash(location.hash);const route=workspaceRoute(location.hash);const next=navigation.find(n=>n[0]===route.page);if(next){dispatchNavigation({type:"route",page:next[0],tab:route.tab});setDriveOpen(!!route.space);if(route.space)setSpace(route.space);setPrefix("");setSelected(null);setShareSelection(undefined);}};window.addEventListener("hashchange",change);return()=>window.removeEventListener("hashchange",change)},[]);
+  useEffect(() => {const change=()=>{setRouteHash(location.hash);const route=workspaceRoute(location.hash);const next=navigation.find(n=>n[0]===route.page);if(next){dispatchNavigation({type:"route",page:next[0],tab:route.tab});setDriveOpen(!!route.space || (next[0]==="files" && route.tab!=="drives" && !!getDataContext().space));if(route.space)setSpace(route.space);setPrefix("");setSelected(null);setShareSelection(undefined);}};window.addEventListener("hashchange",change);return()=>window.removeEventListener("hashchange",change)},[]);
   const [driveOpen, setDriveOpen] = useState(!!workspaceRoute(location.hash).space || !!getDataContext().space);
   useEffect(() => {
     if (!user) return;
@@ -249,7 +265,7 @@ function App() {
     window.addEventListener("keydown", keydown);
     return () => window.removeEventListener("keydown", keydown);
   }, [user]);
-  useEffect(() => { setCommandSearchOpen(false); }, [page, space, user?.id, instance]);
+  useEffect(() => { setCommandSearchOpen(false); setTransferDockOpen(false); }, [page, space, user?.id, instance]);
   const [sidebarCollapsed, toggleSidebar, resetSidebar, sidebarExplicit] = useSidebarPreference(instance, user?.id || "");
   const [navOpen, setNavOpen] = useNavGroups(instance, user?.id || "");
   useEffect(() => {
@@ -373,6 +389,38 @@ function App() {
   const canManageDirectory = admin || !!governance?.tenant_admin;
 
   const availableSpaces = [...new Map([...(governance?.spaces || []), ...spaces].map(s => [s.id, s])).values()];
+  const currentSpaceResolved = availableSpaces.find((s) => s.id === space) || currentSpace;
+  const activeSpaceId = currentSpaceResolved?.id || space;
+  const [sidebarFavorites, setSidebarFavorites] = useState<string[]>([]);
+  useEffect(() => {
+    const readFavs = () => {
+      if (!activeSpaceId) { setSidebarFavorites([]); return; }
+      try {
+        const parsed = JSON.parse(localStorage.getItem(`drivebridge:favorites:${activeSpaceId}`) || "[]");
+        setSidebarFavorites(Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : []);
+      } catch {
+        setSidebarFavorites([]);
+      }
+    };
+    readFavs();
+    window.addEventListener("drivebridge:favorites-changed", readFavs);
+    window.addEventListener("storage", readFavs);
+    return () => {
+      window.removeEventListener("drivebridge:favorites-changed", readFavs);
+      window.removeEventListener("storage", readFavs);
+    };
+  }, [activeSpaceId]);
+  const explicitDrivesDirectory = page === "files" && shellTab === "drives";
+  useEffect(() => {
+    if (loading || !user || page !== "files" || explicitDrivesDirectory || driveOpen) return;
+    const route = workspaceRoute(location.hash);
+    if (route.space) return;
+    const fallback = chooseDefaultDriveSpace(availableSpaces, space);
+    if (fallback) {
+      if (fallback.id !== space) setSpace(fallback.id);
+      setDriveOpen(true);
+    }
+  }, [loading, user, page, explicitDrivesDirectory, driveOpen, availableSpaces, space]);
   useEffect(() => {
     if (!loading && governance && driveOpen && !currentSpace && !getDataContext().space) {
       const accessible = governance.spaces.find(s => s.id === space);
@@ -382,8 +430,13 @@ function App() {
   function openDrive(next: Space) {
     const tenant = next.tenant_id || governance?.tenant_id || getDataContext().tenant;
     const query = new URLSearchParams();if(tenant)query.set("tenant",tenant);if(driveFocused)query.set("view","drive");if(next.team_id)query.set("team",next.team_id);if(governance?.space_roles[next.id] && governance.space_roles[next.id] !== "owner")query.set("scope","managed");
-    location.hash = "#/drive/" + encodeURIComponent(next.id) + "?" + query;
+    const suffix = query.size ? "?" + query : "";
+    location.hash = "#/drive/" + encodeURIComponent(next.id) + suffix;
     // Route admission owns page/scope changes; do not unmount drafts here.
+  }
+  function openDrivesDirectory() {
+    const tenant = getDataContext().tenant;
+    location.hash = "#/drives" + (tenant ? "?tenant=" + encodeURIComponent(tenant) : "");
   }
   function driveHome() {
     location.hash = workspacePageURL("files", getDataContext().tenant);
@@ -431,7 +484,11 @@ function App() {
       api<Audit[]>("/audit"),
     ]);
     setSpaces(sp);
-    if (!space && sp[0]) setSpace(sp[0].id);
+    const chosen = chooseDefaultDriveSpace(sp, space);
+    if (!space && chosen) setSpace(chosen.id);
+    if (!location.hash.startsWith("#/drives") && !workspaceRoute(location.hash).space && sp.length > 0 && (!location.hash || location.hash === "#/" || location.hash.startsWith("#/files"))) {
+      setDriveOpen(true);
+    }
     setOps(op);
     setInboxOps(inbox);
     setTaskAccessDenied(false);
@@ -465,19 +522,38 @@ function App() {
   }
   useEffect(() => {
     const controller = new AbortController();
-    loadSession(controller.signal)
-      .then(async (me) => {
+    // Immediately extract and scrub ?token= / ?key= from the address bar before
+    // any subresources or browser history snapshots can leak the bearer token.
+    const urlInvite = extractUrlLoginToken(location);
+    if (urlInvite) {
+      history.replaceState(history.state, "", urlInvite.cleanUrl);
+    }
+    (async () => {
+      try {
+        if (urlInvite) {
+          await keyLogin(urlInvite.token);
+        }
+        const me = await loadSession(controller.signal);
         if (controller.signal.aborted) return;
         setUser(me.user);
         setInstance(me.instance_id || "");
         setAdmin(!!me.admin);
         setGovernanceEnabled(!!me.governance_enabled);
         await reload();
-      })
-      .catch((e) => {
-        if (!controller.signal.aborted && e.name !== "AbortError" && e.message !== "unauthorized") setError(errorText(e));
-      })
-      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+        if (urlInvite && !controller.signal.aborted) {
+          setNotice("已通过专属直连链接自动登录");
+        }
+      } catch (e) {
+        if (controller.signal.aborted || (e as Error).name === "AbortError") return;
+        if (urlInvite) {
+          setError((e as Error).message === "unauthorized" ? "该邀请链接或一次性 Token 已失效（可能已被使用或已过期），请联系邀请人重新生成。" : errorText(e));
+        } else if ((e as Error).message !== "unauthorized") {
+          setError(errorText(e));
+        }
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
+      }
+    })();
     authMode()
       .then(mode=>{if (controller.signal.aborted) return; setLoginMode(mode);setDemoPersona(mode.current_persona||"admin")})
       .catch(() => {});
@@ -619,8 +695,10 @@ function App() {
   const allowedNav = navigation
     .filter(([id]) => (id !== "governance" || governanceEnabled) && (!getDataContext().space || !["connections","agents"].includes(id)) && (canManageDirectory || id !== "connections"))
     .map(([id]) => id);
-  const navGroups = visibleNavGroups(allowedNav, navOpen);
+  const consumerNavGroups = visibleConsumerNavGroups(allowedNav);
+  const fullNavGroups = visibleNavGroups(allowedNav, navOpen);
   const pendingTaskCount = pendingNavigationTasks(ops);
+  const pendingInboxCount = inboxOps.filter(o => !["completed", "cancelled"].includes(o.status)).length;
   if (loading || !user) return <AuthGate
     loading={loading} mode={loginMode} busy={keyBusy} value={keyInput} error={error}
     onChange={setKeyInput}
@@ -629,9 +707,11 @@ function App() {
       try { await demoLogin(); window.location.reload(); }
       catch (e) { setError(errorText(e)); setKeyBusy(false); }
     }}
-    onKeyLogin={() => {
+    onKeyLogin={(overrideKey) => {
+      const candidate = (overrideKey ?? keyInput).trim();
+      if (!candidate) return;
       setKeyBusy(true); setError("");
-      keyLogin(keyInput.trim()).then(async () => {
+      keyLogin(candidate).then(async () => {
         setKeyInput("");
         const me = await loadSession();
         setUser(me.user); setInstance(me.instance_id || ""); setAdmin(!!me.admin); setGovernanceEnabled(!!me.governance_enabled);
@@ -641,45 +721,136 @@ function App() {
   />;
   return (
     <WorkspaceShell mobile={mobile} collapsed={sidebarCollapsed} focused={driveFocused}>
-      {!mobile && <aside className="sidebar db-pine-nav db-docked-navigation shrink-0 overflow-hidden border-0 p-0 group-data-[collapsed=true]/shell:p-0">
-        <a href="#" className="brand db-nav-brand flex h-16 shrink-0 items-center gap-2 px-3 text-[15px] tracking-normal group-data-[collapsed=true]/shell:justify-center group-data-[collapsed=true]/shell:px-0" onClick={driveHome} aria-label="DriveBridge">
+      {!mobile && <aside className="sidebar db-pine-nav db-docked-navigation shrink-0 overflow-hidden p-0 group-data-[collapsed=true]/shell:p-0">
+        <a href="#" className="brand db-nav-brand flex h-12 shrink-0 items-center gap-2.5 px-3 text-[14px] tracking-normal group-data-[collapsed=true]/shell:justify-center group-data-[collapsed=true]/shell:px-0" onClick={driveHome} aria-label="DriveBridge">
           <span className="brandmark">
-            <BrandMark size={32} />
+            <BrandMark size={26} />
           </span>
-          <span className="db-nav-identity"><strong className="brand-name">DriveBridge</strong><span className="brand-subtitle">个人空间</span></span>
+          <span className="db-nav-identity"><strong className="brand-name">DriveBridge</strong><span className="brand-subtitle">{currentSpaceResolved?.name || "个人云盘"}</span></span>
         </a>
-        <DesktopNavigation groups={navGroups} items={navigation} page={page} title={title}
-          pendingCount={pendingTaskCount} inviteCount={inviteCount}
+        <DesktopNavigation groups={consumerNavGroups} moreGroups={fullNavGroups} items={navigation} page={page} title={title}
+          pendingCount={pendingTaskCount} inviteCount={inviteCount} inboxCount={pendingInboxCount}
+          quickCreate={{
+            readOnly,
+            onUpload: () => {
+              if (page !== "files" || !driveOpen) driveHome();
+              setResume(undefined); setNewVersion(undefined);
+              input.current?.click();
+            },
+            onNewFolder: () => {
+              if (page !== "files" || !driveOpen) {
+                driveHome();
+                setTimeout(() => window.dispatchEvent(new Event("drivebridge:new-folder")), 120);
+              } else {
+                window.dispatchEvent(new Event("drivebridge:new-folder"));
+              }
+            },
+            onNewNote: allowedNav.includes("knowledge") ? () => navigatePage("knowledge") : undefined,
+          }}
+          driveSwitcher={{
+            spaces: availableSpaces,
+            activeSpaceId: currentSpaceResolved?.id || space,
+            driveOpen: driveOpen && !explicitDrivesDirectory,
+            favorites: sidebarFavorites,
+            activePrefix: prefix,
+            onOpenDrive: openDrive,
+            onOpenAllDrives: openDrivesDirectory,
+            onOpenFavorite: fav => {
+              if (page !== "files" || !driveOpen) driveHome();
+              setPrefix(fav);
+              setSearch("");
+            },
+          }}
           onToggle={(id, open) => setNavOpen({ ...navOpen, [id]: open })}
           onNavigate={target => { navigatePage(target); setPrefix(""); setSearch(""); }}
         />
-        {sidebarExplicit && <Button layout="surface" type="button" className="mx-2 mb-2 rounded-md p-2 text-xs text-sidebar-foreground hover:bg-[var(--navigation-hover)]" aria-label="恢复自动导航布局" title="恢复自动导航布局" onClick={resetSidebar}><span className="group-data-[collapsed=true]/shell:hidden">恢复自动布局</span><PanelLeft className="hidden size-4 group-data-[collapsed=true]/shell:block"/></Button>}
-        <SidebarFooter space={meterSpace} user={user} tenant={!!governance?.tenant_id}
+        {inviteCount > 0 && allowedNav.includes("teams") && (
+          <Button layout="surface" variant="ghost" type="button" onClick={() => navigatePage("teams")} className="mx-2.5 mb-2 flex h-9 items-center justify-between rounded-lg bg-accent/70 px-2.5 text-xs font-medium text-accent-foreground group-data-[collapsed=true]/shell:mx-1.5 group-data-[collapsed=true]/shell:justify-center group-data-[collapsed=true]/shell:px-0" aria-label="团队">
+            <span className="flex items-center gap-2"><Users size={16} /><span className="group-data-[collapsed=true]/shell:hidden">团队邀请</span></span>
+            <span className="nav-count group-data-[collapsed=true]/shell:hidden">{inviteCount}</span>
+          </Button>
+        )}
+        {sidebarExplicit && <Button layout="surface" type="button" className="mx-2.5 mb-2 rounded-lg p-2 text-xs text-sidebar-foreground hover:bg-[var(--navigation-hover)]" aria-label="恢复自动导航布局" title="恢复自动导航布局" onClick={resetSidebar}><span className="group-data-[collapsed=true]/shell:hidden">恢复自动布局</span><PanelLeft className="hidden size-4 group-data-[collapsed=true]/shell:block"/></Button>}
+        <SidebarFooter space={meterSpace} user={user} tenant={!!governance?.tenant_id} activeSettings={page === "settings"}
           onUsage={() => openUsage()} onSettings={() => navigatePage("settings")}
           onLogout={() => { void act(logout); }} />
       </aside>}
       {mobile && <MobileNavigationDrawer open={mobileNavOpen} onOpenChange={setMobileNavOpen}
-        groups={navGroups} items={navigation} page={page}
+        groups={fullNavGroups} items={navigation} page={page}
         onNavigate={target => { navigatePage(target); setPrefix(""); setSearch(""); }}
         onLogout={() => { void act(logout); }}
       />}
-      {mobile && <MobileNavigation page={page} allowed={allowedNav} onNavigate={target => { navigatePage(target); setPrefix(""); setSearch(""); }} />}
+      {mobile && <MobileNavigation page={page} allowed={allowedNav} inboxCount={pendingInboxCount} readOnly={readOnly}
+        onUpload={() => {
+          if (page !== "files" || !driveOpen) driveHome();
+          setResume(undefined); setNewVersion(undefined);
+          input.current?.click();
+        }}
+        onNavigate={target => { navigatePage(target); setPrefix(""); setSearch(""); }} />}
       <WorkspaceMain>
         <header className="topbar max-md:py-0 max-md:[&_button]:min-h-11 max-md:[&_button]:min-w-11">
-          {!mobile && <ThemeToggle />}
-          <Button variant="ghost" size="icon" type="button" aria-label="搜索工作区" aria-haspopup="dialog" onClick={openCommandSearch}><Search size={19} /></Button>
-          <Button variant="ghost" size="icon" type="button" className="icon sidebar-toggle" aria-label={mobile ? "打开全部导航" : sidebarCollapsed ? "展开侧边栏" : "折叠侧边栏"} aria-expanded={mobile ? mobileNavOpen : !sidebarCollapsed} onClick={() => { if (mobile) setMobileNavOpen(true); else toggleSidebar(); }}><PanelLeft size={19}/></Button>
-          {governance?.enabled && <GovernanceBar data={governance} user={user}>{loginMode?.team_demo && <div className="team-demo-switch grid gap-2 rounded-lg border border-border bg-muted/40 p-3"><span className="text-xs font-medium">切换体验身份</span><div className="flex min-w-0 flex-wrap items-center gap-2 [&_[data-slot=select-trigger]]:flex-1"><SelectAdapter aria-label="体验身份" value={demoPersona} onChange={e=>setDemoPersona(e.target.value)}>{loginMode.personas?.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</SelectAdapter><Button variant="outline" size="sm" type="submit"  disabled={busy} onClick={()=>void act(async()=>{await demoLogin(demoPersona);location.hash="#/teams";location.reload();})}>切换体验身份</Button></div></div>}</GovernanceBar>}
-          {mobile && <Button variant="ghost" size="icon" type="button" className="icon" aria-label="空间用量" onClick={() => openUsage()}><Cloud size={18}/></Button>}
+          <Button variant="ghost" size="icon" type="button" className="icon sidebar-toggle" aria-label={mobile ? "打开全部导航" : sidebarCollapsed ? "展开侧边栏" : "折叠侧边栏"} aria-expanded={mobile ? mobileNavOpen : !sidebarCollapsed} onClick={() => { if (mobile) setMobileNavOpen(true); else toggleSidebar(); }}><PanelLeft size={18}/></Button>
           <div className="breadcrumb min-w-0 flex-1">
-            {!mobile && !governanceEnabled && <><Button layout="surface" variant="ghost" type="button" className="breadcrumb-link" onClick={driveHome} aria-label="返回我的工作空间">我的工作空间</Button><ChevronRight size={14} /></>}
-            {page === "files" && driveOpen ? <Button layout="surface" variant="ghost" type="button" className="breadcrumb-link" aria-label="返回网盘列表" onClick={driveHome}>{title}</Button> : <span className="min-w-0 truncate" title={title}>{title}</span>}
-            {page === "files" && driveOpen && <><ChevronRight size={14}/><strong>{currentSpace?.name || "网盘工作区"}</strong></>}
+            {page === "files" && driveOpen && !explicitDrivesDirectory ? (
+              <div className="flex min-w-0 items-center gap-1.5">
+                <Button layout="surface" variant="ghost" type="button" className="breadcrumb-link rounded-md px-1.5 py-1 text-[13px] font-semibold text-foreground hover:bg-muted" aria-label="返回网盘列表" onClick={openDrivesDirectory}>
+                  {currentSpaceResolved?.name || title}
+                </Button>
+                {availableSpaces.length > 1 && <span className="hidden rounded-md border border-border bg-muted/60 px-1.5 py-0.5 text-[11px] text-muted-foreground sm:inline">多空间</span>}
+              </div>
+            ) : (
+              <span className="min-w-0 truncate text-[13px] font-semibold text-foreground" title={title}>{explicitDrivesDirectory ? "全部网盘目录" : title}</span>
+            )}
           </div>
-          <Button variant="ghost" type="submit" className="transfer-dock" onClick={() => navigateLegacyPage("transfers")} aria-label="打开交付中心"><ArrowUpDown size={17} /><span>{ops.filter(o => !["completed", "cancelled"].includes(o.status)).length} 项传输</span></Button>
+          {governance?.enabled && <GovernanceBar data={governance} user={user}>{loginMode?.team_demo && <div className="team-demo-switch grid gap-2 rounded-lg border border-border bg-muted/40 p-3"><span className="text-xs font-medium">切换体验身份</span><div className="flex min-w-0 flex-wrap items-center gap-2 [&_[data-slot=select-trigger]]:flex-1"><SelectAdapter aria-label="体验身份" value={demoPersona} onChange={e=>setDemoPersona(e.target.value)}>{loginMode.personas?.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</SelectAdapter><Button variant="outline" size="sm" type="submit"  disabled={busy} onClick={()=>void act(async()=>{await demoLogin(demoPersona);location.hash="#/teams";location.reload();})}>切换体验身份</Button></div></div>}</GovernanceBar>}
+          {!mobile && (
+            page === "files" && driveOpen && !explicitDrivesDirectory ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                type="button"
+                aria-label="搜索工作区"
+                aria-haspopup="dialog"
+                onClick={openCommandSearch}
+                className="h-8 gap-1.5 rounded-lg border border-border/80 bg-muted/40 px-2.5 text-xs font-normal text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                <Search size={13} className="shrink-0" />
+                <span className="hidden xl:inline">全局检索</span>
+                <kbd className="rounded border border-border bg-background px-1 py-0.5 font-mono text-[10px] text-muted-foreground">⌘K</kbd>
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                type="button"
+                aria-label="搜索工作区"
+                aria-haspopup="dialog"
+                onClick={openCommandSearch}
+                className="h-8 min-w-44 max-w-60 justify-between gap-3 rounded-lg border-border bg-muted/45 px-3 text-xs font-normal text-muted-foreground hover:bg-muted lg:min-w-52"
+              >
+                <span className="flex items-center gap-2 truncate">
+                  <Search size={14} className="shrink-0" />
+                  <span>搜索工作区…</span>
+                </span>
+                <kbd className="rounded border border-border bg-background px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">⌘K</kbd>
+              </Button>
+            )
+          )}
+          {mobile && <Button variant="ghost" size="icon" type="button" aria-label="搜索工作区" aria-haspopup="dialog" onClick={openCommandSearch}><Search size={18} /></Button>}
+          {mobile && <Button variant="ghost" size="icon" type="button" className="icon" aria-label="空间用量" onClick={() => openUsage()}><Cloud size={18}/></Button>}
+          {!mobile && <ThemeToggle />}
+          <Button
+            variant={pendingTaskCount > 0 ? "secondary" : "ghost"}
+            type="button"
+            className="transfer-dock rounded-lg px-2.5"
+            onClick={() => navigateLegacyPage("transfers")}
+            aria-label="打开交付中心"
+          >
+            <ArrowUpDown size={15} />
+            <span>{pendingTaskCount > 0 ? `${pendingTaskCount} 项传输中` : "传输"}</span>
+          </Button>
         </header>
 
-        <section className={`content ${page !== "knowledge" && !(page === "files" && driveOpen) && !teamDetail ? "workspace-page-content" : ""} ${teamDetail ? "team-detail-content" : ""} ${page === "knowledge" ? "p-0 overflow-hidden" : ""} ${page === "files" && driveOpen && currentSpace ? "drive-content max-md:p-3" : ""}`}>
+        <section className={`content ${page !== "knowledge" && !(page === "files" && driveOpen) && !teamDetail ? "workspace-page-content" : ""} ${teamDetail ? "team-detail-content" : ""} ${page === "knowledge" ? "p-0 overflow-hidden" : ""} ${page === "files" && driveOpen && currentSpace ? "drive-content p-0" : ""}`}>
           <h1 className="sr-only">{title}</h1>
           {error && (
             <div className="banner error app-toast" role="alert">
@@ -736,7 +907,7 @@ function App() {
           {page === "members" && shellTab !== "keys" && canManageDirectory && <IdentityDirectory data={governance} user={user} keys={userKeys} openKeys={() => navigatePage("users")} openTeam={id=>{location.hash=teamURL(id,"overview",governance?.tenant_id);}}/>}
           {page === "governance" && (governance?.enabled ? <GovernancePanel key={`${user.id}:${governance.tenant_id}:${getDataContext().space}`} initial={governance} user={user} initialTab={workspaceRoute(routeHash).tab || "requests"} close={() => navigatePage("files")} /> : <section role="status"><h2>管理与授权</h2><p>{governanceEnabled ? "正在加载管理数据…" : "当前实例未启用团队治理。"}</p><Button variant="outline" onClick={() => window.dispatchEvent(new Event("drivebridge-governance-changed"))}>重新加载</Button></section>)}
           {page === "teams" && <TeamWorkspace enabled={governanceEnabled} governance={governance} user={user} openDrive={openDrive} openKeys={()=>navigatePage("users")}/>}
-          {page === "files" && <FilesPage open={driveOpen} currentSpace={currentSpace} focused={driveFocused} routeHash={routeHash}
+          {page === "files" && <FilesPage open={driveOpen && !explicitDrivesDirectory} currentSpace={currentSpaceResolved} focused={driveFocused} routeHash={routeHash}
             spaces={availableSpaces} connections={connections} governance={governance} openDrive={openDrive} home={driveHome}
             connect={!managementRestricted ? () => navigatePage("connections") : undefined}
             finder={{ readOnly, managementRestricted, space, prefix, setPrefix, revision: files, reload: refreshFiles, backendLabel: currentBackend.label,
@@ -747,7 +918,7 @@ function App() {
             }} />}
           {page === "knowledge" && <KnowledgePage key={`${instance}:${user.id}:${getDataContext().tenant}:${getDataContext().space}`} actor={`${instance}:${user.id}`} spaces={availableSpaces} onDirtyChange={setKnowledgeDirty}/> }
           {page === "shares" && <SharesPage />}
-          {page === "settings" && <PersonalSettings user={user} teamEnabled={governanceEnabled} onUserChange={setUser} openKeys={() => navigatePage("users")} />}
+          {page === "settings" && <PersonalSettings user={user} teamEnabled={governanceEnabled || availableSpaces.some(s => !!s.team_id)} governanceEnabled={governanceEnabled} allowedPages={allowedNav} onNavigate={target => { navigatePage(target); setPrefix(""); setSearch(""); }} onOpenAllDrives={openDrivesDirectory} onUserChange={setUser} openKeys={() => navigatePage("users")} />}
           {page === "trash" && <TrashPage spaces={spaces} space={space}
             readState={fileRead.space === space && fileRead.page === page ? fileRead.state : 'loading'}
             onReload={() => { void act(refreshFiles); }}
@@ -777,7 +948,7 @@ function App() {
           {page === "resources" && <ResourcesPage scope={JSON.stringify([instance,user.id,getDataContext().tenant,getDataContext().space])} spaces={availableSpaces.filter(s=>!getDataContext().space||s.id===getDataContext().space)}/>}
           {page === "overview" && <WorkspaceViews key={`home:${instance}:${user.id}:${getDataContext().tenant}:${getDataContext().space}:${routeHash}`}
             initialView={/^#\/overview(?:[/?]|$)/.test(routeHash) ? "legacy" : "primary"}
-            label="工作台视图" primaryLabel="我的工作台" legacyLabel="容量与活动观察"
+            label="工作台视图" primaryLabel="最近使用" legacyLabel="容量与活动观察"
             primary={<WorkspaceHome scope={JSON.stringify([instance,user.id,getDataContext().tenant,getDataContext().space])} spaces={availableSpaces.filter(s=>!getDataContext().space||s.id===getDataContext().space)}/>}
             legacy={<InfoWorkspace key={`${user.id}:${governance?.tenant_id || ""}:${getDataContext().space}`} spaces={availableSpaces} preferenceIdentity={{ instance, user: user.id }} />}
           />} 
@@ -851,7 +1022,7 @@ function App() {
           />}/>} 
           {page === "inbox" && !taskAccessDenied && <WorkspaceViews key={`inbox:${instance}:${user.id}:${getDataContext().tenant}:${getDataContext().space}:${routeHash}`}
             initialView={new URLSearchParams(routeHash.split('?')[1]).get('view') === 'legacy' ? 'legacy' : 'primary'}
-            label="收件视图" primaryLabel="待验收与归档" legacyLabel="历史传输收件"
+            label="收件视图" primaryLabel="AI 投递箱" legacyLabel="历史传输收件"
             primary={<SubmissionInbox routeHash={routeHash} scope={JSON.stringify([instance,user.id,getDataContext().tenant,getDataContext().space])} spaces={availableSpaces.filter(s=>!getDataContext().space||s.id===getDataContext().space)}/>}
             legacy={<LegacyInboxPage
             key={"inbox:"+user.id+":"+getDataContext().tenant}
@@ -874,7 +1045,7 @@ function App() {
             onDisconnect={c => { setDriveConnection(c.id); setModal("disconnect"); }}
             onAdd={() => setModal("storage")}
           />}
-          {page === "members" && shellTab === "keys" && admin && !governanceEnabled && <div className="mb-3 flex justify-end"><Button type="button" className="min-h-11 md:min-h-8" onClick={() => { setIssueNames(""); setIssueDays(""); setIssueAdmin(false); setModal("issue"); }}><Plus size={16}/>批量签发</Button></div>}
+          {page === "members" && shellTab === "keys" && admin && !governanceEnabled && <div className="mb-3 flex flex-wrap justify-end gap-2"><Button type="button" className="min-h-11 md:min-h-8" onClick={() => { setIssueNames(""); setIssueDays("7"); setIssueAdmin(false); setIssueOneTime(true); setModal("issue"); }}><Plus size={16}/>签发新用户 / 一次性邀请链接</Button><Button type="button" variant="outline" className="min-h-11 md:min-h-8" onClick={() => { setIssueNames(""); setIssueDays(""); setIssueAdmin(false); setIssueOneTime(false); setModal("issue"); }}>批量签发</Button></div>}
           {page === "members" && shellTab === "keys" && <KeyDirectory key={`${user.id}:${governance?.tenant_id || ""}:${getDataContext().space || ""}`} keys={userKeys} data={governance} canManage={admin && !governanceEnabled} reload={reloadKeys} revoke={k => {setRevokeTarget(k);setModal("revokeuser");}} archive={k => setArchiveTarget({kind:"users",id:k.id,name:k.name})}/>}
           {page === "agents" && <WorkspaceViews key={`agents:${instance}:${user.id}:${getDataContext().tenant}:${getDataContext().space}`}
             label="Agent 授权视图" primaryLabel="Agent 管理" legacyLabel="旧版机器人授权"
@@ -893,6 +1064,21 @@ function App() {
         </section>
 
       </WorkspaceMain>
+      <TransferDock
+        operations={ops}
+        open={transferDockOpen}
+        onOpenChange={setTransferDockOpen}
+        onOpenFile={op => { void act(() => openOperationResult(op)); }}
+        onResume={op => { void act(async () => {
+          if (op.kind === "upload" && op.bytes_transferred < op.size_bytes) { setResume(op); input.current?.click(); }
+          else { await api("/operations/" + op.id + "/resume", "POST", {}); await reload(); await refreshFiles(); }
+        }); }}
+        onCancel={op => { void act(async () => {
+          controllers.current.get(op.id)?.abort(); await api("/operations/" + op.id + "/cancel", "POST", {});
+          await reload();
+        }); }}
+        onOpenHistory={() => { setTransferDockOpen(false); navigateLegacyPage("transfers"); }}
+      />
       {commandSearchOpen && <CommandSearch spaces={availableSpaces} close={closeCommandSearch} />}
       {usageOpen && <CapacityPanel key={user.id+":"+(governance?.tenant_id || "")+":"+space} initialSpace={usageSpace} onClose={() => setUsageOpen(false)} onRefresh={setSpaces} onDetails={id => {setUsageOpen(false);openInsight("capacity",id);}}/>}
       {setupOpen && <Modal className="setup-drawer" title="连接机器人" close={() => setSetupOpen(false)}><RobotSetup expanded /></Modal>}
@@ -924,37 +1110,40 @@ function App() {
           />}
           notebookAction={canOpenMarkdownNotebook(selected, getDataContext().space || space) && <Button type="button" variant="outline" aria-pressed={notebookPreview} onClick={() => setNotebookPreview(value => !value)}>{notebookPreview ? "原文件预览" : "笔记工作台"}</Button>}
           information={<> 
-          <section className="space-y-3 border-t border-border pt-5"><h3 className="text-sm font-semibold">文件信息</h3><dl className="quicklook-metadata"><dt>路径</dt><dd title={selected.path}>{selected.path}</dd><dt>大小</dt><dd>{bytes(selected.size_bytes)}</dd><dt>格式</dt><dd>{selected.mime_type}</dd></dl></section>
+          <section className="space-y-3 border-t border-border pt-4">
+            <h3 className="text-xs font-semibold tracking-wide text-muted-foreground">文件信息</h3>
+            <dl className="quicklook-metadata">
+              <dt>路径</dt><dd title={selected.path}>{selected.path}</dd>
+              <dt>大小</dt><dd className="tabular-nums">{bytes(selected.size_bytes)}</dd>
+              <dt>类型</dt><dd>{humanFileKind(selected)}</dd>
+              <dt>存储</dt>
+              <dd>
+                <span className="sr-only">所属存储：</span>
+                {(() => {
+                  const backend = backendOf(
+                    connections.find(
+                      (c) =>
+                        c.id ===
+                        spaces.find((s) => s.id === selected.space_id)
+                          ?.connection_id,
+                    )?.kind,
+                  );
+                  return backend.label + " · " + capabilityText(backend);
+                })()}
+              </dd>
+            </dl>
+          </section>
           {!selected.trashed && <LabelSuggestionEntry key={JSON.stringify([instance,user.id,getDataContext().tenant,getDataContext().space,selected.id,selected.version_id])} file={selected.id} version={selected.version_id} scope={JSON.stringify([instance,user.id,getDataContext().tenant,getDataContext().space])} readOnly={managementRestricted}/>}
           {!selected.trashed && <FilePropertiesEntry key={JSON.stringify([instance,user.id,getDataContext().tenant,getDataContext().space,selected.id,selected.version_id])} file={selected.id} version={selected.version_id} space={selected.space_id} path={selected.path} scope={JSON.stringify([instance,user.id,getDataContext().tenant,getDataContext().space])} readOnly={managementRestricted} onDirty={onPropertyDirty}/>}
-          <div className="detail-meta">
-
-            <span>
-              所属存储：
-              {(() => {
-                const backend = backendOf(
-                  connections.find(
-                    (c) =>
-                      c.id ===
-                      spaces.find((s) => s.id === selected.space_id)
-                        ?.connection_id,
-                  )?.kind,
-                );
-                return backend.label + " · " + capabilityText(backend);
-              })()}
-            </span>
-          </div>
-          <div className="modal-actions">
+          <div className="modal-actions pt-1">
             <Button variant="default" type="submit"
-
               disabled={selected.trashed || managementRestricted}
               onClick={() => act(() => download(selected))}
             >
-              <ArrowDownToLine size={16} />
+              <ArrowDownToLine size={15} />
               下载
             </Button>
             <Button variant="outline" type="submit"
-
               disabled={selected.trashed || managementRestricted}
               onClick={() => {
                 setNewVersion(selected);
@@ -964,8 +1153,8 @@ function App() {
             >
               上传新版本
             </Button>
-            <Button variant="outline" type="submit"
-
+            <Button variant="ghost" type="submit"
+              className={selected.trashed ? "" : "text-destructive hover:bg-destructive/10 hover:text-destructive"}
               disabled={managementRestricted}
               onClick={() =>
                 act(async () => {
@@ -984,7 +1173,7 @@ function App() {
               {selected.trashed ? "恢复" : "移入回收站"}
             </Button>
           </div>
-          <PreviewSection title="复制到其他网盘"><form className="flex flex-col gap-4"
+          <PreviewSection title="复制到其他网盘"><form className="flex flex-col gap-3"
             onSubmit={(e) => {
               e.preventDefault();
               const form = new FormData(e.currentTarget);
@@ -1006,11 +1195,46 @@ function App() {
               });
             }}
           >
-            <p className="text-muted-foreground leading-relaxed">将当前版本复制到目标网盘，原文件保持不变。</p>
-            <label className="flex flex-col gap-2 text-sm font-medium">目标空间<SelectAdapter name="target_space_id" defaultValue={selected.space_id}>{spaces.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</SelectAdapter></label>
-            <label className="flex flex-col gap-2 text-sm font-medium">目标路径<Input name="target_path" defaultValue={selected.path} required /></label>
-            <Button variant="default" className="w-full" type="submit" disabled={managementRestricted || selected.trashed}>复制为受管副本</Button>
+            <p className="text-muted-foreground leading-relaxed">将当前锁定版本复制到目标网盘，原文件保持不变。</p>
+            <label className="flex flex-col gap-1.5 text-xs font-medium">目标空间<SelectAdapter name="target_space_id" defaultValue={selected.space_id}>{spaces.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</SelectAdapter></label>
+            <label className="flex flex-col gap-1.5 text-xs font-medium">目标路径<Input name="target_path" defaultValue={selected.path} required /></label>
+            <Button variant="outline" className="w-full" type="submit" disabled={managementRestricted || selected.trashed}>复制为受管副本</Button>
           </form></PreviewSection>
+          {isConvertibleImageFile(selected) && !selected.trashed && (
+            <PreviewSection title="转换图片格式">
+              <ImageFormatConvertForm
+                file={selected}
+                existingPaths={files.filter((f) => f.space_id === selected.space_id).map((f) => f.path)}
+                onSaveToDrive={
+                  !readOnly && !managementRestricted
+                    ? (convertedFile) => uploadFiles([convertedFile])
+                    : undefined
+                }
+                onDone={(msg) => setNotice(msg)}
+              />
+            </PreviewSection>
+          )}
+          <div className="space-y-1.5 border-t border-border pt-3">
+            <Button
+              variant="outline"
+              type="button"
+              className="w-full justify-center gap-1.5 rounded-lg"
+              onClick={() =>
+                act(async () => {
+                  await copyReference(selected);
+                  setNotice(
+                    "已复制固定版本引用；在已连接 DriveBridge 的 Agent 中使用",
+                  );
+                })
+              }
+            >
+              <Copy size={14} />
+              复制此版本 AI 引用
+            </Button>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              发给已获授权的 AI 助手即可精准读取当前版本。
+            </p>
+          </div>
           <PreviewSection title="文件标识与引用">
           <dl className="quicklook-metadata"><dt>文件标识</dt><dd className="font-mono">{selected.id}</dd><dt>版本</dt><dd className="font-mono">{selected.version_id}</dd></dl>
           <p>
@@ -1102,7 +1326,16 @@ function App() {
         >
           {notebookPreview && canOpenMarkdownNotebook(selected, getDataContext().space || space)
             ? <RouteBoundary scope={`${user.id}:${selected.space_id}:${selected.id}:${selected.version_id}`}><Suspense fallback={<p role="status">正在加载笔记工作台…</p>}><MarkdownNotebookPreview key={`${selected.space_id}:${selected.id}:${selected.version_id}`} actor={user.id} file={selected} siblings={previewSiblings}/></Suspense></RouteBoundary>
-            : <MediaPreview key={selected.id + selected.version_id} file={selected} />}
+            : <MediaPreview
+                key={selected.id + selected.version_id}
+                file={selected}
+                existingPaths={files.filter((f) => f.space_id === selected.space_id).map((f) => f.path)}
+                onSaveConverted={
+                  !readOnly && !managementRestricted
+                    ? (convertedFile) => uploadFiles([convertedFile])
+                    : undefined
+                }
+              />}
           <nav className="quicklook-controls flex flex-row items-center justify-center gap-3 max-md:[&_button]:min-h-11" aria-label="切换预览文件">{[-1,1].map(step => {const index=previewSiblings.findIndex(f=>f.id===selected.id);const next=previewSiblings[index+step];return <Button variant="outline" size="sm" type="button" key={step} disabled={index<0 || !next} onClick={()=>next && openPreview(next, previewSiblings)}>{step<0?"上一个":"下一个"}</Button>})}<span>{Math.max(1,previewSiblings.findIndex(f=>f.id===selected.id)+1)} / {Math.max(1,previewSiblings.length)} · 方向键切换</span></nav>
         </FilePreviewDialog>
       )}
@@ -1331,6 +1564,7 @@ function App() {
                       name,
                       ...(issueDays ? { days: Number(issueDays) } : {}),
                       ...(issueAdmin ? { admin: true } : {}),
+                      ...(issueOneTime ? { one_time: true } : {}),
                     }));
                   const out = await api<{ issued: IssuedUserKey[] }>(
                     "/users",
@@ -1366,6 +1600,13 @@ function App() {
               </label>
               <label className="checkbox">
                 <Checkbox
+                  checked={issueOneTime}
+                  onCheckedChange={(e) => setIssueOneTime(!!e)}
+                />
+                一次性免密邀请（生成 <code>?token=</code> 链接，首次打开自动登录并立即单次销毁 Token，同时自动开通独立个人空间）
+              </label>
+              <label className="checkbox">
+                <Checkbox
 
                   checked={issueAdmin}
                   onCheckedChange={(e) => setIssueAdmin(e)}
@@ -1386,11 +1627,14 @@ function App() {
                   这些密钥只显示这一次。请立即分发给对应用户；关闭后无法再次查看。
                 </p>
               </div>
-              {issuedKeys.map((k) => (
-                <div className="issued-key" key={k.user_id}>
-                  <label>
+              {issuedKeys.map((k) => {
+                const inviteUrl = buildDirectTokenInviteUrl(location.origin, k.key);
+                return (
+                <div className="issued-key space-y-2" key={k.user_id}>
+                  <label className="font-medium">
                     {k.name}
                     {k.admin ? "（管理员）" : ""}
+                    {k.one_time ? " · 一次性免密邀请" : ""}
                     <Textarea
                       aria-label={k.name + " 密钥"}
                       readOnly
@@ -1398,20 +1642,54 @@ function App() {
                       className="token-value"
                     />
                   </label>
-                  <Button variant="outline" size="sm" type="submit"
-
-                    onClick={() =>
-                      act(async () => {
-                        await navigator.clipboard.writeText(k.key);
-                        setNotice("已复制，请安全保存");
-                      })
-                    }
-                  >
-                    <Copy size={16} />
-                    复制
-                  </Button>
+                  <div className="rounded-lg bg-muted/60 px-2.5 py-1.5 font-mono text-xs break-all text-muted-foreground">
+                    {inviteUrl}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button variant="default" size="sm" type="button"
+                      onClick={() =>
+                        act(async () => {
+                          await navigator.clipboard.writeText(inviteUrl);
+                          setNotice("已复制免密直连链接（?token=），发给对方打开即可直接进入");
+                        })
+                      }
+                    >
+                      <ArrowUpRight size={15} />
+                      复制直连链接
+                    </Button>
+                    <Button variant="outline" size="sm" type="button"
+                      onClick={() =>
+                        act(async () => {
+                          await navigator.clipboard.writeText(
+                            formatInviteShareText({
+                              name: k.name,
+                              url: inviteUrl,
+                              token: k.key,
+                              oneTime: k.one_time,
+                              expiresAt: k.expires_at,
+                            }),
+                          );
+                          setNotice("已复制完整邀请口令卡片");
+                        })
+                      }
+                    >
+                      <Copy size={15} />
+                      复制邀请口令
+                    </Button>
+                    <Button variant="ghost" size="sm" type="submit"
+                      onClick={() =>
+                        act(async () => {
+                          await navigator.clipboard.writeText(k.key);
+                          setNotice("已复制纯密钥，请安全保存");
+                        })
+                      }
+                    >
+                      复制纯密钥
+                    </Button>
+                  </div>
                 </div>
-              ))}
+                );
+              })}
               <div className="modal-actions">
                 <Button variant="outline" type="submit"
 

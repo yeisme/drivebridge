@@ -104,7 +104,9 @@ export async function exportReaderContract(root) {
     const packagedPinax = process.env.DRIVEBRIDGE_PINAX_BIN || join(root, 'desktop', 'host-bin', process.platform === 'win32' ? 'pinax.exe' : 'pinax');
     const siblingSource = resolve(root, '../pinax');
     const sourceAvailable = await access(join(siblingSource, 'go.mod')).then(() => true, () => false);
-    const usePackagedPinax = !sourceAvailable && await access(packagedPinax).then(() => true, () => false);
+    const usePackagedPinax = await access(packagedPinax).then(() => true, () => false);
+    if (process.env.DRIVEBRIDGE_PINAX_BIN && !usePackagedPinax) throw new Error('Explicit owner binary unavailable');
+    if (!usePackagedPinax && !sourceAvailable) throw new Error('Owner schema exporter unavailable');
     const command = usePackagedPinax ? packagedPinax : 'go';
     const args = usePackagedPinax
       ? ['api', 'schema', 'export', '--format', 'openapi', '--vault', vault, '--json']
@@ -135,7 +137,9 @@ export async function exportWriterSyncContract(root) {
     const packagedPinax = process.env.DRIVEBRIDGE_PINAX_BIN || join(root, 'desktop', 'host-bin', process.platform === 'win32' ? 'pinax.exe' : 'pinax');
     const siblingSource = resolve(root, '../pinax');
     const sourceAvailable = await access(join(siblingSource, 'go.mod')).then(() => true, () => false);
-    const usePackagedPinax = !sourceAvailable && await access(packagedPinax).then(() => true, () => false);
+    const usePackagedPinax = await access(packagedPinax).then(() => true, () => false);
+    if (process.env.DRIVEBRIDGE_PINAX_BIN && !usePackagedPinax) throw new Error('Explicit owner binary unavailable');
+    if (!usePackagedPinax && !sourceAvailable) throw new Error('Owner schema exporter unavailable');
     const command = usePackagedPinax ? packagedPinax : 'go';
     const args = usePackagedPinax
       ? ['api', 'schema', 'export', '--format', 'openapi', '--vault', vault, '--json']

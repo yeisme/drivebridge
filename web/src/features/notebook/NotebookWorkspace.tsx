@@ -129,9 +129,9 @@ function NotebookSession({ scope, entries, initialRef, directoryQuery = "", file
     if (action === "commands" || action === "open") setNavigation(action);
     else { focusNext.current = true; dispatch({ type: "cycle", direction: action === "next-tab" ? 1 : -1 }); }
   }}>
-    <div role="tablist" aria-label="已打开笔记" className="flex min-h-11 shrink-0 items-stretch overflow-x-auto border-b bg-card/70 px-1 md:min-h-9 md:px-2">
+    <div role="tablist" aria-label="已打开笔记" className={`flex shrink-0 items-stretch overflow-x-auto border-b bg-muted/40 px-1 max-md:min-h-11 md:min-h-8.5 md:px-2 ${state.tabs.length === 0 ? 'hidden' : ''}`}>
       {state.tabs.filter(tab => allowed.has(tab.key)).map(tab => <div key={tab.key} className="flex shrink-0 items-center">
-        <Button type="button" role="tab" variant="ghost" className="h-11 max-w-56 gap-1.5 rounded-md px-3 text-[13px] aria-selected:bg-background aria-selected:font-semibold aria-selected:text-primary md:h-8" aria-selected={state.activeTab === tab.key} tabIndex={state.activeTab === tab.key ? 0 : -1}
+        <Button type="button" role="tab" variant="ghost" className="h-11 max-w-56 gap-1.5 rounded-md px-2.5 text-xs aria-selected:bg-background aria-selected:font-semibold aria-selected:text-foreground md:h-7.5" aria-selected={state.activeTab === tab.key} tabIndex={state.activeTab === tab.key ? 0 : -1}
           ref={node => { if (node) tabs.current.set(tab.key, node); else tabs.current.delete(tab.key); }}
           onKeyDown={event => {
             const available = state.tabs.filter(item => allowed.has(item.key));
@@ -142,11 +142,10 @@ function NotebookSession({ scope, entries, initialRef, directoryQuery = "", file
           onClick={() => dispatch({ type: "activate", key: tab.key })} onDoubleClick={() => dispatch({ type: "pin", key: tab.key, pinned: true })}>
           {tab.pinned && <Pin size={12} aria-label="已固定"/>}<span className="truncate">{title(tab.key)}</span>{tab.dirty && <span aria-label="未保存" className="text-primary">·</span>}
         </Button>
-        <Button type="button" variant="ghost" size="icon" className="size-10 rounded-md md:size-8" aria-label={`关闭 ${title(tab.key)}`} onClick={() => close(tab.key)}><X size={14}/></Button>
+        <Button type="button" variant="ghost" size="icon" className="size-10 rounded-md md:size-7" aria-label={`关闭 ${title(tab.key)}`} onClick={() => close(tab.key)}><X size={13}/></Button>
       </div>)}
-      {!state.tabs.length && <p className="flex items-center px-3 text-xs text-muted-foreground">从目录或快速打开选择一篇笔记</p>}
     </div>
-    <div className="flex min-h-12 shrink-0 flex-wrap items-center gap-1 border-b bg-background/90 px-2 max-md:[&>button]:size-11 md:min-h-10 md:px-3" role="toolbar" aria-label="笔记工具栏">
+    <div className="flex min-h-11 shrink-0 flex-nowrap items-center gap-1 overflow-x-auto border-b bg-background px-2 max-md:[&>button]:size-11 md:min-h-9 md:px-3" role="toolbar" aria-label="笔记工具栏">
       <Button type="button" variant="ghost" size="icon" aria-label="笔记目录" disabled={focused} aria-expanded={!focused && (directoryInline ? preferences.leftOpen : directoryOpen)} onClick={() => { if (!directoryInline) setDirectoryOpen(true); else savePreferences({ ...preferences, leftOpen: !preferences.leftOpen }); }}><ListTree/></Button>
       <Button type="button" variant="ghost" size="icon" aria-label="命令面板" onClick={() => setNavigation("commands")}><Terminal/></Button>
       <Button type="button" variant="ghost" size="icon" aria-label="快速打开" onClick={() => setNavigation("open")}><Search/></Button>

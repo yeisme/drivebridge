@@ -30,7 +30,6 @@ import {
   Columns3,
   GalleryHorizontal,
   List,
-  Search,
   Upload,
   X,
   Share2,
@@ -43,6 +42,7 @@ import {
   MoreHorizontal,
   Star,
   RotateCw,
+  Repeat,
   Cloud,
 } from "lucide-react";
 import {
@@ -57,7 +57,15 @@ import {
   type DriveFile,
   type Space,
 } from "./api";
-import { MediaPreview, MediaThumbnail } from "./Media";
+import { ImageFormatConvertForm, isConvertibleImageFile, MediaPreview, MediaThumbnail } from "./Media";
+import { motion } from "motion/react";
+import { EmptyDropIllustration, FolderGlyph } from "./components/file-art/FileArtwork";
+import { FolderArt } from "./components/folder-art/FolderArt";
+import { folderMeta, folderTone, updatedLabel } from "./components/folder-art/folder-cover";
+import { humanFileKind } from "./lib/file-display";
+import { SPRING_DOCK } from "./lib/motion-presets";
+import { marqueeIntersects, mergeSelectionIds, normalizeMarqueeBox, type BoxRect } from "./features/files/marquee";
+import { useFolderSummary, useFolderSummaryStore, type FolderSummaryStore } from "./features/files/folder-summaries";
 import { FinderMenu, newEntryError, type MenuItem } from "./FinderMenu";
 import { FolderPicker } from "./FolderPicker";
 import { moveNotice, type LastMove } from "./finder-undo";
@@ -83,7 +91,7 @@ import {
 } from "./finder-keys";
 
 export { AppDialog as WorkspaceDialog } from "./components/AppDialog";
-import { useDirectoryRead, type BrowserEntry, type DirectoryPage } from "./features/files/useDirectoryRead";
+import { DIRECTORY_PAGE_SIZE, useDirectoryRead, type BrowserEntry, type DirectoryPage } from "./features/files/useDirectoryRead";
 export type { BrowserEntry } from "./features/files/useDirectoryRead";
 export interface FinderAdapter {
   directory: typeof directory;
@@ -201,7 +209,7 @@ function TreeNode({
           onClick={() => navigate(path)}
           aria-current={selected === path ? "location" : undefined}
         >
-          <Folder size={15} />
+          <FolderGlyph tone={path ? folderTone(path) : 1} size={17} />
           <span>{path.split("/").pop() || "全部文件"}</span>
         </Button>
       </div>
@@ -226,6 +234,26 @@ function TreeNode({
         </ul>
       )}
     </li>
+  );
+}
+// Grid folder tile: cover drawn from the folder's first directory page. The
+// relative-time pill is decorative, so it is repeated for screen readers.
+function FolderTileContent({ store, path }: { store?: FolderSummaryStore; path: string }) {
+  const host = useRef<HTMLSpanElement>(null);
+  const state = useFolderSummary(store, path, host);
+  const summary = state.status === "ready" ? state.summary : undefined;
+  const badge = updatedLabel(summary?.updatedAt);
+  return (
+    <>
+      <span ref={host} className="finder-folder-cover">
+        <FolderArt tone={folderTone(path)} sheets={summary?.sheets} badge={badge} />
+      </span>
+      <strong>{path.split("/").pop()}</strong>
+      <small className="finder-folder-meta">
+        {summary ? folderMeta(summary) : state.status === "error" ? "内容暂不可读" : "文件夹"}
+        {badge && <span className="sr-only">，{badge}</span>}
+      </small>
+    </>
   );
 }
 export function Finder({
@@ -309,6 +337,11 @@ export function Finder({
   const [action, setAction] = useState(""),
     [value, setValue] = useState(""),
     [notice, setNotice] = useState("");
+  useEffect(() => {
+    if (!notice) return;
+    const timer = setTimeout(() => setNotice(""), 4000);
+    return () => clearTimeout(timer);
+  }, [notice]);
   const [clipboard, setClipboard] = useState<FileClipboard>(),
     [focusIndex, setFocusIndex] = useState(0),
     [anchorIndex, setAnchorIndex] = useState(0),
@@ -326,12 +359,29 @@ export function Finder({
   const [textContent, setTextContent] = useState(""),
     [fileType, setFileType] = useState("txt");
   const [folderInfo, setFolderInfo] = useState<string>();
+  const [convertTarget, setConvertTarget] = useState<DriveFile | null>(null);
   const [folderEntries, setFolderEntries] = useState<
     BrowserEntry[] | undefined
   >();
   const [folderError, setFolderError] = useState("");
   const [dragging, setDragging] = useState(false);
+  const [marqueeBox, setMarqueeBox] = useState<BoxRect | null>(null);
+  const marqueeSession = useRef<{
+    startX: number;
+    startY: number;
+    additive: boolean;
+    baseFiles: string[];
+    baseFolders: string[];
+    active: boolean;
+  } | null>(null);
   const operationAbort = useRef<AbortController | undefined>(undefined);
+  useEffect(() => {
+    const onNewFolder = () => {
+      if (!readOnly) beginCreate("folder");
+    };
+    window.addEventListener("drivebridge:new-folder", onNewFolder);
+    return () => window.removeEventListener("drivebridge:new-folder", onNewFolder);
+  });
   const typeBuffer = useRef("");
   const typeAt = useRef(0);
   const listRef = useRef<HTMLDivElement>(null);
@@ -341,6 +391,7 @@ export function Finder({
     setMenu(undefined);
     setAction("");
     setFolderInfo(undefined);
+    setConvertTarget(null);
     setDragging(false);
     setError("");
     operationAbort.current?.abort();
@@ -414,9 +465,10 @@ export function Finder({
   const treeID = useId();
   const [treeCollapsed, setTreeCollapsed] = useState(() => {
     try {
-      return localStorage.getItem("drivebridge:tree-collapsed") === "true";
+      const saved = localStorage.getItem("drivebridge:tree-collapsed");
+      return saved === null ? true : saved === "true";
     } catch {
-      return false;
+      return true;
     }
   });
   const treeOpen = mobile ? mobileTreeOpen : !treeCollapsed;
@@ -463,11 +515,12 @@ export function Finder({
     }
   }, [preferenceKey, space]);
   useDirectoryRead({ space, prefix, query, cursor, sort, order: sortOrder, revision, reader: adapter?.directory,
-    onStart: () => { setBusy(true); setError(""); setEntries([]); setSelection([]); },
+    onStart: () => { setBusy(true); setError(""); setEntries([]); setSelection([]); setFolderSelection([]); },
     onPage: result => { setEntries(result.entries); setNextCursor(result.next_cursor); setTotal(result.total); },
     onError: setError,
     onFinish: () => setBusy(false),
   });
+  const folderSummaries = useFolderSummaryStore(grid && !query, space, prefix, revision, adapter?.directory);
   const chooseMode = (mode: "list" | "grid" | "columns" | "gallery") => {
     setViewMode(mode);
     setGrid(mode === "grid");
@@ -485,6 +538,7 @@ export function Finder({
         `drivebridge:favorites:${space}`,
         JSON.stringify(next),
       );
+      window.dispatchEvent(new CustomEvent("drivebridge:favorites-changed", { detail: { space } }));
     } catch {
       /* Preferences are optional. */
     }
@@ -984,6 +1038,15 @@ export function Finder({
               } else await download(menuFile, menuFile.version_id);
             }),
         },
+        ...(isConvertibleImageFile(menuFile)
+          ? [
+              {
+                label: "转换图片格式…",
+                icon: icon(<Repeat size={16} />),
+                run: () => setConvertTarget(menuFile),
+              } satisfies MenuItem,
+            ]
+          : []),
         {
           label: "复制固定版本引用",
           icon: icon(<Copy size={16} />),
@@ -1427,7 +1490,7 @@ export function Finder({
                 setPrefix(navigation[position - 1]);
               }}
             >
-              <ArrowLeft size={17} />
+              <ArrowLeft size={16} />
             </Button>
             <Button variant="ghost" size="icon" type="button"
               className="icon"
@@ -1438,93 +1501,110 @@ export function Finder({
                 setPrefix(navigation[position + 1]);
               }}
             >
-              <ArrowRight size={17} />
+              <ArrowRight size={16} />
             </Button>
           </div>
-        <nav className="finder-breadcrumb" aria-label="目录路径">
-          <Button variant="ghost" type="button" onClick={() => navigate("")}>全部文件</Button>
-          {prefix
-            .split("/")
-            .filter(Boolean)
-            .map((name, i) => (
-              <React.Fragment key={i}>
-                <ChevronRight size={12} />
-                <Button variant="ghost" type="button"
-                  onClick={() =>
-                    navigate(
-                      prefix
-                        .split("/")
-                        .slice(0, i + 1)
-                        .join("/"),
-                    )
-                  }
-                >
-                  {name}
-                </Button>
-              </React.Fragment>
-            ))}
-          <Button variant="ghost" size="icon" type="button"
-            className="icon"
-            aria-label="收藏当前目录"
-            aria-pressed={favorites.includes(prefix)}
-            onClick={toggleFavorite}
-          >
-            <Star
-              size={14}
-              fill={favorites.includes(prefix) ? "currentColor" : "none"}
+          <nav className="finder-breadcrumb" aria-label="目录路径">
+            <Button
+              variant="ghost"
+              type="button"
+              onClick={() => navigate("")}
+              onDragOver={acceptFileMove}
+              onDrop={(e) => dropMovedFiles(e, "")}
+            >
+              全部文件
+            </Button>
+            {prefix
+              .split("/")
+              .filter(Boolean)
+              .map((name, i) => {
+                const crumbPath = prefix.split("/").slice(0, i + 1).join("/");
+                return (
+                  <React.Fragment key={i}>
+                    <ChevronRight size={12} />
+                    <Button
+                      variant="ghost"
+                      type="button"
+                      onClick={() => navigate(crumbPath)}
+                      onDragOver={acceptFileMove}
+                      onDrop={(e) => dropMovedFiles(e, crumbPath)}
+                    >
+                      {name}
+                    </Button>
+                  </React.Fragment>
+                );
+              })}
+            <Button variant="ghost" size="icon" type="button"
+              className="icon"
+              aria-label="收藏当前目录"
+              aria-pressed={favorites.includes(prefix)}
+              onClick={toggleFavorite}
+            >
+              <Star
+                size={14}
+                fill={favorites.includes(prefix) ? "currentColor" : "none"}
+              />
+            </Button>
+          </nav>
+          <div className="hidden w-52 lg:block xl:w-60">
+            <SearchField
+              aria-label="搜索文件"
+              placeholder="筛选当前目录…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
             />
-          </Button>
-        </nav>
+          </div>
           {mobile ? <DropdownMenu>
             <DropdownMenuTrigger render={<Button type="button" variant="outline" size="icon" className="size-11" aria-label="文件视图" />}>
-              {viewMode === "grid" ? <LayoutGrid /> : viewMode === "columns" ? <Columns3 /> : viewMode === "gallery" ? <GalleryHorizontal /> : <List />}
+              {{ grid: <LayoutGrid />, columns: <Columns3 />, gallery: <GalleryHorizontal />, list: <List /> }[viewMode]}
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               {([['list', '列表视图', List], ['grid', '网格视图', LayoutGrid], ['columns', '分栏视图', Columns3], ['gallery', '画廊视图', GalleryHorizontal]] as const).map(([mode, label, Icon]) =>
                 <DropdownMenuItem key={mode} aria-label={label} className="min-h-11" onClick={() => chooseMode(mode)}><Icon />{label}{viewMode === mode && <span className="ml-auto text-xs">当前</span>}</DropdownMenuItem>)}
             </DropdownMenuContent>
           </DropdownMenu> : <ViewModeSwitch label="文件视图" value={viewMode} onChange={chooseMode} items={[
-            { value: "list" as const, label: "列表视图", icon: <List size={17} /> },
-            { value: "grid" as const, label: "网格视图", icon: <LayoutGrid size={17} /> },
-            { value: "columns" as const, label: "分栏视图", icon: <Columns3 size={17} /> },
-            { value: "gallery" as const, label: "画廊视图", icon: <GalleryHorizontal size={17} /> },
+            { value: "list" as const, label: "列表视图", icon: <List size={15} /> },
+            { value: "grid" as const, label: "网格视图", icon: <LayoutGrid size={15} /> },
+            { value: "columns" as const, label: "分栏视图", icon: <Columns3 size={15} /> },
+            { value: "gallery" as const, label: "画廊视图", icon: <GalleryHorizontal size={15} /> },
           ]} />}
           {focusAction && <div className="finder-focus border-l border-border pl-2 max-md:[&>a]:size-11">{focusAction}</div>}
         </div>
-        <div className="finder-search px-3 pb-2 max-md:[&_[data-slot=input-group]]:min-h-11">          <SearchField
-              aria-label="搜索文件"
-              placeholder="搜索当前目录及子目录"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-</div>
         <div className="finder-actions max-md:[&_button]:min-h-11 max-md:[&_button]:min-w-11">
-          <Button variant="default" type="button" className="finder-upload" aria-label="上传文件" disabled={readOnly} onClick={() => upload()}>
-            <Upload size={17} /><span className="max-md:hidden">上传文件</span><span className="md:hidden">上传</span>
+          <Button variant="outline" type="button" className="finder-upload px-3" aria-label="上传文件" disabled={readOnly} onClick={() => upload()}>
+            <Upload size={15} /><span className="max-md:hidden">上传文件</span><span className="md:hidden">上传</span>
           </Button>
           <DropdownMenu>
-            <DropdownMenuTrigger render={<Button variant="outline" type="button" disabled={readOnly} aria-label="新建"><Plus />新建<ChevronDown className="max-md:hidden" /></Button>} />
-            <DropdownMenuContent align="start">
-              <DropdownMenuItem disabled={readOnly} onClick={() => beginCreate("folder")}><FolderPlus />新建文件夹</DropdownMenuItem>
-              <DropdownMenuItem disabled={readOnly || !!(adapter && !adapter.createFile)} onClick={() => beginCreate("file")}><FilePlus2 />新建文件</DropdownMenuItem>
+            <DropdownMenuTrigger render={<Button variant="outline" type="button" disabled={readOnly} aria-label="新建"><Plus size={15} />新建<ChevronDown size={14} className="max-md:hidden" /></Button>} />
+            <DropdownMenuContent align="start" className="rounded-xl p-1.5 shadow-[var(--shadow-popover)]">
+              <DropdownMenuItem className="rounded-md" disabled={readOnly} onClick={() => beginCreate("folder")}><FolderPlus size={15} className="text-muted-foreground" />新建文件夹</DropdownMenuItem>
+              <DropdownMenuItem className="rounded-md" disabled={readOnly || !!(adapter && !adapter.createFile)} onClick={() => beginCreate("file")}><FilePlus2 size={15} className="text-muted-foreground" />新建文件</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button variant="outline" size="sm" type="button"
-            className="finder-secondary"
+          <Button variant="ghost" size="sm" type="button"
+            className="finder-secondary text-muted-foreground hover:bg-secondary hover:text-foreground"
             disabled={readOnly || managementRestricted}
             onClick={() => onShare(selected, prefix)}
           >
             <Share2 size={15} />
             分享{selected.length ? `（${selected.length}）` : "目录"}
           </Button>
-          <div className="finder-inline-filters ml-auto flex min-w-0 gap-2 [&_label>span]:hidden">{filterControls}</div>
+          <div className="min-w-0 flex-1 lg:hidden max-md:[&_[data-slot=input-group]]:min-h-11">
+            <SearchField
+              aria-label="搜索文件"
+              placeholder="搜索当前目录…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          </div>
+          <div className="finder-inline-filters ml-auto flex min-w-0 items-center gap-2">{filterControls}</div>
           <div className="finder-compact-filters ml-auto max-md:[&_button]:w-11 max-md:[&_button]:p-0 max-md:[&_button]:text-[0px] max-md:[&_button]:gap-0">
-            <Popover><PopoverTrigger render={<Button variant="outline" type="button"><SlidersHorizontal />筛选与排序</Button>} />
+            <Popover><PopoverTrigger render={<Button variant="outline" type="button"><SlidersHorizontal size={15} />筛选与排序</Button>} />
               <PopoverContent align="end" className="grid w-64 gap-4">{filterControls}</PopoverContent>
             </Popover>
           </div>
-          <Button variant="outline" size="sm" type="button"
-            className="finder-more"
+          <Button variant="ghost" size="sm" type="button"
+            className="finder-more text-muted-foreground hover:bg-secondary hover:text-foreground"
             aria-label="更多操作"
             onClick={(e) => contextMenu(e, entries.find(entry => entry.file ? entry.file.id === selected[0]?.id : folderSelection.length === 1 && entry.path === folderSelection[0]))}
           >
@@ -1533,20 +1613,23 @@ export function Finder({
           </Button>
         </div>
         {error && (
-          <p className="banner error m-0 mx-3 mb-2 flex-wrap px-3 py-1.5" role="alert">
+          <p className="banner error m-0 mx-3 my-1.5 flex-wrap px-3 py-1.5" role="alert">
             {error}
             <Button variant="ghost" type="submit" onClick={() => void reload()}>重新读取</Button>
           </p>
         )}
         {notice && (
-          <p className="banner m-0 mx-3 mb-2 flex-wrap px-0 py-1.5" role="status">
-            {notice}
+          <div className="finder-notice-toast" role="status">
+            <span>{notice}</span>
             {lastMove && notice.startsWith("已移动") && (
               <Button variant="ghost" type="submit" className="text-button" onClick={() => void act(() => undoMove())}>
                 撤销
               </Button>
             )}
-          </p>
+            <Button variant="ghost" size="icon" type="button" className="size-7 max-md:size-11" aria-label="关闭目录提示" onClick={() => setNotice("")}>
+              <X size={13} />
+            </Button>
+          </div>
         )}
         {clipboard && (
           <div className="clipboard-bar" role="status">
@@ -1569,7 +1652,99 @@ export function Finder({
             <Button variant="ghost" type="submit" onClick={() => setClipboard(undefined)}>清除</Button>
           </div>
         )}
-        <div className="finder-scroll" ref={listRef}>
+        <div
+          className="finder-scroll relative"
+          ref={listRef}
+          onPointerDown={(e) => {
+            if (mobile || e.button !== 0) return;
+            const target = e.target as HTMLElement;
+            if (
+              target.closest(
+                "article,button,a,input,select,textarea,[role=checkbox],[role=combobox],.finder-list-header,.finder-pagination,.empty",
+              )
+            )
+              return;
+            const container = listRef.current;
+            if (!container) return;
+            const rect = container.getBoundingClientRect();
+            const startX = e.clientX - rect.left + container.scrollLeft;
+            const startY = e.clientY - rect.top + container.scrollTop;
+            marqueeSession.current = {
+              startX,
+              startY,
+              additive: e.metaKey || e.ctrlKey,
+              baseFiles: selection,
+              baseFolders: folderSelection,
+              active: false,
+            };
+            const onMove = (moveEvent: MouseEvent) => {
+              const session = marqueeSession.current;
+              const host = listRef.current;
+              if (!session || !host) return;
+              const hostRect = host.getBoundingClientRect();
+              const currentX = moveEvent.clientX - hostRect.left + host.scrollLeft;
+              const currentY = moveEvent.clientY - hostRect.top + host.scrollTop;
+              if (!session.active && Math.hypot(currentX - session.startX, currentY - session.startY) < 6) return;
+              session.active = true;
+              const box = normalizeMarqueeBox(session.startX, session.startY, currentX, currentY);
+              setMarqueeBox(box);
+              const hitFiles: string[] = [];
+              const hitFolders: string[] = [];
+              for (const el of Array.from(host.querySelectorAll<HTMLElement>("[data-file-id],[data-directory-path]"))) {
+                const r = el.getBoundingClientRect();
+                const itemBox = {
+                  left: r.left - hostRect.left + host.scrollLeft,
+                  top: r.top - hostRect.top + host.scrollTop,
+                  right: r.right - hostRect.left + host.scrollLeft,
+                  bottom: r.bottom - hostRect.top + host.scrollTop,
+                };
+                if (!marqueeIntersects(box, itemBox)) continue;
+                if (el.dataset.fileId) hitFiles.push(el.dataset.fileId);
+                else if (el.dataset.directoryPath) hitFolders.push(el.dataset.directoryPath);
+              }
+              setSelection(mergeSelectionIds(session.baseFiles, hitFiles, session.additive));
+              setFolderSelection(mergeSelectionIds(session.baseFolders, hitFolders, session.additive));
+            };
+            const onUp = () => {
+              const session = marqueeSession.current;
+              if (session && !session.active && !session.additive) {
+                setSelection([]);
+                setFolderSelection([]);
+              }
+              marqueeSession.current = null;
+              setMarqueeBox(null);
+              window.removeEventListener("pointermove", onMove);
+              window.removeEventListener("pointerup", onUp);
+            };
+            window.addEventListener("pointermove", onMove);
+            window.addEventListener("pointerup", onUp);
+          }}
+        >
+        {marqueeBox && (
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute z-20 rounded-md border border-primary bg-primary/10"
+            style={{
+              left: marqueeBox.left,
+              top: marqueeBox.top,
+              width: marqueeBox.right - marqueeBox.left,
+              height: marqueeBox.bottom - marqueeBox.top,
+            }}
+          />
+        )}
+        {dragging && entries.length > 0 && !readOnly && (
+          <motion.div
+            key="finder-drop-banner"
+            initial={{ opacity: 0, y: -10, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={SPRING_DOCK}
+            aria-hidden="true"
+            className="pointer-events-none sticky inset-x-3 top-3 z-20 mx-3 flex items-center justify-center gap-2.5 rounded-2xl border-2 border-dashed border-primary bg-accent/92 px-4 py-3 text-sm font-medium text-accent-foreground shadow-[var(--shadow-md)] backdrop-blur-md"
+          >
+            <Upload className="size-4 shrink-0 text-primary" />
+            <span>松开鼠标，上传文件至「{prefix ? prefix.split("/").pop() : "全部文件"}」</span>
+          </motion.div>
+        )}
         {busy && !entries.length && (
           <div className="finder-skeleton" aria-hidden="true">
             <i /><i /><i /><i />
@@ -1591,7 +1766,7 @@ export function Finder({
                 onDoubleClick={() => row.file ? onPreview(row.file,files) : navigate(row.path)}
                 onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();e.stopPropagation();if(row.file) onPreview(row.file,files); else navigate(row.path);}}}
                 draggable={!!row.file && !readOnly && !busy} onDragStart={event => { if (row.file) startFileDrag(event, row.file.id); }} onDragOver={event => { if (!row.file) acceptFileMove(event); }} onDrop={event => { if (!row.file) dropMovedFiles(event, row.path); }}>
-                {row.file ? <MediaThumbnail file={row.file}/> : <Folder size={24}/>}
+                {row.file ? <MediaThumbnail file={row.file}/> : <FolderGlyph tone={folderTone(row.path)} size={22}/>}
                 <span className="finder-readable-name"><span>{row.file ? row.path.split("/").pop()?.replace(/\.[^.]+$/,"") : row.path.split("/").pop()}</span>{row.file && <small>{row.path.includes(".") ? "."+row.path.split(".").pop() : row.file.mime_type}</small>}</span>
               </Button>)}
               {selected[0] && <Button type="button" variant="outline" className="m-3" onClick={()=>onPreview(selected[0],files)}><Eye/>打开阅读器</Button>}
@@ -1602,7 +1777,7 @@ export function Finder({
         {viewMode === "gallery" && (
           <div className="finder-gallery">
             <header className="flex min-w-0 flex-wrap items-center gap-3 border-b border-border p-4">
-              <div className="min-w-0 flex-1"><h3 className="truncate text-base font-semibold" title={selected[0]?.path}>{selected[0]?.path.split("/").pop() || "选择文件"}</h3>{selected[0] && <p className="text-xs text-muted-foreground">{selected[0].mime_type || "未知类型"} · {bytes(selected[0].size_bytes)}</p>}</div>
+              <div className="min-w-0 flex-1"><h3 className="truncate text-base font-semibold" title={selected[0]?.path}>{selected[0]?.path.split("/").pop() || "选择文件"}</h3>{selected[0] && <p className="text-xs text-muted-foreground">{humanFileKind(selected[0])} · {bytes(selected[0].size_bytes)}</p>}</div>
               <Button type="button" disabled={!selected[0]} onClick={()=>selected[0] && onPreview(selected[0],files)}><Eye/>打开阅读器</Button>
             </header>
             <div className="finder-gallery-preview">{selected[0] ? <MediaPreview file={selected[0]} /> : <><GalleryHorizontal size={44}/><p>选择文件以查看预览</p></>}</div>
@@ -1616,7 +1791,7 @@ export function Finder({
             </div>
           </div>
         )}
-        {(viewMode === "list" || viewMode === "grid") && <div className={grid ? "finder-grid" : "finder-list [&_.finder-file]:min-h-9 [&_.finder-file]:rounded-none [&_.finder-file]:py-1 [&_.finder-name]:gap-2 [&_.media-thumbnail]:size-6 [&_.finder-folder]:min-h-9 [&_.finder-folder]:rounded-none [&_.finder-folder]:p-1 [&_.finder-folder_.finder-name>svg]:size-5 md:[&_.finder-row-actions_.icon]:size-7 md:[&_.finder-folder_.icon]:size-7 max-md:[&_.finder-file]:min-h-12 max-md:px-2 max-md:[&_.finder-file]:grid-cols-[24px_minmax(0,1fr)_90px] max-md:[&_.finder-folder]:min-h-12 max-md:[&_.finder-folder_.icon]:size-11 max-md:[&_.finder-file_[data-slot=checkbox]]:opacity-100 max-md:[&_.finder-name]:min-h-11 max-md:[&_.finder-name_strong]:whitespace-normal max-md:[&_.finder-name_strong]:line-clamp-2 max-md:[&_.finder-name_strong]:break-all"} aria-busy={busy}>
+        {(viewMode === "list" || viewMode === "grid") && <div className={grid ? "finder-grid" : "finder-list [&_.finder-file]:min-h-9 [&_.finder-file]:rounded-xl [&_.finder-file]:py-1 [&_.finder-name]:gap-2.5 [&_.media-thumbnail]:size-7 [&_.finder-folder]:min-h-9 [&_.finder-folder]:rounded-xl [&_.finder-folder]:p-1.5 md:[&_.finder-row-actions_.icon]:size-7 md:[&_.finder-folder_.icon]:size-7 max-md:[&_.finder-file]:min-h-12 max-md:px-2 max-md:[&_.finder-file]:grid-cols-[24px_minmax(0,1fr)_90px] max-md:[&_.finder-folder]:min-h-12 max-md:[&_.finder-folder_.icon]:size-11 max-md:[&_.finder-file_[data-slot=checkbox]]:opacity-100 max-md:[&_.finder-name]:min-h-11 max-md:[&_.finder-name_strong]:whitespace-normal max-md:[&_.finder-name_strong]:line-clamp-2 max-md:[&_.finder-name_strong]:break-all"} aria-busy={busy}>
           {!grid && <div className="finder-list-header max-md:grid-cols-[24px_minmax(0,1fr)_90px] max-md:px-0 [&_button]:min-h-8 max-md:[&_button]:min-h-11" role="group" aria-label="文件列表表头">
             <span />{[["name", "名称"], ["date", "修改时间"], ["size", "大小"]].map(([key, label]) => <Button layout="surface" variant="ghost" type="submit" key={key} aria-label={`按${label}排序`} aria-pressed={sort === key} onClick={() => { setCursor(""); setSort(key); setSortOrder(sort === key && sortOrder === "asc" ? "desc" : "asc"); }}>{label}{sort === key ? (sortOrder === "asc" ? " ↑" : " ↓") : ""}</Button>)}<span />
           </div>}
@@ -1626,7 +1801,7 @@ export function Finder({
               .map((row) => (
                 <article
                   key={row.path}
-                  className={`finder-folder ${folderSelection.includes(row.path) ? "selected" : ""} ${isCutItem(clipboard, "dir:" + row.path, row.path) ? "cut" : ""} ${listed[focusIndex]?.path === row.path ? "focused" : ""}`}
+                  className={`finder-folder folder-art-host ${folderSelection.includes(row.path) ? "selected" : ""} ${isCutItem(clipboard, "dir:" + row.path, row.path) ? "cut" : ""} ${listed[focusIndex]?.path === row.path ? "focused" : ""}`}
                   title={row.path}
                   tabIndex={listed[focusIndex]?.path === row.path ? 0 : -1}
                   data-directory-path={row.path}
@@ -1638,7 +1813,7 @@ export function Finder({
                   onDrop={(e) => { e.currentTarget.classList.remove("drop-target"); dropMovedFiles(e, row.path); }}
                 >
                   <Checkbox
-
+                    className={grid ? "absolute top-3 left-3 z-[1]" : undefined}
                     aria-label={"选择文件夹 " + row.path}
                     checked={folderSelection.includes(row.path)}
                     onCheckedChange={() => {
@@ -1666,8 +1841,14 @@ export function Finder({
                     }}
                     onDoubleClick={() => navigate(row.path)}
                   >
-                    <Folder size={32} />
-                    <strong>{row.path.split("/").pop()}</strong>
+                    {grid ? (
+                      <FolderTileContent store={folderSummaries} path={row.path} />
+                    ) : (
+                      <>
+                        <FolderGlyph tone={folderTone(row.path)} size={22} />
+                        <strong>{row.path.split("/").pop()}</strong>
+                      </>
+                    )}
                   </Button>
                   <Button variant="ghost" size="icon" type="submit"
                     className="icon"
@@ -1721,7 +1902,7 @@ export function Finder({
                   <strong>{query ? f.path : f.path.split("/").pop()}</strong>
                   <small className={grid || f.review_pending ? undefined : "md:hidden"}>
                     {f.review_pending ? "待审核 · " : ""}
-                    {f.mime_type || "文件"}
+                    {humanFileKind(f)}
                   </small>
                 </span>
               </Button>
@@ -1759,7 +1940,11 @@ export function Finder({
             }}
             onDrop={dropOsFiles}
           >
-            <Folder size={36} />
+            {query ? (
+              <Folder size={36} />
+            ) : (
+              <EmptyDropIllustration tone={prefix ? folderTone(prefix) : 1} open={dragging} />
+            )}
             <h3>{query ? "没有匹配的文件" : "把文件放到这里"}</h3>
             <p>
               {query
@@ -1770,6 +1955,12 @@ export function Finder({
                     ? "松开即可上传到这个目录。"
                     : "上传图片、视频或文档，开始整理这个目录。"}
             </p>
+            {!query && !readOnly && (
+              <Button variant="outline" size="sm" type="button" className="mt-1" onClick={() => upload()}>
+                <Upload size={14} />
+                选择文件上传
+              </Button>
+            )}
           </div>
         )}
         {(cursor || nextCursor) && (
@@ -1779,14 +1970,14 @@ export function Finder({
               disabled={!cursor || busy}
               onClick={() =>
                 setCursor(
-                  Number(cursor) > 200 ? String(Number(cursor) - 200) : "",
+                  Number(cursor) > DIRECTORY_PAGE_SIZE ? String(Number(cursor) - DIRECTORY_PAGE_SIZE) : "",
                 )
               }
             >
               上一页
             </Button>
             <span>
-              第 {Math.floor(Number(cursor || 0) / 200) + 1} 页 · 共 {total} 项
+              第 {Math.floor(Number(cursor || 0) / DIRECTORY_PAGE_SIZE) + 1} 页 · 共 {total} 项
             </span>
             <Button variant="outline" size="sm" type="submit"
 
@@ -1799,10 +1990,18 @@ export function Finder({
         )}
         </div>
         {selection.length + folderSelection.length > 0 && (
-          <div className="selection-bar">
-            <span>已选择 {selection.length + folderSelection.length} 项</span>
-            {!adapter && (
-              <Button variant="ghost" type="submit"
+          <motion.div
+            key="finder-selection-bar"
+            initial={{ opacity: 0, y: 18, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={SPRING_DOCK}
+            className="selection-bar"
+            role="toolbar"
+            aria-label="多选文件操作"
+          >
+            <span className="font-semibold text-foreground">已选择 {selection.length + folderSelection.length} 项</span>
+            {!adapter && selection.length > 0 && (
+              <Button variant="ghost" size="sm" type="button"
                 onClick={() => {
                   const a = document.createElement("a");
                   a.href = contextURL(
@@ -1813,33 +2012,46 @@ export function Finder({
                   a.click();
                 }}
               >
+                <ArrowDownToLine size={14} />
                 批量下载 ZIP
               </Button>
             )}
-            <Button variant="ghost" type="submit"
+            {selection.length > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                type="button"
+                disabled={readOnly || managementRestricted}
+                onClick={() => onShare(selected, prefix)}
+              >
+                <Share2 size={14} />
+                分享
+              </Button>
+            )}
+            <Button variant="ghost" size="sm" type="button"
               disabled={!!copyDisabledReason(readOnly, canCopy, chosenFolders().length > 0, canCopyFolders) || busy}
               onClick={() => rememberClipboard("copy")}
             >
               复制
             </Button>
-            <Button variant="ghost" type="submit"
+            <Button variant="ghost" size="sm" type="button"
               disabled={!!cutDisabledReason(readOnly) || busy}
               onClick={() => rememberClipboard("cut")}
             >
               剪切
             </Button>
-            <Button variant="ghost" type="submit"
+            <Button variant="ghost" size="sm" type="button"
               disabled={!!copyDisabledReason(readOnly, canCopy, chosenFolders().length > 0, canCopyFolders) || busy}
               onClick={() => beginDuplicate()}
             >
               创建副本
             </Button>
             {onedriveConnections.length > 0 && (
-              <Button variant="ghost" type="submit" disabled={busy || readOnly} onClick={() => beginExport()}>
+              <Button variant="ghost" size="sm" type="button" disabled={busy || readOnly} onClick={() => beginExport()}>
                 复制到 OneDrive
               </Button>
             )}
-            <Button variant="ghost" type="submit"
+            <Button variant="ghost" size="sm" type="button"
               disabled={readOnly}
               onClick={() => {
                 setAction("move");
@@ -1848,21 +2060,24 @@ export function Finder({
             >
               移动到…
             </Button>
-            <Button variant="ghost" type="submit"
+            <Button variant="ghost" size="sm" type="button"
+              className="text-destructive hover:text-destructive"
               disabled={readOnly || managementRestricted}
               onClick={() => setAction("trash")}
             >
+              <Trash2 size={14} />
               移入回收站
             </Button>
-            <Button variant="ghost" type="submit"
+            <Button variant="ghost" size="sm" type="button"
               onClick={() => {
                 setSelection([]);
                 setFolderSelection([]);
               }}
             >
+              <X size={14} />
               取消选择
             </Button>
-          </div>
+          </motion.div>
         )}
         <footer className="finder-status">
           {readOnly && <span>当前网盘仅供浏览 · 移动文件需要编辑权限，请在「管理与授权」中申请</span>}
@@ -1888,7 +2103,7 @@ export function Finder({
             <dt>大小</dt>
             <dd>{bytes(inspected.size_bytes)}</dd>
             <dt>类型</dt>
-            <dd>{inspected.mime_type}</dd>
+            <dd>{humanFileKind(inspected)}</dd>
             <dt>更新时间</dt>
             <dd>{new Date(inspected.updated_at).toLocaleString("zh-CN")}</dd>
             <dt>版本标识</dt>
@@ -2349,6 +2564,26 @@ export function Finder({
               </Button>
             </div>
           </form>
+        </WorkspaceDialog>
+      )}
+      {convertTarget && (
+        <WorkspaceDialog
+          title={`转换图片格式 · ${convertTarget.path.split("/").pop() || convertTarget.path}`}
+          close={() => setConvertTarget(null)}
+        >
+          <ImageFormatConvertForm
+            file={convertTarget}
+            existingPaths={files.map((f) => f.path)}
+            onSaveToDrive={
+              !readOnly && !managementRestricted
+                ? (convertedFile) => upload([convertedFile])
+                : undefined
+            }
+            onDone={(msg) => {
+              setNotice(msg);
+              setConvertTarget(null);
+            }}
+          />
         </WorkspaceDialog>
       )}
     </div>

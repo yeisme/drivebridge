@@ -35,15 +35,18 @@ function DocumentSession({ identity, body, draft, historical, editable, maxBytes
   const tooLarge = new TextEncoder().encode(value).byteLength > maxBytes;
   const readonly = historical || !editable || tooLarge;
   return <section className="flex min-h-full min-w-0 flex-col bg-card" aria-label="Markdown 文档">
-    <header className="border-b px-4 pb-3 pt-4 md:px-10">
-      <div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><h1 className="m-0 truncate text-xl font-semibold tracking-tight">{title || "Markdown 文档"}</h1><p className="m-0 mt-1 truncate text-xs text-muted-foreground">{path || identity.objectId} · revision {identity.revision}</p></div><span className="shrink-0 rounded-full bg-primary/10 px-2 py-1 text-[11px] font-medium text-primary">{historical ? "历史版本" : editable ? "可编辑" : "只读"}</span></div>
+    <header title={`${path || identity.objectId} · revision ${identity.revision}`} className="sticky top-0 z-10 grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1 border-b bg-card/95 px-3 py-1 backdrop-blur-sm md:flex md:min-h-10 md:justify-between md:px-6">
+      <h1 className="m-0 min-w-0 truncate text-sm font-semibold tracking-tight md:text-[15px]">{title || "Markdown 文档"}</h1>
+      <span className="shrink-0 rounded-md border border-border bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground md:order-2">{historical ? "历史版本" : editable ? "可编辑" : "只读"}</span>
+      <div className="col-span-2 flex min-w-0 flex-nowrap items-center gap-1 overflow-x-auto max-md:border-t max-md:border-border/60 max-md:pt-1 md:order-3 md:ml-auto">
+        <div role="group" aria-label="文档模式" className="flex shrink-0 items-center gap-0.5 rounded-lg border border-border/80 bg-muted/50 p-0.5 max-md:[&_button]:min-h-11 max-md:[&_button]:px-2">
+          {([['reading', '阅读'], ['live', '实时预览'], ['source', '源码']] as const).map(([id, label]) => <Button key={id} type="button" variant="ghost" size="sm" className="h-7 rounded-md px-2.5 text-xs aria-pressed:bg-background aria-pressed:font-semibold aria-pressed:shadow-2xs" aria-pressed={mode === id} onClick={() => { setMode(id); onModeChange?.(id); }}>{label}</Button>)}
+        </div>
+        {actions && <div className="ml-auto flex shrink-0 items-center gap-1 pl-1 max-md:[&_button]:min-h-11 md:ml-0">{actions}</div>}
+      </div>
     </header>
-    <div role="group" aria-label="文档模式" className="sticky top-0 z-10 flex min-h-11 shrink-0 flex-wrap items-center gap-1 border-b bg-card px-2 max-md:[&_button]:min-h-11 max-md:[&_button]:px-2">
-      {([['reading', '阅读'], ['live', '实时预览'], ['source', '源码']] as const).map(([id, label]) => <Button key={id} type="button" variant="ghost" className="text-[13px] aria-pressed:bg-accent aria-pressed:font-semibold" aria-pressed={mode === id} onClick={() => { setMode(id); onModeChange?.(id); }}>{label}</Button>)}
-      {actions && <div className="ml-auto flex items-center gap-1 pr-2">{actions}</div>}
-    </div>
-    {readonly && <p role="status" className="m-0 border-b px-3 py-2 text-xs leading-5 text-muted-foreground">{readonlyMessage ?? (historical ? "历史版本只读" : tooLarge ? `正文超过 ${maxBytes / 1024}KiB 编辑预算，当前只读` : "当前来源未授予编辑能力")}</p>}
-    <div className="flex min-w-0 flex-1 flex-col gap-5 px-4 pb-16 pt-5 md:px-10 md:pt-6">
+    {readonly && <p role="status" className="m-0 border-b bg-muted/30 px-4 py-1.5 text-xs leading-5 text-muted-foreground md:px-6">{readonlyMessage ?? (historical ? "历史版本只读" : tooLarge ? `正文超过 ${maxBytes / 1024}KiB 编辑预算，当前只读` : "当前来源未授予编辑能力")}</p>}
+    <div className="flex min-w-0 flex-1 flex-col gap-5 px-4 pb-16 pt-1.5 md:px-10 md:pt-4">
       <div hidden={mode === "reading"} className="mx-auto w-full max-w-[var(--notebook-line-width,720px)]"><NotebookSource value={value} readonly={readonly} onChange={onDraft}/></div>
       <div hidden={mode === "source"}><NotebookRenderBoundary body={value}><NotebookRenderer body={value}/></NotebookRenderBoundary></div>
     </div>
