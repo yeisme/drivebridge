@@ -7,8 +7,10 @@ import (
 	"encoding/hex"
 	"io"
 	"os"
+	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 type missingAwareStore struct {
@@ -26,7 +28,7 @@ func blobRig(t *testing.T) (*Service, *memoryStore, Principal) {
 	t.Helper()
 	dir := t.TempDir()
 	os.Chmod(dir, 0700)
-	s, e := Open(Config{State: dir, Enabled: true, Development: true, MaxBytes: 1 << 30})
+	s, e := Open(databaseTestConfig(t, Config{State: dir, Enabled: true, Development: true, MaxBytes: 1 << 30}))
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -117,6 +119,37 @@ func TestBlobInstantUploadSharesOneObject(t *testing.T) {
 	info, e := s.BlobInfo(p, sha)
 	if e != nil || info["ref_count"] != int64(2) {
 		t.Fatalf("blob info: %v %+v", e, info)
+	}
+}
+
+func TestBlobGCClaimRecoversAfterRestart(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Chmod(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	s, err := Open(databaseTestConfig(t, Config{State: dir, Enabled: true, Development: true, MaxBytes: 1 << 20}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC().Add(-time.Hour)
+	row := Blob{ID: ID(), SHA256: strings.Repeat("a", 64), Owner: "owner", ConnectionID: "platform", ObjectKey: "stale-object", GCClaimed: true, GCClaimedAt: &now, GCClaimToken: "old-worker"}
+	if err := s.DB.Create(&row).Error; err != nil {
+		s.Close()
+		t.Fatal(err)
+	}
+	s.Close()
+
+	reopened, err := Open(databaseTestConfig(t, Config{State: dir, Enabled: true, Development: true, MaxBytes: 1 << 20}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	var recovered Blob
+	if err := reopened.DB.First(&recovered, "id = ?", row.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if recovered.GCClaimed || recovered.GCClaimToken != "" || recovered.GCClaimedAt != nil {
+		t.Fatalf("restart must release abandoned claim: %+v", recovered)
 	}
 }
 

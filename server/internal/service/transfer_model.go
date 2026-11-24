@@ -37,7 +37,7 @@ func (TransferPlan) TableName() string { return "transfer_plans" }
 type TransferItem struct {
 	ID              string `gorm:"primaryKey"`
 	PlanID          string `json:"plan_id" gorm:"uniqueIndex:transfer_item_identity;index"`
-	ItemKey         string `json:"item_key" gorm:"uniqueIndex:transfer_item_identity"`
+	ItemKey         string `json:"item_key" gorm:"uniqueIndex:transfer_item_identity;serializer:itemkey"`
 	Owner           string `json:"-"`
 	SourceFileID    string `json:"source_file_id"`
 	SourceVersionID string `json:"source_version_id"`

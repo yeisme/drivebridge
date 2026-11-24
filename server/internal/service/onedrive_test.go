@@ -54,7 +54,7 @@ func (f graphRoundTrip) RoundTrip(r *http.Request) (*http.Response, error) { ret
 func TestOneDriveImportExportAndConnectionBoundaries(t *testing.T) {
 	dir := t.TempDir()
 	os.Chmod(dir, 0700)
-	s, e := Open(Config{State: dir, Enabled: true, Development: true, MaxBytes: 1 << 20})
+	s, e := Open(databaseTestConfig(t, Config{State: dir, Enabled: true, Development: true, MaxBytes: 1 << 20}))
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -225,7 +225,7 @@ func (c cancellingStore) Put(ctx context.Context, _ string, _ io.Reader, _ int64
 func TestCancelInterruptsActiveCloudWrite(t *testing.T) {
 	dir := t.TempDir()
 	os.Chmod(dir, 0700)
-	s, e := Open(Config{State: dir, Enabled: true, Development: true})
+	s, e := Open(databaseTestConfig(t, Config{State: dir, Enabled: true, Development: true}))
 	if e != nil {
 		t.Fatal(e)
 	}

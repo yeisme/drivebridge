@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/yeisme/drivebridge-server/internal/fixtures"
 	"github.com/yeisme/drivebridge-server/internal/service"
@@ -25,13 +26,19 @@ func stageBackup(t *testing.T, f *fixtures.Runtime, name string) string {
 	if e := os.Mkdir(dir, 0700); e != nil {
 		t.Fatal(e)
 	}
-	for _, file := range []string{"metadata.sqlite", "instance.id"} {
-		b, e := os.ReadFile(filepath.Join(f.Service.Config.State, file))
-		if e != nil {
+	if f.Service.DB.Dialector.Name() == "postgres" {
+		if e := f.Service.SnapshotBackupMetadata(dir); e != nil {
 			t.Fatal(e)
 		}
-		if e = os.WriteFile(filepath.Join(dir, file), b, 0600); e != nil {
-			t.Fatal(e)
+	} else {
+		for _, file := range []string{"metadata.sqlite", "instance.id"} {
+			b, e := os.ReadFile(filepath.Join(f.Service.Config.State, file))
+			if e != nil {
+				t.Fatal(e)
+			}
+			if e = os.WriteFile(filepath.Join(dir, file), b, 0600); e != nil {
+				t.Fatal(e)
+			}
 		}
 	}
 	if e := service.WriteBackupManifest(dir); e != nil {
@@ -204,6 +211,25 @@ func TestRestoreDrillScriptedSmoke(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
+	// Let the real worker finish this drill's outbox before comparing live
+	// metadata with a fixed snapshot. Restore may resume pending runtime work.
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		var unpublished, unfinished int64
+		if e := f.Service.DB.Model(&service.OutboxEvent{}).Where("published = ?", false).Count(&unpublished).Error; e != nil {
+			t.Fatal(e)
+		}
+		if e := f.Service.DB.Model(&service.RuntimeJob{}).Where("status <> ?", "done").Count(&unfinished).Error; e != nil {
+			t.Fatal(e)
+		}
+		if unpublished == 0 && unfinished == 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("runtime did not quiesce before snapshot comparison")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
 	backup := stageBackup(t, f, "drill")
 	// Key escrow retrieval: the drill copies the key from the live state as
 	// the stand-in for the separate secret channel.
@@ -223,6 +249,24 @@ func TestRestoreDrillScriptedSmoke(t *testing.T) {
 		t.Fatal(e)
 	}
 	defer restored.Close()
+	// The portable snapshot must preserve all source metadata tables, including
+	// authorization, recovery and sealed credentials, not just file manifests.
+	tables, e := f.Service.DB.Migrator().GetTables()
+	if e != nil {
+		t.Fatal(e)
+	}
+	for _, table := range tables {
+		if table == "sqlite_sequence" {
+			continue
+		}
+		var before, after int64
+		if e = f.Service.DB.Table(table).Count(&before).Error; e != nil {
+			t.Fatal(e)
+		}
+		if e = restored.DB.Table(table).Count(&after).Error; e != nil || before != after {
+			t.Fatalf("restored metadata count mismatch for %s: source=%d restored=%d error=%v", table, before, after, e)
+		}
+	}
 	p := service.Principal{UserID: h.user.ID}
 	_, _, body, e := restored.Download(context.Background(), p, op.FileID, "")
 	if e != nil {

@@ -172,6 +172,17 @@ func pathAvailable(db *gorm.DB, owner, space, target, except string) error {
 
 func (s *Service) browseDirectory(w http.ResponseWriter, r *http.Request, p Principal) error {
 	q := r.URL.Query()
+	pageSize := 200 // Preserve the legacy endpoint default for existing clients.
+	if values, supplied := q["limit"]; supplied {
+		if len(values) != 1 {
+			return code("invalid_request")
+		}
+		n, err := strconv.Atoi(values[0])
+		if err != nil || n < 1 || n > 200 {
+			return code("invalid_request")
+		}
+		pageSize = n
+	}
 	space, dir := q.Get("space_id"), q.Get("path")
 	if _, err := s.space(p, space); err != nil {
 		return err
@@ -266,7 +277,7 @@ func (s *Service) browseDirectory(w http.ResponseWriter, r *http.Request, p Prin
 		}
 		start = n
 	}
-	end := min(start+200, len(entries))
+	end := min(start+pageSize, len(entries))
 	next := ""
 	if end < len(entries) {
 		next = strconv.Itoa(end)

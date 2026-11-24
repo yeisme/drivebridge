@@ -231,14 +231,18 @@ func TestEncryptedInstanceKeyLossRefusesService(t *testing.T) {
 	}
 	restored := t.TempDir()
 	os.Chmod(restored, 0700)
-	for _, name := range []string{"metadata.sqlite", "instance.id"} {
+	files := []string{"instance.id"}
+	if f.Service.DB.Dialector.Name() == "sqlite" {
+		files = append(files, "metadata.sqlite")
+	}
+	for _, name := range files {
 		b, e := os.ReadFile(filepath.Join(f.Service.Config.State, name))
 		if e != nil {
 			t.Fatal(e)
 		}
 		os.WriteFile(filepath.Join(restored, name), b, 0600)
 	}
-	if _, e := service.Open(service.Config{State: restored, Enabled: true, Development: true}); e == nil || e.Error() != "instance_key_missing_restore_required" {
+	if _, e := service.Open(service.Config{State: restored, Enabled: true, Development: true, TeamDSN: f.Service.Config.TeamDSN}); e == nil || e.Error() != "instance_key_missing_restore_required" {
 		t.Fatalf("missing key silently regenerated: %v", e)
 	}
 }

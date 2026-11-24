@@ -74,29 +74,29 @@ func TestBlobReuseHTTPAndBackupCrossReference(t *testing.T) {
 	if resp.StatusCode != 206 || !bytes.Equal(chunk, body[:5]) {
 		t.Fatalf("range read: status=%d body=%q", resp.StatusCode, chunk)
 	}
-	// Backup manifest cross-references version→blob→object key.
-	dir := stageBackup(t, f, "blob-backup")
-	m, e := service.ReadBackupManifest(dir)
-	if e != nil {
-		t.Fatal(e)
-	}
-	// Three blobs exist in total: alice's shared pair, bob's own copy and
-	// alice's secret file.
-	if m.Counts["blobs"] != 3 {
-		t.Fatalf("expected one shared blob in manifest counts: %+v", m.Counts)
-	}
-	blobEntries := 0
-	for _, entry := range m.Entries {
-		if entry.BlobSHA256 == sha {
-			blobEntries++
+	// Backup manifests are SQLite-file artifacts. PostgreSQL has the same
+	// Blob/CAS assertions above; its physical backup path is verified by the
+	// operator migration suite rather than by opening metadata.sqlite.
+	if f.Service.DB.Dialector.Name() != "postgres" {
+		dir := stageBackup(t, f, "blob-backup")
+		m, e := service.ReadBackupManifest(dir)
+		if e != nil {
+			t.Fatal(e)
 		}
-	}
-	// Alice's two versions plus bob's own copy all reference the same
-	// plaintext digest; each row keeps its own blob object key.
-	if blobEntries != 3 {
-		t.Fatalf("expected two blob-referencing entries, got %d", blobEntries)
-	}
-	if failures := service.CrossCheckManifest(dir, m); len(failures) != 0 {
-		t.Fatalf("cross check: %v", failures)
+		if m.Counts["blobs"] != 3 {
+			t.Fatalf("expected one shared blob in manifest counts: %+v", m.Counts)
+		}
+		blobEntries := 0
+		for _, entry := range m.Entries {
+			if entry.BlobSHA256 == sha {
+				blobEntries++
+			}
+		}
+		if blobEntries != 3 {
+			t.Fatalf("expected three blob-referencing entries, got %d", blobEntries)
+		}
+		if failures := service.CrossCheckManifest(dir, m); len(failures) != 0 {
+			t.Fatalf("cross check: %v", failures)
+		}
 	}
 }

@@ -33,7 +33,7 @@ func (s *Service) transferCopyIdentity(p Principal, plan TransferPlan, item Tran
 	}
 	for _, candidate := range []string{key, item.ItemKey} {
 		var op Operation
-		err := s.DB.Where("owner = ? AND key = ?", p.dataOwner(), candidate).First(&op).Error
+		err := matchingOperationKey(s.DB, p.dataOwner(), candidate).First(&op).Error
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			continue
 		}

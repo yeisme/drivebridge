@@ -44,6 +44,11 @@ func openBackupDB(path string) (*sql.DB, error) {
 // CheckpointMetadata flushes the write-ahead log into metadata.sqlite so the
 // shipped file is self-contained and read-only consumers see every row.
 func (s *Service) CheckpointMetadata() error {
+	if s.runtimeDialect() == "postgres" {
+		// PostgreSQL commits metadata directly; there is no SQLite WAL to
+		// checkpoint. Keep the operator command portable and idempotent.
+		return nil
+	}
 	return s.DB.Exec("PRAGMA wal_checkpoint(TRUNCATE)").Error
 }
 

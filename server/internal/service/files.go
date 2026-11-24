@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -92,7 +93,11 @@ func (s *Service) createUpload(p Principal, q UploadRequest, key string, origin 
 	operationID, versionID := ID(), ID()
 	if p.ServiceIdentity != nil {
 		var replay Operation
-		if err := s.DB.First(&replay, "owner = ? AND key = ?", p.dataOwner(), key).Error; err == nil {
+		replayErr := matchingOperationKey(s.DB, p.dataOwner(), key).First(&replay).Error
+		if replayErr != nil && !errors.Is(replayErr, gorm.ErrRecordNotFound) {
+			return Operation{}, code("database_unavailable")
+		}
+		if replayErr == nil {
 			if replay.Fingerprint != fingerprint {
 				return Operation{}, code("idempotency_conflict")
 			}
@@ -133,7 +138,11 @@ func (s *Service) createUpload(p Principal, q UploadRequest, key string, origin 
 			return err
 		}
 		var old Operation
-		if tx.First(&old, "owner = ? AND key = ?", p.dataOwner(), key).Error == nil {
+		replayErr := matchingOperationKey(tx, p.dataOwner(), key).First(&old).Error
+		if replayErr != nil && !errors.Is(replayErr, gorm.ErrRecordNotFound) {
+			return code("database_unavailable")
+		}
+		if replayErr == nil {
 			if old.Fingerprint != fingerprint {
 				return code("idempotency_conflict")
 			}
@@ -239,7 +248,7 @@ func (s *Service) createUpload(p Principal, q UploadRequest, key string, origin 
 			if p.Agent != nil {
 				agentID = p.Agent.ID
 			}
-			op = Operation{ActorID: p.UserID, ReviewPending: q.ReviewPending, Caller: q.Caller, TaskRef: q.TaskRef, ID: operationID, Owner: p.dataOwner(), AgentID: agentID, Key: key, Fingerprint: fingerprint, Kind: "upload", SpaceID: q.SpaceID, Path: q.Path, Size: q.Size, SHA256: q.SHA256, FileID: f.ID, VersionID: versionID, ConnectionID: blob.ConnectionID, Status: "completed", Transferred: 0, BlobReused: true, MIME: blob.MIME, BatchID: q.BatchID, ItemKey: q.ItemKey, Updated: v.Created}
+			op = Operation{ActorID: p.UserID, ReviewPending: q.ReviewPending, Caller: q.Caller, TaskRef: q.TaskRef, ID: operationID, Owner: p.dataOwner(), AgentID: agentID, Key: key, KeyEncodingVersion: operationKeyEncoding(key), Fingerprint: fingerprint, Kind: "upload", SpaceID: q.SpaceID, Path: q.Path, Size: q.Size, SHA256: q.SHA256, FileID: f.ID, VersionID: versionID, ConnectionID: blob.ConnectionID, Status: "completed", Transferred: 0, BlobReused: true, MIME: blob.MIME, BatchID: q.BatchID, ItemKey: q.ItemKey, Updated: v.Created}
 			if origin != nil {
 				op.Kind = origin.Kind
 				op.ArchiveFileID, op.ArchiveVersionID, op.ArchiveHeadVersion = origin.Source.SourceFileID, origin.Source.SourceVersionID, origin.Source.ExpectedSourceVersion
@@ -276,7 +285,7 @@ func (s *Service) createUpload(p Principal, q UploadRequest, key string, origin 
 		if p.Agent != nil {
 			agent = p.Agent.ID
 		}
-		op = Operation{ActorID: p.UserID, ReviewPending: q.ReviewPending, Caller: q.Caller, TaskRef: q.TaskRef, ID: operationID, Owner: p.dataOwner(), AgentID: agent, Key: key, Fingerprint: fingerprint, Kind: "upload", SpaceID: q.SpaceID, Path: q.Path, Size: q.Size, SHA256: q.SHA256, FileID: q.FileID, ExpectedVersion: q.ExpectedVersion, VersionID: versionID, ConnectionID: sp.ConnectionID, Nonce: nonce, Status: "awaiting_upload", BatchID: q.BatchID, ItemKey: q.ItemKey, Updated: time.Now().UTC()}
+		op = Operation{ActorID: p.UserID, ReviewPending: q.ReviewPending, Caller: q.Caller, TaskRef: q.TaskRef, ID: operationID, Owner: p.dataOwner(), AgentID: agent, Key: key, KeyEncodingVersion: operationKeyEncoding(key), Fingerprint: fingerprint, Kind: "upload", SpaceID: q.SpaceID, Path: q.Path, Size: q.Size, SHA256: q.SHA256, FileID: q.FileID, ExpectedVersion: q.ExpectedVersion, VersionID: versionID, ConnectionID: sp.ConnectionID, Nonce: nonce, Status: "awaiting_upload", BatchID: q.BatchID, ItemKey: q.ItemKey, Updated: time.Now().UTC()}
 		if origin != nil {
 			op.Kind = origin.Kind
 			op.RenameOnConflict = origin.AutoRename
@@ -452,7 +461,11 @@ func (s *Service) putPartAuthorized(p Principal, id string, index int, reader io
 	}
 	digest := hex.EncodeToString(hash.Sum(nil))
 	var existing Part
-	if s.DB.First(&existing, "operation_id = ? AND `index` = ?", id, index).Error == nil {
+	existingErr := s.DB.Where("operation_id = ?", id).Where(map[string]any{"index": index}).First(&existing).Error
+	if existingErr != nil && !errors.Is(existingErr, gorm.ErrRecordNotFound) {
+		return op, code("database_unavailable")
+	}
+	if existingErr == nil {
 		if existing.SHA256 != digest || existing.Size != staged {
 			return op, code("part_conflict")
 		}

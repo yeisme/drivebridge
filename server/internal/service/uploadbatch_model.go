@@ -37,7 +37,7 @@ func (UploadBatch) TableName() string { return "upload_batches" }
 type UploadBatchItem struct {
 	ID              string    `gorm:"primaryKey"`
 	BatchID         string    `json:"batch_id" gorm:"uniqueIndex:upload_batch_item;index"`
-	ItemKey         string    `json:"item_key" gorm:"uniqueIndex:upload_batch_item"`
+	ItemKey         string    `json:"item_key" gorm:"uniqueIndex:upload_batch_item;serializer:itemkey"`
 	Owner           string    `json:"-"`
 	CaseFolded      string    `json:"-"` // lower-cased relative path for backend name-space collisions
 	RelativePath    string    `json:"relative_path"`

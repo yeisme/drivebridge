@@ -8,6 +8,17 @@ import (
 	"gorm.io/gorm/clause"
 )
 
+// reconcileBlobGC runs after the process lock is acquired. Any previous
+// process is therefore gone, so a claimed blob can safely return to the
+// candidate pool. The next run will re-check refs and object existence before
+// deleting; this is the recovery boundary for a crash between storage delete
+// and metadata removal.
+func (s *Service) reconcileBlobGC() error {
+	return s.DB.Model(&Blob{}).
+		Where("gc_claimed = ?", true).
+		Updates(map[string]any{"gc_claimed": false, "gc_claimed_at": nil, "gc_claim_token": ""}).Error
+}
+
 // blobScope is the dedupe dimension of a space: plaintext spaces share by
 // digest alone within the data owner, encrypted spaces only within the space.
 func blobScope(sp Space) string {
@@ -107,11 +118,13 @@ func (s *Service) BlobGC(ctx context.Context, dryRun bool) (map[string]any, erro
 	for _, candidate := range blobs {
 		var b Blob
 		claimed := false
+		claimToken := ID()
+		claimedAt := time.Now().UTC()
 		err := s.DB.Transaction(func(tx *gorm.DB) error {
 			if e := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&b, "id = ? AND refs <= ? AND gc_claimed = ?", candidate.ID, 0, false).Error; e != nil {
 				return e
 			}
-			if e := tx.Model(&Blob{}).Where("id = ? AND refs <= ? AND gc_claimed = ?", b.ID, 0, false).Update("gc_claimed", true).Error; e != nil {
+			if e := tx.Model(&Blob{}).Where("id = ? AND refs <= ? AND gc_claimed = ?", b.ID, 0, false).Updates(map[string]any{"gc_claimed": true, "gc_claimed_at": claimedAt, "gc_claim_token": claimToken}).Error; e != nil {
 				return e
 			}
 			claimed = true
@@ -122,19 +135,19 @@ func (s *Service) BlobGC(ctx context.Context, dryRun bool) (map[string]any, erro
 		}
 		bytes += b.Size
 		if dryRun {
-			_ = s.DB.Model(&Blob{}).Where("id = ? AND gc_claimed = ?", b.ID, true).Update("gc_claimed", false).Error
+			_ = s.DB.Model(&Blob{}).Where("id = ? AND gc_claimed = ? AND gc_claim_token = ?", b.ID, true, claimToken).Updates(map[string]any{"gc_claimed": false, "gc_claimed_at": nil, "gc_claim_token": ""}).Error
 			continue
 		}
 		st, e := s.storageFor(b.Owner, b.ConnectionID)
 		if e != nil {
-			_ = s.DB.Model(&Blob{}).Where("id = ? AND gc_claimed = ?", b.ID, true).Update("gc_claimed", false).Error
+			_ = s.DB.Model(&Blob{}).Where("id = ? AND gc_claimed = ? AND gc_claim_token = ?", b.ID, true, claimToken).Updates(map[string]any{"gc_claimed": false, "gc_claimed_at": nil, "gc_claim_token": ""}).Error
 			return nil, e
 		}
 		if e = st.Delete(ctx, b.ObjectKey); e != nil {
-			_ = s.DB.Model(&Blob{}).Where("id = ? AND gc_claimed = ?", b.ID, true).Update("gc_claimed", false).Error
+			_ = s.DB.Model(&Blob{}).Where("id = ? AND gc_claimed = ? AND gc_claim_token = ?", b.ID, true, claimToken).Updates(map[string]any{"gc_claimed": false, "gc_claimed_at": nil, "gc_claim_token": ""}).Error
 			return nil, e
 		}
-		if e = s.DB.Where("id = ? AND refs <= ? AND gc_claimed = ?", b.ID, 0, true).Delete(&Blob{}).Error; e != nil {
+		if e = s.DB.Where("id = ? AND refs <= ? AND gc_claimed = ? AND gc_claim_token = ?", b.ID, 0, true, claimToken).Delete(&Blob{}).Error; e != nil {
 			return nil, code("database_unavailable")
 		}
 		removed++

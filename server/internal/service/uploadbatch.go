@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"gorm.io/gorm/clause"
 	"io"
 	"os"
 	"path"
@@ -610,8 +611,11 @@ func (s *Service) lookupAnchorOperation(p Principal, key, kind string, originalR
 	}
 	hash, _ := fp.(string)
 	var op Operation
-	if s.DB.First(&op, "owner = ? AND key = ? AND kind = ?", p.dataOwner(), key, kind).Error != nil {
-		return lookupNotFound(), nil
+	if err := matchingOperationKey(s.DB, p.dataOwner(), key).Where("kind = ?", kind).First(&op).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return lookupNotFound(), nil
+		}
+		return OperationLookupView{}, code("database_unavailable")
 	}
 	if op.Fingerprint != hash {
 		return OperationLookupView{}, code("idempotency_conflict")
@@ -660,7 +664,9 @@ func (s *Service) UploadSessionFor(p Principal, operationID string) (UploadSessi
 	var session UploadSession
 	first := s.DB.First(&session, "operation_id = ?", op.ID).Error == nil
 	var parts []Part
-	s.DB.Where("operation_id = ?", op.ID).Order("`index`").Find(&parts)
+	if err := s.DB.Where("operation_id = ?", op.ID).Order(clause.OrderByColumn{Column: clause.Column{Name: "index"}}).Find(&parts).Error; err != nil {
+		return UploadSessionView{}, code("database_unavailable")
+	}
 	received := make([]int, 0, len(parts))
 	var bytes int64
 	for _, part := range parts {
@@ -748,7 +754,7 @@ func (s *Service) bindBatchItem(tx *gorm.DB, p Principal, q *UploadRequest) (Upl
 		return UploadBatch{}, code("operation_closed")
 	}
 	var item UploadBatchItem
-	if tx.First(&item, "batch_id = ? AND item_key = ?", q.BatchID, q.ItemKey).Error != nil {
+	if matchingItemKey(tx, q.ItemKey).First(&item, "batch_id = ?", q.BatchID).Error != nil {
 		return UploadBatch{}, code("not_found")
 	}
 	if item.IsDir {
@@ -794,7 +800,7 @@ func (s *Service) bindBatchItem(tx *gorm.DB, p Principal, q *UploadRequest) (Upl
 // exists in the same transaction.
 func scheduleBatchItem(tx *gorm.DB, owner, batchID, itemKey, operationID string) error {
 	now := time.Now().UTC()
-	return tx.Model(&UploadBatchItem{}).Where("batch_id = ? AND item_key = ? AND owner = ?", batchID, itemKey, owner).Updates(map[string]any{"status": "transferring", "operation_id": operationID, "updated_at": now}).Error
+	return matchingItemKey(tx.Model(&UploadBatchItem{}), itemKey).Where("batch_id = ? AND owner = ?", batchID, owner).Updates(map[string]any{"status": "transferring", "operation_id": operationID, "updated_at": now}).Error
 }
 
 // finishBatchItem records the item outcome after its original operation
@@ -809,7 +815,7 @@ func (s *Service) finishBatchItem(op Operation, status, errText string) {
 		now := time.Now().UTC()
 		// Conditional update: a cancelled batch may have already decided the
 		// item; completed facts always win over later failure replays.
-		q := tx.Model(&UploadBatchItem{}).Where("batch_id = ? AND item_key = ? AND status <> ?", op.BatchID, op.ItemKey, "completed")
+		q := matchingItemKey(tx.Model(&UploadBatchItem{}), op.ItemKey).Where("batch_id = ? AND status <> ?", op.BatchID, "completed")
 		updates := map[string]any{"status": status, "updated_at": now, "error": errText}
 		if status == "completed" {
 			updates["certainty"] = "confirmed"

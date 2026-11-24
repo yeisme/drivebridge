@@ -85,7 +85,7 @@ func (s *Service) saveCreativeArtifact(ctx context.Context, p Principal, receipt
 	key := "creative-save:" + receipt.ID + ":" + Hash(ref)
 	// Reuse completed or recoverable transfers, independently of generation.
 	var existing Operation
-	if s.DB.First(&existing, "owner = ? AND key = ?", p.dataOwner(), key).Error == nil {
+	if matchingOperationKey(s.DB, p.dataOwner(), key).First(&existing).Error == nil {
 		if existing.Status == "completed" {
 			return existing, nil
 		}
