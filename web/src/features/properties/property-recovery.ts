@@ -1,3 +1,4 @@
+import { sha256Hex } from '../../lib/tab-lock';
 import type { components } from '../../generated/personal-workspace';
 export type Catalog = components['schemas']['PropertyDefinitionViewEnvelope']['data'];
 export type Definition = Catalog['definitions'][number];
@@ -15,7 +16,7 @@ export function validCatalog(row: Catalog, space: string) {
 export const propertySlot = (scope: string, space: string) => 'drivebridge:property-definitions:' + JSON.stringify([scope, space]);
 export async function propertyDigest(space: string, input: Update) {
   const raw = JSON.stringify({ space_id: space, request: { expected_revision: input.expected_revision, definitions: input.definitions.map(row => ({ key: row.key, display_name: row.display_name, group: row.group, type: row.type })) } }).replace(/[<>&\u2028\u2029]/g, ch => '\\u' + ch.charCodeAt(0).toString(16).padStart(4, '0'));
-  return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw))), byte => byte.toString(16).padStart(2, '0')).join('');
+  return sha256Hex(raw);
 }
 export function readRecovery(slot: string): Recovery | null {
   const raw = localStorage.getItem(slot); if (raw === null) return null;

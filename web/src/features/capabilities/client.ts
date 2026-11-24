@@ -19,7 +19,9 @@ export function projectCapabilities(value: unknown) {
     if (value !== undefined && value !== null && !count(value)) throw new Error('invalid_contract');
     return [key, value === undefined ? null : value];
   })) as Record<string, number | null>;
-  return { actions: row.actions as string[], limits: safeLimits };
+  const projected = { actions: row.actions as string[], limits: safeLimits, actionCatalog: [] as ActionCatalogAction[] };
+  Object.defineProperty(projected, 'actionCatalog', { value: row.action_catalog === undefined ? [] : projectActionCatalog(row.action_catalog), enumerable: false });
+  return projected;
 }
 
 export function projectReadiness(value: unknown, expectedAction: string) {
@@ -34,11 +36,68 @@ export function projectReadiness(value: unknown, expectedAction: string) {
   return { action: expectedAction, implemented, configured, authorized, availability, dependency, observedAt, reason };
 }
 
+export type ActionCatalogAction = {
+  id: string;
+  intent: string;
+  surface: string[];
+  tool?: string;
+  implemented: boolean;
+  configured: boolean;
+  authorized: boolean;
+  dependencyStatus: string;
+  availability: 'available' | 'blocked' | 'unknown';
+  blockReason: string | null;
+  sideEffect: string;
+  actor: string;
+  executionLocation: string;
+  resultKind: string | null;
+  byteTransport: string | null;
+  recovery: string[];
+  observedAt: string | null;
+};
+
 export type Capabilities = ReturnType<typeof projectCapabilities>;
 export type Readiness = ReturnType<typeof projectReadiness>;
 export async function readCapabilities(space: string, signal: AbortSignal) {
   const query = space ? '?' + new URLSearchParams({ space_id: space }) : '';
   return projectCapabilities(await api<unknown>('/capabilities' + query, 'GET', undefined, {}, signal));
+}
+
+export function projectActionCatalog(value: unknown): ActionCatalogAction[] {
+  const row = object(value);
+  const raw = row.actions;
+  if (!Array.isArray(raw) || raw.length > 128) throw new Error('invalid_contract');
+  return raw.map(item => {
+    const action = object(item);
+    if (!identifier(action.id) || !identifier(action.intent) || !Array.isArray(action.surface) || !action.surface.every(value => identifier(value))) throw new Error('invalid_contract');
+    const availability = action.availability === 'available' || action.availability === 'blocked' ? action.availability : 'unknown';
+    if (typeof action.implemented !== 'boolean' || typeof action.configured !== 'boolean' || typeof action.authorized !== 'boolean' || typeof action.side_effect !== 'string' || typeof action.actor !== 'string' || typeof action.execution_location !== 'string') throw new Error('invalid_contract');
+    if (availability === 'available' && (!action.implemented || !action.configured || !action.authorized)) throw new Error('invalid_contract');
+    return {
+      id: action.id,
+      intent: action.intent,
+      surface: action.surface as string[],
+      tool: typeof action.tool === 'string' ? action.tool : undefined,
+      implemented: action.implemented,
+      configured: action.configured,
+      authorized: action.authorized,
+      dependencyStatus: typeof action.dependency_status === 'string' ? action.dependency_status : 'unknown',
+      availability,
+      blockReason: identifier(action.block_reason) ? action.block_reason : null,
+      sideEffect: action.side_effect,
+      actor: action.actor,
+      executionLocation: action.execution_location,
+      resultKind: typeof action.result_kind === 'string' ? action.result_kind : null,
+      byteTransport: typeof action.byte_transport === 'string' ? action.byte_transport : null,
+      recovery: Array.isArray(action.recovery) && action.recovery.every(value => identifier(value)) ? action.recovery as string[] : [],
+      observedAt: action.observed_at === null || action.observed_at === undefined ? null : typeof action.observed_at === 'string' && Number.isFinite(Date.parse(action.observed_at)) ? action.observed_at : null,
+    };
+  });
+}
+
+export async function readActionCatalog(space: string, signal: AbortSignal) {
+  const query = space ? '?' + new URLSearchParams({ space_id: space }) : '';
+  return projectActionCatalog(await api<unknown>('/action-catalog' + query, 'GET', undefined, {}, signal));
 }
 export async function readReadiness(action: string, space: string, signal: AbortSignal) {
   if (!identifier(action) || !space) throw new Error('invalid_request');

@@ -3,6 +3,7 @@ import { api, getDataContext, type DriveFile } from '../../api';
 import { type SessionView, verifySessionIdentity } from '../../app/session';
 import type { components } from '../../generated/personal-workspace';
 import { Button } from '../../components/ui/button';
+import { sha256Hex } from '../../lib/tab-lock';
 import { AppDialog } from '../../components/AppDialog';
 
 type Schemas = components['schemas'];
@@ -102,7 +103,7 @@ function HoldDialog({ file, restricted, close }: { file: DriveFile; restricted: 
       if (!lookup && confirm) {
         const body = { expected_revision: confirm.revision } satisfies Schemas['WorkspaceHoldRelease'];
         const raw = JSON.stringify({ FileID: file.id, HoldID: confirm.hold_id, Request: body });
-        const digest = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw))), byte => byte.toString(16).padStart(2, '0')).join('');
+        const digest = await sha256Hex(raw);
         abort.signal.throwIfAborted();
         if (!navigator.locks?.request) throw new Error('lock_unavailable');
         const claim = await navigator.locks.request(slot.current, { signal: abort.signal }, () => {

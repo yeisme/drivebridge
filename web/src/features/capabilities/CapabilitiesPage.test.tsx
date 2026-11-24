@@ -4,7 +4,7 @@ import { CapabilitiesPage } from './CapabilitiesPage';
 import { setCSRF } from '../../app/transport';
 import type { Space } from '../../api';
 const spaces = [{ id: 'space', name: 'Personal' }] as Space[];
-const discovery = { actions: ['file_list'], limits: { max_file_bytes: 1024 } };
+const discovery = { actions: ['file_list'], limits: { max_file_bytes: 1024 }, action_catalog: { actions: [{ id: 'files.list', intent: 'list_authorized_files', surface: ['http'], tool: 'files', implemented: true, configured: true, authorized: true, dependency_status: 'none', availability: 'available', side_effect: 'read', actor: 'human_or_agent', execution_location: 'server', recovery: ['capabilities.check'] }] } };
 const readiness = { action: 'file_list', implemented: true, configured: false, authorized: true, dependency_status: 'none', availability: 'available', connection_observed_at: null };
 const json = (data: unknown, status = 200) => new Response(JSON.stringify({ data }), { status });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });

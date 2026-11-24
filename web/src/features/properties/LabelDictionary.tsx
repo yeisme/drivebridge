@@ -8,6 +8,7 @@ import { Input } from '../../components/ui/input';
 import { Textarea } from '../../components/ui/textarea';
 import { SelectAdapter } from '../../components/SelectAdapter';
 import { AppDialog } from '../../components/AppDialog';
+import { sha256Hex } from '../../lib/tab-lock';
 import { validDefinition } from './property-recovery';
 
 type S = components['schemas'];
@@ -23,7 +24,7 @@ const itemLabels: Record<string, string> = { pending: '待执行', done: '完成
 const isID = (value: string) => /^[a-f0-9]{48}$/.test(value);
 async function digest(value: unknown) {
   const raw = JSON.stringify(value).replace(/[<>&\u2028\u2029]/g, ch => '\\u' + ch.charCodeAt(0).toString(16).padStart(4, '0'));
-  return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw))), b => b.toString(16).padStart(2, '0')).join('');
+  return sha256Hex(raw);
 }
 function stored(slot: string): Recovery | null {
   const raw = localStorage.getItem(slot); if (raw === null) return null;

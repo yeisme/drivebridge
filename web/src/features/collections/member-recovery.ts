@@ -1,3 +1,4 @@
+import { sha256Hex } from '../../lib/tab-lock';
 import type { components } from '../../generated/personal-workspace';
 export type Decisions = components['schemas']['CollectionMemberDecisionsEnvelope']['data'];
 export type Decision = Decisions['items'][number];
@@ -11,7 +12,7 @@ export function validDecisions(value: Decisions, id: string) {
 }
 export async function memberDigest(id: string, input: MemberChange) {
   const raw = JSON.stringify({ collection_id: id, request: { expected_revision: input.expected_revision, include: input.include, exclude: input.exclude } });
-  return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw))), byte => byte.toString(16).padStart(2, '0')).join('');
+  return sha256Hex(raw);
 }
 export function readMemberRecovery(slot: string): MemberRecovery | null {
   const raw = localStorage.getItem(slot); if (raw === null) return null;

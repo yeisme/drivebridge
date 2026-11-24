@@ -68,13 +68,14 @@ export function DeliverCenter({
   const noteDirty = useRef(false);
   const noteGeneration = useRef(0);
   const discussionController = useRef<AbortController | null>(null);
+  useEffect(() => { setThreadNotice(''); }, [fileId]);
 
 
   // Draft text stays in memory. A failed read is never an empty note/thread list.
   useEffect(() => {
     const request = new AbortController(); discussionController.current = request;
-    setThreads([]); setNotePreview(null); setThreadNotice('');
-    const invalidate = () => { request.abort(); setReply(''); setNote(''); setThreads([]); setNotePreview(null); setThreadKey(''); threadKeyFor.current = ''; setThreadState('denied'); setNoteState('denied'); };
+    setThreads([]); setNotePreview(null);
+    const invalidate = () => { request.abort(); setReply(''); setNote(''); setThreads([]); setNotePreview(null); setThreadNotice(''); setThreadKey(''); threadKeyFor.current = ''; setThreadState('denied'); setNoteState('denied'); };
     const offline = () => { request.abort(); setThreads([]); setNotePreview(null); setThreadState('offline'); setNoteState('offline'); };
     window.addEventListener('drivebridge-context', invalidate); window.addEventListener('offline', offline);
     if (!fileId) { setThreadState('idle'); setNoteState('idle'); }

@@ -336,6 +336,7 @@ describe("TestFPPlatformConsumers/page", () => {
     threadOk = true;
     await userEvent.click(screen.getByRole("button", { name: "发布讨论" }));
     await waitFor(() => expect(threadPosts).toHaveLength(2));
+    await screen.findByText('讨论已发布到固定版本锚点。');
     expect(threadPosts[1].idempotency_key).toBe(threadPosts[0].idempotency_key);
     expect((threadPosts[0] as unknown as { body: string }).body).toBe("请确认这个版本的标题。");
     // A successful post invalidates the key: a NEW draft mints a NEW key.

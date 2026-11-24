@@ -26,17 +26,38 @@ function Fixture() {
     reload={async () => {}} upload={() => {}} onPreview={() => {}} onShare={() => {}} backendLabel="Fixture" adapter={adapter} showSpaceSwitcher={false}/>;
 }
 
+it('clears folder selections before the next directory page becomes actionable', async () => {
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async input => {
+    const url = new URL(String(input), location.origin);
+    const next = url.searchParams.get('cursor') === '50';
+    return new Response(JSON.stringify({data: {
+      entries: [{kind: 'directory', path: next ? 'next-page' : 'first-page'}],
+      next_cursor: next ? '' : '50', total: 51, coverage: 'managed_directory',
+    }}));
+  });
+  const view = render(<Finder spaces={[space]} space={space.id} setSpace={() => {}} prefix="" setPrefix={() => {}} revision={revision}
+    reload={async () => {}} upload={() => {}} onPreview={() => {}} onShare={() => {}} backendLabel="Fixture"/>);
+  fireEvent.click(await screen.findByRole('checkbox', {name: '选择文件夹 first-page'}));
+  expect(view.container.querySelector('.selection-bar')?.textContent).toContain('已选择 1 项');
+  fireEvent.click(screen.getByRole('button', {name: '下一页'}));
+  await screen.findByRole('checkbox', {name: '选择文件夹 next-page'});
+  expect(view.container.querySelector('.selection-bar')).toBeNull();
+  expect(screen.getByRole('checkbox', {name: '选择文件夹 next-page'}).getAttribute('aria-checked')).toBe('false');
+  expect(screen.getByText('第 2 页 · 共 51 项')).toBeTruthy();
+});
+
 it('keeps layout and view usable when optional localStorage is unavailable', async () => {
   vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new DOMException('Blocked', 'SecurityError'); });
   vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new DOMException('Blocked', 'SecurityError'); });
   render(<Fixture/>);
   await screen.findByRole('button', { name: '打开文件夹 资料' });
-  fireEvent.click(screen.getByRole('button', { name: '折叠目录树' }));
   expect(screen.queryByRole('complementary', { name: '目录树' })).toBeNull();
   fireEvent.click(screen.getByRole('button', { name: '网格视图' }));
   expect(screen.getByRole('button', { name: '网格视图' }).getAttribute('aria-pressed')).toBe('true');
   fireEvent.click(screen.getByRole('button', { name: '展开目录树' }));
   expect(screen.getByRole('complementary', { name: '目录树' })).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: '折叠目录树' }));
+  expect(screen.queryByRole('complementary', { name: '目录树' })).toBeNull();
 });
 
 it('prevents native dragging and movement in a read-only space', async () => {
@@ -59,6 +80,8 @@ it('prevents native dragging and movement in a read-only space', async () => {
 it('uses a mobile drawer without changing the desktop directory preference', async () => {
   const view = render(<Fixture/>);
   await screen.findByRole('button', { name: '打开文件夹 资料' });
+  expect(localStorage.getItem('drivebridge:tree-collapsed')).toBe('true');
+  fireEvent.click(screen.getByRole('button', { name: '展开目录树' }));
   expect(localStorage.getItem('drivebridge:tree-collapsed')).toBe('false');
   viewport.mobile = true;
   view.rerender(<Fixture/>);

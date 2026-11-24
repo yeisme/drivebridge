@@ -312,3 +312,8 @@
     justify-content: flex-start;
   }
 }
+
+@media (max-width: 767px), (pointer: coarse) {
+  .resource-browser button { min-height: 44px; }
+  .resource-view-switch button { min-width: 44px; }
+}

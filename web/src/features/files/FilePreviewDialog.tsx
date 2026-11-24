@@ -83,14 +83,32 @@ export function FilePreviewDialog({ title, close, notebookAction, information, d
       overlayClassName="quicklook-overlay-offset"
       overlayStyle={{ '--quicklook-nav-width': `${navigationWidth}px` } as CSSProperties}
       style={{ '--quicklook-nav-width': `${navigationWidth}px` } as CSSProperties}
-      className={`app-dialog quicklook-dialog flex flex-col gap-0 overflow-hidden p-0 max-md:h-dvh max-md:max-h-dvh max-md:w-screen max-md:max-w-none max-md:rounded-none ${expanded ? 'quicklook-expanded' : ''}`}>
-      <header className="grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1 border-b border-border px-3 py-1 md:flex md:min-h-12 md:px-4">
-        <DialogTitle className="min-w-0 flex-1 truncate leading-normal" title={title}>{title}</DialogTitle>
-        <DialogClose render={<Button type="button" variant="ghost" size="icon" className="size-11 md:order-3 md:size-8" aria-label="关闭" />}><X /></DialogClose>
-        <div className="quicklook-header-actions col-span-2 flex min-w-0 flex-wrap items-center justify-end gap-2 md:order-2 max-md:[&_button]:min-h-11 max-md:[&_button]:min-w-11">
+      className={`app-dialog quicklook-dialog flex flex-col gap-0 overflow-hidden rounded-xl border border-border p-0 shadow-[var(--shadow-popover)] max-md:h-dvh max-md:max-h-dvh max-md:w-screen max-md:max-w-none max-md:rounded-none ${expanded ? 'quicklook-expanded' : ''}`}>
+      <header className="grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1 border-b border-border bg-background px-3 py-1 md:flex md:min-h-12 md:px-4">
+        <DialogTitle className="min-w-0 flex-1 truncate text-sm font-semibold leading-normal" title={title}>{title}</DialogTitle>
+        {tabs.length === 1 && inline && (
+          <div role="tablist" aria-label="已打开文件" className="flex items-center gap-1 md:order-1">
+            <Button
+              type="button"
+              role="tab"
+              variant="ghost"
+              aria-selected={activeTab === tabs[0].key}
+              tabIndex={0}
+              className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
+              title={tabs[0].path}
+              onClick={() => onActivateTab?.(tabs[0].key)}
+              onDoubleClick={() => onPinTab?.(tabs[0].key, !tabs[0].pinned)}
+            >
+              {tabs[0].pinned ? <Pin size={12} aria-label="已固定" /> : <PinOff size={12} aria-label="未固定" />}
+              <span className="sr-only">{tabs[0].title}</span>
+            </Button>
+          </div>
+        )}
+        <DialogClose render={<Button type="button" variant="ghost" size="icon" className="size-11 md:order-3 md:size-8" aria-label="关闭" />}><X size={16} /></DialogClose>
+        <div className="quicklook-header-actions col-span-2 flex min-w-0 flex-wrap items-center justify-end gap-1.5 md:order-2 max-md:[&_button]:min-h-11 max-md:[&_button]:min-w-11">
           {notebookAction}
           {tabs.length > 1 && activeTab && <DropdownMenu>
-            <DropdownMenuTrigger render={<Button type="button" variant="ghost" size="icon" className="size-9" aria-label="标签操作" />}><MoreHorizontal /></DropdownMenuTrigger>
+            <DropdownMenuTrigger render={<Button type="button" variant="ghost" size="icon" className="size-8" aria-label="标签操作" />}><MoreHorizontal size={15} /></DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem onClick={() => onPinTab?.(activeTab, !tabs.find(tab => tab.key === activeTab)?.pinned)}>{tabs.find(tab => tab.key === activeTab)?.pinned ? '取消固定当前标签' : '固定当前标签'}</DropdownMenuItem>
               <DropdownMenuItem onClick={() => onCloseOthers?.(activeTab)}>关闭其他标签</DropdownMenuItem>
@@ -99,24 +117,24 @@ export function FilePreviewDialog({ title, close, notebookAction, information, d
             </DropdownMenuContent>
           </DropdownMenu>}
           <Button type="button" variant="outline" size="icon" aria-label={expanded ? '还原预览窗口' : '最大化预览'} onClick={() => setExpanded(value => !value)}>
-            {expanded ? <Minimize2 /> : <Maximize2 />}
+            {expanded ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
           </Button>
           <Button ref={toggle} type="button" variant="outline" aria-label={open ? '收起信息栏' : '展开信息栏'} aria-expanded={open} aria-controls="quicklook-sidebar"
             onClick={() => { if (open) hideInformation(); else if (inline) setDesktopOpen(true); else setOverlayOpen(true); }}>
-            <PanelRight /><span className="max-md:hidden">{open ? '收起信息栏' : '展开信息栏'}</span><span className="md:hidden">信息</span>
+            <PanelRight size={15} /><span className="max-md:hidden">{open ? '收起信息栏' : '展开信息栏'}</span><span className="md:hidden">信息</span>
           </Button>
         </div>
       </header>
-      {tabs.length > 0 && <div role="tablist" aria-label="已打开文件" className="quicklook-tabs flex min-h-10 shrink-0 items-stretch gap-1 overflow-x-auto border-b border-border bg-card/80 px-2">
+      {tabs.length > 1 && <div role="tablist" aria-label="已打开文件" className="quicklook-tabs flex min-h-9 shrink-0 items-stretch gap-1 overflow-x-auto border-b border-border bg-muted/40 px-2">
         {tabs.map(tab => <div key={tab.key} className="quicklook-tab flex shrink-0 items-center">
-          <Button type="button" role="tab" variant="ghost" aria-selected={activeTab === tab.key} tabIndex={activeTab === tab.key ? 0 : -1} className="h-9 max-w-56 justify-start gap-1.5 rounded-md px-2.5 text-xs aria-selected:bg-background aria-selected:font-semibold" title={tab.path} onKeyDown={event => {
+          <Button type="button" role="tab" variant="ghost" aria-selected={activeTab === tab.key} tabIndex={activeTab === tab.key ? 0 : -1} className="h-8 max-w-56 justify-start gap-1.5 rounded-md px-2.5 text-xs aria-selected:bg-background aria-selected:font-semibold" title={tab.path} onKeyDown={event => {
             const index = tabs.findIndex(item => item.key === tab.key);
             const next = event.key === 'ArrowRight' ? (index + 1) % tabs.length : event.key === 'ArrowLeft' ? (index + tabs.length - 1) % tabs.length : event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : -1;
             if (next >= 0) { event.preventDefault(); const target = tabs[next]; if (target) onActivateTab?.(target.key); }
           }} onClick={() => onActivateTab?.(tab.key)} onDoubleClick={() => onPinTab?.(tab.key, !tab.pinned)}>
             {tab.pinned ? <Pin size={12} aria-label="已固定"/> : <PinOff size={12} aria-label="未固定"/>}<span className="truncate">{tab.title}</span>
           </Button>
-          <Button type="button" variant="ghost" size="icon" className="size-8" aria-label={`关闭 ${tab.title}`} onClick={() => onCloseTab?.(tab.key)}><X size={13}/></Button>
+          <Button type="button" variant="ghost" size="icon" className="size-7" aria-label={`关闭 ${tab.title}`} onClick={() => onCloseTab?.(tab.key)}><X size={13}/></Button>
         </div>)}
       </div>}
       <div className={`quicklook-layout relative grid min-h-0 flex-1 ${inline && open ? 'grid-cols-[minmax(0,1fr)_288px]' : inline ? 'grid-cols-[minmax(0,1fr)_40px]' : 'grid-cols-[minmax(0,1fr)]'}`}>

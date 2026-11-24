@@ -1,11 +1,12 @@
+import { sha256Hex } from '../../lib/tab-lock';
 import type { components } from '../../generated/personal-workspace';
 export type RegisterResource = components['schemas']['RegisterResourceRequest'];
 export type ResourceReceipt = components['schemas']['ResourceRegistrationReceiptEnvelope']['data'];
 export type Recovery = { key: string; digest: string };
 export const resourceSlot = (scope: string) => 'drivebridge:resource-register:' + scope;
 export async function resourceDigest(input: RegisterResource): Promise<string> {
-  const bytes = new TextEncoder().encode(JSON.stringify([input.space_id, input.kind, input.display_name, input.file_ref ?? '', input.collection_snapshot_id ?? '']));
-  return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), b => b.toString(16).padStart(2, '0')).join('');
+  const raw = JSON.stringify([input.space_id, input.kind, input.display_name, input.file_ref ?? '', input.collection_snapshot_id ?? '']);
+  return sha256Hex(raw);
 }
 export function readResourceRecovery(slot: string): Recovery | null {
   const raw = localStorage.getItem(slot); if (raw === null) return null;

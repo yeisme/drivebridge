@@ -11,8 +11,19 @@ type Target = { scope: string; space: string; file: string; version: string; rea
 export function FilePropertiesEntry(props: Target & { path: string; history?: boolean }) {
   const [open, setOpen] = useState(false), [denied, setDenied] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
-  if (!/\.(pdf|png|jpe?g|gif|webp|mp3|wav|mp4|webm)$/i.test(props.path)) return <p className="text-xs text-muted-foreground">此格式暂不支持属性值编辑；Markdown/frontmatter 须独立无损合同，不使用 sidecar 替代。</p>;
-  return <div><Button ref={trigger} className="min-h-11" variant="outline" disabled={denied} onClick={() => setOpen(true)}>{props.history ? `查看历史属性与回执 ${props.version}` : '查看文件属性'}</Button>{denied && <p role="alert">属性权限或范围已变化，请重新打开文件。</p>}{open && <FileProperties {...props} readOnly={props.readOnly || props.history} denied={() => { setDenied(true); setOpen(false); }} close={() => { setOpen(false); trigger.current?.focus(); }}/>}</div>;
+  if (!/\.(pdf|png|jpe?g|gif|webp|mp3|wav|mp4|webm)$/i.test(props.path)) {
+    return (
+      <details className="text-xs text-muted-foreground">
+        <summary className="cursor-pointer select-none py-0.5 text-muted-foreground hover:text-foreground">
+          当前格式暂不支持自定义属性
+        </summary>
+        <p className="mt-1 leading-relaxed text-muted-foreground">
+          此格式暂不支持属性值编辑；Markdown/frontmatter 须独立无损合同，不使用 sidecar 替代。
+        </p>
+      </details>
+    );
+  }
+  return <div><Button ref={trigger} className="min-h-11 md:min-h-8" variant="outline" disabled={denied} onClick={() => setOpen(true)}>{props.history ? `查看历史属性与回执 ${props.version}` : '查看文件属性'}</Button>{denied && <p role="alert">属性权限或范围已变化，请重新打开文件。</p>}{open && <FileProperties {...props} readOnly={props.readOnly || props.history} denied={() => { setDenied(true); setOpen(false); }} close={() => { setOpen(false); trigger.current?.focus(); }}/>}</div>;
 }
 
 export function FileProperties({ scope, space, file, version, readOnly = false, onDirty, close, denied }: Target & { close: () => void; denied: () => void }) {

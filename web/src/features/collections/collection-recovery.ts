@@ -1,3 +1,4 @@
+import { sha256Hex } from '../../lib/tab-lock';
 import type { components } from '../../generated/personal-workspace';
 export type CollectionReceipt = components['schemas']['CollectionCreationReceiptEnvelope']['data'];
 export type Creation = { space_id: string; name: string; scope: 'private' } & ({ kind: 'manual' } | { kind: 'rule'; rule: components['schemas']['CollectionRule'] });
@@ -6,7 +7,7 @@ export const collectionSlot = (scope: string) => 'drivebridge:collection-create:
 export async function creationDigest(input: Creation) {
   // Match Go encoding/json's legacy field order and HTML/line-separator escaping.
   const raw = JSON.stringify({ space: input.space_id, name: input.name, kind: input.kind, scope: input.scope, rule: input.kind === 'rule' ? JSON.stringify(input.rule) : '' }).replace(/[<>&\u2028\u2029]/g, ch => '\\u' + ch.charCodeAt(0).toString(16).padStart(4, '0'));
-  return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw))), b => b.toString(16).padStart(2, '0')).join('');
+  return sha256Hex(raw);
 }
 export function readCreation(slot: string): Recovery | null {
   const raw = localStorage.getItem(slot); if (raw === null) return null;

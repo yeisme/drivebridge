@@ -1,3 +1,4 @@
+import { sha256Hex } from '../../lib/tab-lock';
 import type { components } from '../../generated/personal-workspace';
 import { validCatalog, type Catalog, type Definition, type Recovery } from './property-recovery';
 export type Sidecar = components['schemas']['PropertySidecarViewEnvelope']['data'];
@@ -37,7 +38,7 @@ export async function sidecarDigest(file: string, input: SidecarPatch) {
   // than reformatting its number literals; unrelated stored values never enter it.
   const updates = Object.fromEntries(Object.entries(input.updates).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0));
   const raw = JSON.stringify({ file_id: file, request: { base_version_id: input.base_version_id, definition_revision: input.definition_revision, expected_revision: input.expected_revision, updates, remove_keys: input.remove_keys } }).replace(/[<>&\u2028\u2029]/g, ch => '\\u' + ch.charCodeAt(0).toString(16).padStart(4, '0'));
-  return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw))), byte => byte.toString(16).padStart(2, '0')).join('');
+  return sha256Hex(raw);
 }
 export function matchesSidecarReceipt(row: SidecarReceipt, record: Recovery, file: string, version: string, expected?: number) {
   return !!row && Object.keys(row).sort().join(',') === 'committed_at,file_id,request_digest,result_revision,version_id' && row.file_id === file && row.version_id === version && row.request_digest === record.digest && Number.isSafeInteger(row.result_revision) && row.result_revision >= 1 && (expected === undefined || row.result_revision === expected + 1) && typeof row.committed_at === 'string' && Number.isFinite(Date.parse(row.committed_at));

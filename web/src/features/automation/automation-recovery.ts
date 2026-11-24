@@ -1,3 +1,4 @@
+import { sha256Hex } from '../../lib/tab-lock';
 import type { components } from '../../generated/personal-workspace';
 
 type Schemas = components['schemas'];
@@ -20,7 +21,7 @@ export async function automationDigest(target: string, action: AutomationAction,
   }
   // Mirror Go encoding/json's HTML and line-separator escaping, not user prose.
   const raw = JSON.stringify(value).replace(/[<>&\u2028\u2029]/g, character => '\\u' + character.charCodeAt(0).toString(16).padStart(4, '0'));
-  return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw))), byte => byte.toString(16).padStart(2, '0')).join('');
+  return sha256Hex(raw);
 }
 export function readAutomationRecovery(slot: string): AutomationRecovery | null {
   const raw = localStorage.getItem(slot);

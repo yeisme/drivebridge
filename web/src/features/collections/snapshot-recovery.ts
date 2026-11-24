@@ -1,3 +1,4 @@
+import { sha256Hex } from '../../lib/tab-lock';
 import type { components } from '../../generated/personal-workspace';
 export type SnapshotReceipt = components['schemas']['SnapshotCreationReceiptEnvelope']['data'];
 export type SnapshotRequest = components['schemas']['SnapshotCreationRequest'];
@@ -5,7 +6,7 @@ export type SnapshotRecovery = { key: string; digest: string };
 export const snapshotSlot = (scope: string, id: string) => 'drivebridge:snapshot-create:' + JSON.stringify([scope, id]);
 export async function snapshotDigest(id: string, revision: number) {
   const raw = JSON.stringify({ collection_id: id, expected_revision: revision }).replace(/[<>&\u2028\u2029]/g, ch => '\\u' + ch.charCodeAt(0).toString(16).padStart(4, '0'));
-  return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw))), byte => byte.toString(16).padStart(2, '0')).join('');
+  return sha256Hex(raw);
 }
 export function readSnapshotRecovery(slot: string): SnapshotRecovery | null {
   const raw = localStorage.getItem(slot); if (raw === null) return null;

@@ -49,6 +49,6 @@ it("sends the original directory paging and sorting contract", async () => {
   expect(fetcher).not.toHaveBeenCalled();
   await act(async () => { await vi.advanceTimersByTimeAsync(1); });
   const url = new URL(String(fetcher.mock.calls[0][0]), location.origin);
-  expect(Object.fromEntries(url.searchParams)).toEqual({ space_id: "a", path: "docs/one", q: "needle", cursor: "opaque", sort: "date", order: "desc" });
+  expect(Object.fromEntries(url.searchParams)).toEqual({ space_id: "a", path: "docs/one", q: "needle", cursor: "opaque", sort: "date", order: "desc", limit: "50" });
   expect(onPage).toHaveBeenCalledWith(expect.objectContaining({ next_cursor: "next" }));
 });

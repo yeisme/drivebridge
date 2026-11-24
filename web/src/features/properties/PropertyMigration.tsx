@@ -7,6 +7,7 @@ import { AppDialog } from '../../components/AppDialog';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { SelectAdapter } from '../../components/SelectAdapter';
+import { sha256Hex } from '../../lib/tab-lock';
 import { TYPES, typeLabel, validCatalog, type Catalog } from './property-recovery';
 
 type Schemas = components['schemas'];
@@ -101,7 +102,7 @@ function MigrationSession({ space, scope, close }: { space: string; scope: strin
           input = { expected_revision: plan.revision, impact_digest: plan.impact_digest };
         }
         const raw = JSON.stringify({ resource_id: stage === 'preview' ? space : plan!.plan_id, request: input }).replace(/[<>&\u2028\u2029]/g, ch => '\\u' + ch.charCodeAt(0).toString(16).padStart(4, '0'));
-        const digest = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw))), byte => byte.toString(16).padStart(2, '0')).join('');
+        const digest = await sha256Hex(raw);
         abort.signal.throwIfAborted();
         const next: Recovery = { plan: stage === 'preview' ? '' : plan!.plan_id, pending: { stage, key: 'migration-' + Array.from(crypto.getRandomValues(new Uint8Array(24)), byte => byte.toString(16).padStart(2, '0')).join(''), digest, expected: stage === 'preview' ? 0 : plan!.revision } };
         await replaceRecord(current, next, abort.signal); current = next; setRecord(next); setRisk(false); sent = true;

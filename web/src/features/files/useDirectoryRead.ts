@@ -2,6 +2,8 @@ import { useEffect } from "react";
 import type { DriveFile } from "../../api";
 import { api, errorText } from "../../api";
 
+export const DIRECTORY_PAGE_SIZE = 50;
+
 export interface BrowserEntry {
   kind: "file" | "directory";
   path: string;
@@ -49,7 +51,7 @@ export function useDirectoryRead(options: Options) {
         try {
           const result = reader
             ? await reader(space, prefix, query, controller.signal).then(entries => ({ entries, next_cursor: "", total: entries.length }))
-            : await api<DirectoryPage>(`/browser?${new URLSearchParams({ space_id: space, path: prefix, q: query, cursor, sort, order })}`, "GET", undefined, {}, controller.signal);
+            : await api<DirectoryPage>(`/browser?${new URLSearchParams({ space_id: space, path: prefix, q: query, cursor, sort, order, limit: String(DIRECTORY_PAGE_SIZE) })}`, "GET", undefined, {}, controller.signal);
           if (!controller.signal.aborted) onPage(result);
         } catch (error) {
           if (!controller.signal.aborted) onError(errorText(error));
