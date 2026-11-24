@@ -36,14 +36,19 @@
   color: var(--ink);
   background: var(--surface);
   display: grid;
-  grid-template-columns: 200px minmax(0, 1fr);
+  grid-template-columns: 204px minmax(0, 1fr);
   min-height: 0;
   flex: 1;
   min-width: 0;
   border: 1px solid var(--line);
   border-radius: var(--radius-finder);
   overflow: hidden;
-  box-shadow: var(--shadow-sm);
+  box-shadow: none;
+}
+.content.drive-content > .finder {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
 }
 .finder.has-inspector {
   grid-template-columns: 200px minmax(0, 1fr) 264px;
@@ -77,8 +82,8 @@
   border-radius: 7px;
 }
 .finder-tree {
-  background: var(--ui-muted);
-  padding: 18px 12px;
+  background: var(--surface);
+  padding: 12px 8px;
   border-right: 1px solid var(--line);
   overflow: auto;
   min-height: 0;
@@ -163,11 +168,10 @@
   container: file-browser / inline-size;
 }
 .finder-toolbar {
-  display:grid;
-  grid-template-columns:auto auto minmax(0,1fr) auto auto;
-  align-items:center;
-  gap:8px;
-  padding:8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
 }
 .finder-search { border-bottom:1px solid var(--line); }
 .finder-compact-filters { display:none; }
@@ -264,33 +268,38 @@
 }
 .finder-file {
   display: grid;
-  grid-template-columns: 20px minmax(0, 1fr) 85px 65px 74px;
+  grid-template-columns: 20px minmax(0, 1fr) 88px 68px 74px;
   align-items: center;
   gap: 10px;
   min-width: 0;
-  min-height: 44px;
-  padding: 8px;
+  min-height: 40px;
+  padding: 5px 10px;
   border: 1px solid transparent;
-  border-bottom-color: var(--line);
-  border-radius: 8px;
+  border-radius: 6px;
+  transition: background-color var(--motion-fast) ease;
 }
-.finder-file:hover {
-  background: var(--surface);
+.finder-file:hover,
+.finder-folder:hover {
+  background: var(--navigation-hover);
 }
 .finder-file.cut {
   opacity: 0.55;
 }
 .finder-file.focused,
 .finder-folder.focused {
-  box-shadow: inset 0 0 0 2px #6d9a6a;
+  background: var(--navigation-hover);
+}
+.finder-file.focused:focus-visible,
+.finder-folder.focused:focus-visible {
+  box-shadow: inset 0 0 0 1.5px var(--focus);
 }
 .finder-file.selected {
-  background: var(--accent-soft);
-  border-color: var(--line);
+  background: color-mix(in srgb, var(--green) 7%, var(--ui-accent));
+  border-color: transparent;
 }
-.finder-file.selected.focused,
-.finder-folder.focused.selected {
-  box-shadow: inset 0 0 0 2px var(--green);
+.finder-file.selected.focused:focus-visible,
+.finder-folder.focused.selected:focus-visible {
+  box-shadow: inset 0 0 0 1.5px var(--green);
 }
 .finder-file [data-slot="checkbox"] {
   width: 16px;
@@ -355,15 +364,15 @@
   align-items: center;
   width: 100%;
   gap: 12px;
-  padding: 12px;
+  padding: 6px 10px;
   border: 1px solid transparent;
-  border-bottom-color: var(--line);
-  border-radius: 8px;
+  border-radius: 6px;
   text-align: left;
+  transition: background-color var(--motion-fast) ease;
 }
 .finder-folder.selected {
-  background: var(--accent-soft);
-  border-color: var(--line);
+  background: color-mix(in srgb, var(--green) 7%, var(--ui-accent));
+  border-color: transparent;
 }
 .finder-folder.cut {
   opacity: 0.55;
@@ -416,15 +425,18 @@
   padding: 10px;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 11px;
+  border-radius: var(--radius-surface);
+  box-shadow: none;
+  transition: border-color var(--motion-fast) ease, background-color var(--motion-fast) ease;
 }
 .finder-grid .finder-file:hover {
-  border-color: var(--line);
-  box-shadow: 0 3px 12px #284a3010;
+  border-color: var(--ui-input);
+  background: var(--navigation-hover);
+  box-shadow: none;
 }
 .finder-grid .finder-file.selected {
-  background: var(--accent-soft);
-  border-color: var(--line);
+  background: color-mix(in srgb, var(--green) 7%, var(--ui-accent));
+  border-color: color-mix(in srgb, var(--green) 32%, var(--line));
 }
 .finder-grid .finder-file > [data-slot="checkbox"] {
   position: absolute;
@@ -483,20 +495,62 @@
   border: 1px solid var(--line);
   border-radius: 7px;
 }
+/* Grid folders: borderless tiles around a FolderArt cover; the cover is the
+   visual centre, so the tile itself only shows hover and selection. */
 .finder-grid .finder-folder {
+  position: relative;
   flex-direction: column;
-  justify-content: center;
-  border: 1px solid var(--line);
-  border-radius: 11px;
+  justify-content: flex-start;
+  gap: 0;
+  padding: 10px 10px 12px;
+  border: 1px solid transparent;
+  border-radius: 14px;
   min-height: 205px;
+  transition: background-color var(--motion-fast) ease-out;
 }
-.finder-grid .finder-folder .finder-name svg {
-  width: 62px;
-  height: 62px;
+.finder-grid .finder-folder:hover {
+  background: var(--ui-muted);
+}
+.finder-grid .finder-folder.selected {
+  background: var(--accent-soft);
+  border-color: var(--line);
+}
+.finder-grid .finder-folder .finder-name {
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 3px;
+  width: 100%;
+  text-align: center;
+}
+.finder-folder-cover {
+  display: block;
+  width: min(100%, 152px);
+  margin: 8px auto 14px;
 }
 .finder-grid .finder-folder strong {
   flex: none;
   max-width: 100%;
+  font-size: 14px;
+}
+.finder-folder-meta {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.finder-grid .finder-folder > .icon {
+  position: absolute;
+  z-index: 1;
+  top: 6px;
+  right: 6px;
+}
+.finder-empty-art {
+  display: block;
+  width: 132px;
+  margin-bottom: 6px;
 }
 .finder-status {
   flex: none;
@@ -514,14 +568,34 @@
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 8px;
-  padding: 8px 12px;
-  margin: 0 16px 8px;
+  gap: 4px;
+  padding: 6px 12px;
+  margin: 4px auto 10px;
+  max-width: calc(100% - 32px);
+  width: fit-content;
   border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--ui-muted);
+  border-radius: 12px;
+  background: var(--ui-popover);
+  box-shadow: var(--shadow-float);
   color: var(--ink);
   font-size: 12px;
+}
+.finder-notice-toast {
+  position: absolute;
+  right: 16px;
+  bottom: 44px;
+  z-index: 15;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100% - 32px);
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--ui-popover);
+  color: var(--ink);
+  font-size: 12px;
+  box-shadow: var(--shadow-md);
 }
 .clipboard-bar {
   display: flex;
@@ -621,6 +695,13 @@
   .finder-grid .finder-file:focus-within .finder-row-actions {
     opacity: 1;
     pointer-events: auto;
+  }
+  .finder-grid .finder-folder:not(.selected) > [data-slot="checkbox"],
+  .finder-grid .finder-folder > .icon {
+    opacity: 0;
+  }
+  .finder-grid .finder-folder:is(:hover, :focus-within) > :is([data-slot="checkbox"], .icon) {
+    opacity: 1;
   }
 }
 @container file-browser (max-width: 760px) {
@@ -899,9 +980,12 @@
 
 /* Container visibility overrides primitive display utilities in the command strip. */
 @layer utilities {
-  @container file-browser (max-width:639px) {
-    .finder-inline-filters, .finder-actions .finder-secondary { display:none; }
+  @container file-browser (max-width:740px) {
+    .finder-inline-filters { display:none; }
     .finder-compact-filters { display:block; }
+  }
+  @container file-browser (max-width:639px) {
+    .finder-actions .finder-secondary { display:none; }
   }
   @container file-browser (max-width:419px) {
     .finder-compact-filters button, .finder-actions > .finder-more { width:44px; padding:0; gap:0; font-size:0; }
@@ -930,24 +1014,56 @@
 /* Precision Pine browser geometry: the tree and inspector share the same
    density as the notebook workspace while retaining Finder's interactions. */
 @layer components {
-  .finder { grid-template-columns:220px minmax(0,1fr); border-radius:var(--radius-finder); box-shadow:var(--shadow-sm); }
-  .finder.has-inspector { grid-template-columns:220px minmax(0,1fr) 360px; }
-  .finder.tree-collapsed.has-inspector { grid-template-columns:minmax(0,1fr) 360px; }
-  .finder-tree { padding:12px 10px; }
-  .finder-tree .finder-label { margin:16px 8px 7px; }
-  .finder-tree .tree-row, .finder-tree .tree-row button { min-height:var(--file-row-height); }
-  .finder-toolbar { min-height:48px; padding:8px 12px; }
-  .finder-actions { min-height:48px; }
+  .finder { position:relative; grid-template-columns:208px minmax(0,1fr); border-radius:var(--radius-finder); box-shadow:none; }
+  .content.drive-content > .finder { border:0; border-radius:0; }
+  .finder.tree-collapsed { grid-template-columns:minmax(0,1fr); }
+  .finder.has-inspector { grid-template-columns:208px minmax(0,1fr) 340px; }
+  .finder.tree-collapsed.has-inspector { grid-template-columns:minmax(0,1fr) 340px; }
+  .finder-tree { padding:10px 8px; }
+  .finder-tree .finder-label { margin:14px 8px 6px; }
+  .finder-tree .tree-row, .finder-tree .tree-row button { min-height:34px; }
+  .finder-toolbar { min-height:40px; padding:4px 14px; border-bottom:1px solid var(--line); }
+  .finder-actions { min-height:38px; padding:3px 14px; border-bottom:1px solid var(--line); }
+  .finder-inline-filters > label { display:inline-flex !important; align-items:center; gap:0 !important; }
+  .finder-inline-filters > label > span { display:none !important; }
+  .finder-notice-toast {
+    position: absolute;
+    right: 16px;
+    bottom: 44px;
+    z-index: 15;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    max-width: calc(100% - 32px);
+    padding: 6px 10px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-control);
+    background: var(--ui-popover);
+    color: var(--ink);
+    font-size: 12px;
+    box-shadow: var(--shadow-md);
+  }
   .finder .workspace-view-switch { flex:none; }
   .finder-file { min-height:var(--file-row-height); }
-  .finder-inspector { min-width:320px; max-width:640px; padding:16px; }
+  .finder-inspector { min-width:300px; max-width:600px; padding:16px; }
   .finder-inspector .workspace-inspector-header { margin-bottom:16px; }
   .finder-inspector .workspace-inspector-header button { flex:none; }
   .finder-inspector .media-preview { min-height:220px; }
-  .finder button, .finder input { transition:background-color var(--motion-fast) ease, border-color var(--motion-fast) ease, color var(--motion-fast) ease, transform var(--motion-fast) ease; }
-  .finder button:active:not(:disabled) { transform:translateY(1px); }
-}
-
-@media (max-width: 767px) {
-  .finder-inspector { min-width:0; max-width:none; }
+  .finder button, .finder input { transition:background-color var(--motion-fast) ease, border-color var(--motion-fast) ease, color var(--motion-fast) ease; }
+  @media (min-width: 768px) and (max-width: 1200px) {
+    .finder.has-inspector,
+    .finder.tree-collapsed.has-inspector {
+      grid-template-columns: minmax(0, 1fr) 260px;
+    }
+  }
+  @media (max-width: 767px) {
+    .finder,
+    .finder.has-inspector,
+    .finder.tree-collapsed,
+    .finder.tree-collapsed.has-inspector {
+      display: flex;
+      flex-direction: column;
+    }
+    .finder-inspector { min-width:0; max-width:none; }
+  }
 }

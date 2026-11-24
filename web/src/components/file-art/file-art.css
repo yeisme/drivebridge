@@ -1,0 +1,172 @@
+@layer theme, base, legacy, components, utilities;
+
+@layer components {
+  /* Restrained flat linear document & folder glyphs (Quiet Precision) */
+  .finder-grid .media-thumbnail {
+    border-radius: var(--radius-control);
+    border: 1px solid color-mix(in srgb, currentColor 10%, var(--ui-border));
+    box-shadow: none;
+  }
+  .dark .finder-grid .media-thumbnail {
+    border-color: color-mix(in srgb, currentColor 14%, var(--ui-border));
+    box-shadow: none;
+  }
+
+  .finder-grid .media-fallback {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    gap: 6px;
+    padding: 10px 8px 8px;
+    background: transparent;
+  }
+
+  .file-art-sheet-wrap {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 26px;
+    color: inherit;
+    filter: none;
+    transition: transform var(--motion-fast) ease;
+  }
+
+  .finder-grid .media-fallback .file-art-sheet-wrap {
+    width: 48px;
+    height: 58px;
+    filter: drop-shadow(0 1px 2px rgb(16 18 22 / 6%));
+  }
+  .dark .finder-grid .media-fallback .file-art-sheet-wrap {
+    filter: drop-shadow(0 2px 4px rgb(0 0 0 / 28%));
+  }
+
+  .finder-grid .media-fallback .file-art-svg {
+    width: 48px;
+    height: 58px;
+  }
+  .finder-list .media-fallback .file-art-svg,
+  .finder-columns .media-fallback .file-art-svg {
+    width: 22px;
+    height: 26px;
+  }
+
+  /* Clean type label badge in Grid view */
+  .finder-grid .media-fallback > .file-art-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1px 7px;
+    border-radius: var(--radius-xs);
+    background-color: var(--ui-card);
+    color: inherit;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    line-height: 1.45;
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 14%, transparent);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .finder-grid .finder-file:is(:hover, :focus-within) .media-thumbnail > img {
+      transform: scale(1.02);
+    }
+  }
+
+  .media-thumbnail > img {
+    transition: transform 180ms ease;
+  }
+
+  .file-art-svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+    overflow: visible;
+    fill: none;
+  }
+
+  .file-art-paper {
+    fill: #ffffff;
+    stroke: rgb(17 19 21 / 12%);
+    stroke-width: 1;
+  }
+  .dark .file-art-paper {
+    fill: #1b1e23;
+    stroke: rgb(255 255 255 / 14%);
+  }
+
+  .file-art-flap {
+    fill: #f1f3f5;
+  }
+  .dark .file-art-flap {
+    fill: #272b32;
+  }
+
+  /* Clean Folder Glyph for Lists & Trees */
+  svg.folder-dim-glyph {
+    --fd-tone: var(--folder-tone-1);
+    display: inline-block;
+    flex-shrink: 0;
+    fill: none;
+    color: var(--fd-tone);
+    filter: none;
+  }
+  svg.folder-dim-glyph[data-tone="2"] { --fd-tone: var(--folder-tone-2); }
+  svg.folder-dim-glyph[data-tone="3"] { --fd-tone: var(--folder-tone-3); }
+  svg.folder-dim-glyph[data-tone="4"] { --fd-tone: var(--folder-tone-4); }
+  svg.folder-dim-glyph[data-tone="5"] { --fd-tone: var(--folder-tone-5); }
+  svg.folder-dim-glyph .folder-dim-back {
+    fill: color-mix(in oklch, var(--fd-tone) 78%, black);
+  }
+  svg.folder-dim-glyph .folder-dim-front {
+    fill: var(--fd-tone);
+  }
+
+  /* Clean monochrome linear nav icon wrapper (no colorful chip backgrounds) */
+  .nav-glyph-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+    color: var(--nav-icon);
+    transition: color var(--motion-fast) ease;
+  }
+  .nav-glyph-chip > svg {
+    width: 18px;
+    height: 18px;
+  }
+  .db-nav-item:hover .nav-glyph-chip {
+    color: var(--nav-fg);
+  }
+  .db-nav-item[aria-current="page"] .nav-glyph-chip {
+    background: transparent;
+    color: var(--nav-strong);
+    box-shadow: none;
+  }
+
+  /* Minimal Empty Drop Icon */
+  .empty-drop-scene {
+    position: relative;
+    width: 64px;
+    height: 52px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 4px;
+  }
+  .empty-drop-glyph {
+    width: 64px;
+    height: 52px;
+    display: block;
+  }
+  .empty-drop-scene[data-open="true"] .empty-drop-glyph rect {
+    stroke: var(--ui-primary);
+    fill: color-mix(in srgb, var(--ui-primary) 8%, var(--ui-muted));
+  }
+  .empty-drop-scene[data-open="true"] .empty-drop-glyph path {
+    stroke: var(--ui-primary);
+  }
+}

@@ -78,7 +78,7 @@ it.each([
   ["insights", "insights", "overview"],
   ["users", "members", "keys"],
   ["members", "members", "people"],
-  ["drives", "files", ""],
+  ["drives", "files", "drives"],
 ])("preserves the %s legacy alias and tenant", (alias, page, tab) => {
   expect(workspaceRoute(`#/${alias}?tenant=tenant%20one`)).toEqual({
     page, tab, tenant: "tenant one", scope: "", space: "", team: "",

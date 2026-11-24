@@ -56,7 +56,6 @@
   .topbar .storage-mobile { display: none !important; }
   .nav-group[data-open="false"] .nav-item { display: none !important; }
   .sidebar-collapsed .nav-group[data-open="false"] .nav-item { display: inline-flex !important; }
-  .finder-upload { background: var(--ui-primary) !important; color: var(--ui-primary-foreground) !important; border-color: var(--ui-primary) !important; }
   @media (max-width: 760px) { .topbar .storage-mobile { display: inline-flex !important; } }
   @media (max-width: 700px) { .nav-group[data-open="false"] .nav-item { display: inline-flex !important; } }
   html[data-motion="reduced"] *, html[data-motion="reduced"] *::before, html[data-motion="reduced"] *::after {

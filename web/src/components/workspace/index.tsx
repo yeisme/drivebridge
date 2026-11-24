@@ -1,6 +1,8 @@
-import type { ReactNode } from "react";
+import { useId, type ReactNode } from "react";
+import { motion } from "motion/react";
 import { X } from "lucide-react";
 import { Button } from "../ui/button";
+import { SPRING_PILL } from "../../lib/motion-presets";
 
 export function PageToolbar({
   eyebrow,
@@ -76,7 +78,36 @@ export function InspectorHeader({ eyebrow, title, onClose, closeLabel = "关闭�
 }
 
 export function ViewModeSwitch<T extends string>({ items, value, onChange, label }: { items: Array<{ value: T; label: string; icon: ReactNode }>; value: T; onChange: (value: T) => void; label: string }) {
-  return <div className="workspace-view-switch" role="group" aria-label={label}>{items.map(item => <Button key={item.value} type="button" variant="ghost" size="icon" aria-label={item.label} aria-pressed={value === item.value} onClick={() => onChange(item.value)}>{item.icon}</Button>)}</div>;
+  const switchId = useId();
+  return (
+    <div className="workspace-view-switch" role="group" aria-label={label}>
+      {items.map((item) => {
+        const active = value === item.value;
+        return (
+          <Button
+            key={item.value}
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="relative isolate rounded-md"
+            aria-label={item.label}
+            aria-pressed={active}
+            onClick={() => onChange(item.value)}
+          >
+            {active && (
+              <motion.span
+                layoutId={`${switchId}-pill`}
+                transition={SPRING_PILL}
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-0 -z-10 rounded-md bg-background shadow-xs ring-1 ring-border/70"
+              />
+            )}
+            {item.icon}
+          </Button>
+        );
+      })}
+    </div>
+  );
 }
 
 export function Breadcrumbs({ items, label = "路径" }: { items: Array<{ label: string; onClick?: () => void }>; label?: string }) {

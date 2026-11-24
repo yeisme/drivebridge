@@ -4,7 +4,8 @@ export function workspacePageURL(page: Page, tenant = "") {
   const canonical: Partial<Record<Page, string>> = { overview: "home", files: "files", transfers: "tasks", connections: "storage" };
   const query = new URLSearchParams();
   if (tenant) query.set("tenant", tenant);
-  return `#/${canonical[page] || page}${query.size ? "?" + query : ""}`;
+  const suffix = query.size ? `?${query}` : "";
+  return `#/${canonical[page] || page}${suffix}`;
 }
 
 export const governanceTabs = ["requests", "notifications", "events", "teams", "accounts"] as const;
@@ -12,7 +13,7 @@ export function governanceURL(tab = "requests", tenant = "", space = "") {
   const query = new URLSearchParams({ tab: governanceTabs.includes(tab as typeof governanceTabs[number]) ? tab : "requests" });
   if (tenant) query.set("tenant", tenant);
   if (space) query.set("space", space);
-  return "#/governance?" + query;
+  return `#/governance?${query}`;
 }
 
 // Legacy aliases stay explicit so shell navigation can change without breaking bookmarks.
@@ -25,7 +26,7 @@ export const workspaceAliases = {
   insights: { page: "insights", tab: "overview" },
   users: { page: "members", tab: "keys" },
   members: { page: "members", tab: "people" },
-  drives: { page: "files", tab: "" },
+  drives: { page: "files", tab: "drives" },
 } as const;
 export type WorkspaceAlias = keyof typeof workspaceAliases;
 export interface WorkspaceRoute {
@@ -90,5 +91,6 @@ export function driveFocusURL(hash: string, focused: boolean) {
   const [route, search = ""] = hash.split("?");
   const query = new URLSearchParams(search);
   if (focused) query.set("view", "drive"); else query.delete("view");
-  return route + (query.size ? "?" + query : "");
+  const suffix = query.size ? `?${query}` : "";
+  return `${route}${suffix}`;
 }

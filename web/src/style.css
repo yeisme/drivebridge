@@ -1,7 +1,7 @@
 @layer theme, base, legacy, components, utilities;
-@import "tailwindcss" source(none);
-@import "./shadcn.css";
+@import "tailwindcss";
 @source "./**/*.{ts,tsx}";
+@import "./shadcn.css";
 @layer legacy {
 
 :root {
@@ -126,12 +126,12 @@ small {
 .sidebar {
   --bg-sidebar: var(--ui-sidebar);
   --ink: var(--ui-sidebar-foreground);
-  --muted: var(--ui-sidebar-foreground);
+  --muted: var(--navigation-muted);
   --green: var(--ui-sidebar-accent-foreground);
   --accent-soft: var(--ui-sidebar-accent);
   --surface: var(--ui-sidebar);
-  --line: #446353;
-  --border-subtle: #355344;
+  --line: var(--ui-sidebar-border);
+  --border-subtle: var(--navigation-hover);
   color: var(--ui-sidebar-foreground);
   position: relative;
   flex: 0 0 var(--sidebar-width);
@@ -258,11 +258,13 @@ nav .nav-count {
   min-width: 18px;
   height: 18px;
   padding: 0 5px;
-  border-radius: 9px;
-  background: var(--green);
-  color: var(--accent);
+  border-radius: 6px;
+  background: var(--ui-secondary);
+  color: var(--ui-foreground);
+  border: 1px solid var(--ui-border);
   font-size: 11px;
-  line-height: 18px;
+  font-weight: 600;
+  line-height: 16px;
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
@@ -897,7 +899,7 @@ progress::-moz-progress-bar {
 .login-card h1 { font-size: 40px; letter-spacing: -.04em; line-height: 1.25; margin: 16px 0; font-weight: 600; }
 .login-card > p { color: var(--ui-muted-foreground); line-height: 1.8; font-size: 14px; margin-bottom: 28px; }
 .login-card footer { margin-top: 32px; color: var(--ui-muted-foreground); font-size: 12px; display: flex; align-items: center; gap: 8px; }
-.login-art { position: relative; margin: 24px 24px 24px 0; border-radius: 24px; background: var(--ui-muted); overflow: hidden; display: flex; align-items: center; justify-content: center; border: 1px solid var(--ui-border); }
+.login-art { position: relative; margin: 16px 16px 16px 0; border-radius: var(--radius-surface); background: var(--ui-sidebar); overflow: hidden; display: flex; align-items: center; justify-content: center; border: 1px solid var(--ui-border); }
 .art-orbit { position: absolute; width: 420px; height: 420px; border: 1px solid var(--ui-border); border-radius: 50%; box-shadow: 0 0 0 60px color-mix(in srgb, var(--ui-primary) 4%, transparent), 0 0 0 120px color-mix(in srgb, var(--ui-primary) 3%, transparent); }
 .art-file { position: relative; display: flex; align-items: center; flex-direction: column; gap: 24px; border-radius: 20px; background: var(--ui-card); border: 1px solid var(--ui-border); padding: 48px 32px; transform: rotate(-4deg); color: var(--ui-foreground); }
 .art-file strong { font-size: 20px; font-weight: 500; }

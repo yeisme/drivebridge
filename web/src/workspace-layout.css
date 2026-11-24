@@ -466,6 +466,8 @@
 .quicklook-sidebar-rail {width:40px;}
 .quicklook-overlay-offset {left:var(--quicklook-nav-width, 0px)!important;}
 .quicklook-dialog[data-slot="dialog-content"] {
+  height:92dvh;
+  max-height:92dvh;
   left:calc(var(--quicklook-nav-width, 0px) + (100vw - var(--quicklook-nav-width, 0px)) / 2)!important;
   width:min(1600px, calc(100vw - var(--quicklook-nav-width, 0px) - 24px))!important;
   max-width:calc(100vw - var(--quicklook-nav-width, 0px) - 24px)!important;
