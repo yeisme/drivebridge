@@ -4,7 +4,7 @@
 
 ## 1. 视觉与组件合同
 
-沿用 Precision Pine：深松绿导航、浅中性工作面、密集文件列表、右侧详情。React 19/TypeScript/Vite/Tailwind 4、现有 Base UI/shadcn 原语、lucide、TanStack Table；继续使用 typed fetch。无需引入新框架、axios、第二套组件库或动效运行时。技术决策见 [D01–D07](../../architecture/personal-workspace-technical-decisions.md)：类型化 hash 路由表保旧深链，页面 state/reducer 与身份/壳层 Context，不引入全局文件 store 或自研查询缓存。
+沿用并演进为 Clear Pine Cloud（清透果味网盘风，见 `drivebridge-consumer-cloud-drive-ux-v1`）：清透浅色侧栏、纯净白无框文件画布、彩色语义文件类型徽标、双层紧凑文件头、底部悬浮多选胶囊栏与右下角可折叠传输悬浮窗。React 19/TypeScript/Vite/Tailwind 4、现有 Base UI/shadcn 原语、lucide、TanStack Table；继续使用 typed fetch。无需引入新应用框架、axios 或第二套组件库；经用户明确要求，本规格正式准入轻量级 `motion`（`motion/react`）物理弹簧动效运行时与 `components/file-art/` 微立体折角文件图标体系，并由 `AppearanceProvider` 统一受控 `reducedMotion`。技术决策见 [D01–D07](../../architecture/personal-workspace-technical-decisions.md)：类型化 hash 路由表保旧深链，默认首屏直达首个个人空间（`#/drives` 保留全量网盘目录），低频运维模块统一收口至「设置与空间管理」中心。
 
 | Token / 区域 | 正式值或规则 |
 | --- | --- |

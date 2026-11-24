@@ -1,3 +1,9 @@
+## 2026-11-03：接收 Pinax 中误放的客户端责任
+
+原 `cli/pinax/openspec/changes/pinax-drivebridge-workbench-v1` 完整迁入本 owner 的 [历史 handoff](../../handoffs/pinax-drivebridge-workbench-v1/README.md)。本 change 是消费者唯一执行队列；D03/D08、D14 与 D09/D10 保留原状态和全部证据，不将历史包任务重复计入。
+
+源码投影/附件/同步/原 operation 的服务裁决属于 Pinax；闭合 desktop DTO、renderer/preload、草稿与恢复槽、guard、客户端旅程与三平台属于 DriveBridge。已接收 `notebook-consumer-boundary` 规格；迁移不把 D14.3 proposal-only 升级为 apply，不将 D03/D08 或 reader/平台父项勾选。接收文档与合同漂移检查不等于客户端运行验收。
+
 ## Context
 
 用户已锁定 Electron、阅读先行和三平台实机门。本包已进入分片实施，历史设计期任务数量不代表当前实现进度；公共reader、知识库、收藏继续归原任务，新增任务只补Pinax/宿主/保护域缺口。后续用户批准真实编辑集成，以D14独立writer消费任务承接，不改变D05只读验收。
@@ -273,9 +279,29 @@ cursor使用每store实例随机AES-GCM密钥，只有内存，不持久秘密�
 
 D03.4 共享候选协议已实现，迁移/拒绝/恢复语义见 [state-fence-protocol.md](state-fence-protocol.md)。为消除先移数据库再 mkdir 的缺口，改用持久快照后原子替换格式标记；`fenced` 仅为维护状态，生产 startup/guard/binding 尚未接入。
 
+D03/D08 的完整设计已冻结为 [managed-vault-guard-protocol.md](managed-vault-guard-protocol.md)：三层保护（state 栅栏 / 应用 guard / 会话隔离）、`ManagedGuard` 的 CAS 安装事务、五个复检点、hide 与 release 的不变量、以及 C1–C12 反例矩阵与证据手段。该文同时记录现有入口的复检缺口（`local_preview.go`、`webdav.go`、`RemoteSurfaces.UploadLocalFile`、`local_creative.go`、provider 直调）和 D03.5 的固定旧 binary 要求。设计不改变原验收标准，也未安装 guard、未修改系统权限或服务身份；D03/D08 保持未完成，实现顺序按该文"交付顺序"执行。
+
 再次核对root openService/model.New、server New与现有managed_vault_admission_test：仅发现各state进程锁，没有已被旧writer理解的最低writer/state版本准入门。不能通过新guard表、锁文件、chmod同用户目录或停止当前进程证明跨state旧writer受控；0700也不能阻止同UID旧进程。当前预检继续blocked，无新增ready/正文/writer授权。
 
 可能的后续工程路径需要单独证明：所有参与DriveBridge writer经独立OS权限域/受控broker访问原vault，而旧进程没有直接写权限，并验证既有打开句柄、祖先rename/delete、挂载别名、worker恢复和降级；这涉及安装/服务身份/跨平台权限与已有连接迁移，不是给预检传一个布尔量。私有副本或只读快照不能悄悄代替用户选择的原vault写回；普遍禁止同用户外部程序也与允许外部编辑器的边界不同。未执行权限修改、用户数据迁移或系统服务安装，D03父项保留。
+
+## D14.3 就绪度实测（2026-10-24）
+
+环境前置：Electron 44.5.1 linux-x64 由本机 `~/.cache/electron` 离线安装（未联网下载），`xvfb-run` 下真实主进程启动成功，渲染器 `sandbox:true`/`contextIsolation:true` 生效，`require` 与 `process` 均为 `undefined`；证据 `temp/integration-test-runs/20261024T145510Z-ab88a3be`。主进程使用了容器常用的 `--no-sandbox` 启动参数，因此该证据不证明三平台 sandbox/签名安装，也不等同于 D10 实机验收。
+
+owner 侧能力：Pinax 公开 writer 面已可用（`/v1/writer/notes/{id}/editor-source`、`/v1/writer/proposals`、`/v1/writer/proposals:apply`、`/v1/writer/capture`、organize plan/apply，以及 transport catalog 的 `writer.editor_source|propose|apply` capability）。
+
+消费者侧缺口（这就是 D14.3 的真正阻塞点，不是测试脚本问题）：`server/pkg/desktopcontract/ipc.go` 的 32 个方法在返回前被统一赋值为 `Status="planned"`；`desktop/src/preload.ts` 只暴露 `capabilities` 与 `chooseVault`；`internal/desktop/facade.go` 只注册 `capabilities`、`bindings/preview`、`bindings`（confirm 恒返回 `managed_scope_unverifiable`）三条路由。因此没有 reader body 会话、没有 writer 会话、没有原 operation apply/reconcile 链路，D09 的 Electron 读取纵切与 D14.2 父项的 writer/preload 都尚未开始。
+
+结论：D14.3 依赖 D03/D08 admission + D14.2 父项 + D09 harness，三项都不存在；本轮不构造 mock 链路冒充通过，D14.3 保持未完成。
+
+## D14.3 真实 Electron 纵切已通过（2026-10-24）
+
+`web/tests-electron/desktop-editor.spec.ts`（Playwright Electron project，`-c playwright.electron.config.ts`）在 `xvfb` 下启动真实 Electron 44.5.1，加载已构建的 main/preload 与 Web 产物，经真实 preload IPC 走完整链路：binding preview → CAS confirm（`active`，revision 1）→ notes → editor-source（固定 revision 源码）→ draft proposal（writer scope）→ stale revision conflict → 重启后重新绑定并回读同一源码（proposal 未半应用）→ 第二个 vault 独立 binding 且跨 vault note identity 不可读 → release 与原 key replay 返回同一 operation_id → 释放后 `source_unknown`。
+
+前置条件同批实现：`Admission` 接缝与 `BridgeAdmission`、`ServeHostWithAdmission` 在私有 bootstrap 后附加 owner state（默认配置路径、仅已存在、不自动初始化）、hoisted preload 暴露 7 个声明方法、main 逐方法主帧/形状校验与 suspend 栅栏、host 侧按 scope 打开的 owner 会话（`reader.metadata` / `reader.metadata+reader.body` / `writer.editor`）、以及 owner 错误按 pinax origin 的封闭码表投影。
+
+未覆盖：`apply`（合同未声明，按设计 proposal-only）、D09 的搜索/长文/双链/附件/收藏广度、三平台实机（D10）。
 
 ## D07.1 宿主休眠失效（单端验证）
 

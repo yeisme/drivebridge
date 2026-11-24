@@ -8,25 +8,25 @@
 
 ## 产品姿态
 
-- 关键词：克制、可扫读、可信、文件优先。风格名 Precision Pine。
-- 保留绿色品牌。浅色主色 `#245a45`，深色主色 `#88d5ae`；状态色与图表色随主题切换。
-- 字体：`"SF Pro Text", "PingFang SC", system-ui`。文件/版本标识用等宽；用量与表格数字用 `tabular-nums`。
-- 英文 eyebrow 只出现在登录页。
+- 关键词：克制、精准、高信噪比、文件优先。风格名 **Quiet Precision（克制现代生产力风）**，对标 Linear / Raycast / Notion。
+- 基底去偏色：浅色采用纯正无彩色极浅灰侧栏（`#f8f9fa`）配纯白无框一体文件画布（`#ffffff`），深色采用无彩色深炭黑基底（`#0c0d0e` / `#121416`）；去除全局绿偏色、高光渐变按钮与旋转漂浮插画，品牌松绿仅用于唯一主操作按钮、焦点环与关键状态点。
+- 单侧栏一体壳层：去掉套娃外框与双搜索框打架；默认首屏直达首个本人个人网盘（`#/drives` 保留全量网盘目录）；侧栏顶部保留唯一实底主入口「＋ 新建 / 上传」+ 7 项高频入口（含网盘切换与常用收藏目录），低频运维模块统一收入「设置与空间管理」中心。
+- 字体：`"SF Pro Text", "PingFang SC", system-ui`。文件/版本标识用等宽并默认收进详情折叠区；用量与表格数字用 `tabular-nums`。
+- 英文 eyebrow 只出现在登录页；常规文件列表展示中文可读类型而非原始 MIME；前台文案统一采用简洁用户语言，避免裸露内部架构与免责术语。
 
 ## 令牌
 
-颜色统一在 `src/shadcn.css` 定义：shadcn 使用 `--ui-*`，现有布局变量 `--surface`、`--ink`、`--muted` 等指向同一套语义色。禁止在页面中写死白色表面或为深色模式复制一套组件。
+颜色统一在 `src/app/theme/tokens.css` 与 `src/shadcn.css` 定义：shadcn 使用 `--ui-*`，现有布局变量 `--surface`、`--ink`、`--muted` 等指向同一套语义色。禁止在页面中写死白色表面或为深色模式复制一套组件。
 
 | 语义 | 浅色 | 深色 |
 | --- | --- | --- |
-| 页面背景 | `#f6f8f6` | `#111916` |
-| 卡片/表面 | `#ffffff` | `#1a2520` |
-| 浮层 | `#ffffff` | `#202e27` |
-| 侧栏 | `#e4ece7` | `#15221b` |
-| 主文字 | `#24382d` | `#e4efe8` |
-| 次级文字 | `#4b6254` | `#a5b9ad` |
-| 主色 | `#245a45` | `#88d5ae` |
-| 边框 | `#d9e3dc` | `#34463b` |
+| 页面/主画布 | `#ffffff` | `#0c0d0e` |
+| 卡片/浮层 | `#ffffff` | `#16181b` |
+| 侧栏/次表面 | `#f8f9fa` | `#121416` |
+| 主文字 | `#111315` | `#f2f4f7` |
+| 次级文字 | `#5e646e` | `#98a0ab` |
+| 主色 | `#186346` | `#4cc38a` |
+| 边框 | `#e6e8ec` | `#23262b` |
 
 样式层顺序固定为 `theme → base → legacy → components → utilities`，每个独立样式入口声明同一顺序，防止分包加载时 Tailwind reset 覆盖布局间距。新组件使用 shadcn 和 Tailwind；迁移中的布局样式仅在 `legacy` 层，颜色与新组件共用令牌。该层不表示全站组件迁移已经完成。
 
@@ -44,9 +44,13 @@
 
 侧栏、登录、favicon、apple-touch、PWA maskable 同源。应用内组件：`BrandMark`。
 
-## 图标
+## 图标与克制文件徽标
 
-lucide-react。禁止手绘业务图标。
+通用工具图标基于 `lucide-react`（侧栏统一 `18px`、`strokeWidth={1.75}` 单色线性图标，无彩底高光方块）；文件列表与网格使用封装在 `web/src/components/file-art/` 下的克制扁平线性文档徽标 `FileSheetSvg`、轻量文件夹标识 `FolderGlyph` 与干净线性空态组件 `EmptyDropIllustration`（去除夸张投影与悬停歪头旋转，禁止在业务页面散落裸手绘 SVG）。
+
+## 物理弹簧动效规范（UI Spec 准入例外）
+
+正式准入 `motion`（`motion/react`）作为共享滑块（`layoutId`）、悬浮胶囊坞与卡片弹簧过渡引擎，并在 `AppearanceProvider` 顶层挂载 `<MotionConfig reducedMotion={preferences.motion === "reduced" ? "always" : "user"}>`，确保系统 `prefers-reduced-motion: reduce` 与用户「减少动效」设置一键静默全部位移动效。
 
 - 侧栏 20px，`strokeWidth={1.75}`
 - 工具条与菜单图标统一目标为 16px
@@ -56,6 +60,18 @@ lucide-react。禁止手绘业务图标。
 导航不得复用同一图形：总览 `Gauge`、用量 `ChartColumn`、网盘 `HardDrive`、Agent `Bot`、团队 `Users`、用户 `ContactRound`、Key `KeyRound`。
 
 文件类型走 `mediaKind()`：image / video / audio / pdf / text / converted / other。
+
+文件夹封面 `FolderArt` 属于缩略图，不属于图标，只用于网格视图和空目录；目录树、列表行仍用 lucide `Folder`，仅按 `folderTone` 着色。
+
+## 文件夹封面
+
+网格视图的文件夹是内容预览容器，不是装饰插画：封面露出当前层最近修改的至多 3 个文件类型（文档、PDF、表格、图片、视频、音频、子文件夹），下方写文件与子文件夹数量，前板胶囊写本层文件的最近修改时间。实现见 `web/src/components/folder-art/`。
+
+- 数据：进入视口才读该目录 `/browser` 第一页（`sort=date&order=desc`），同时最多 2 个请求，切换目录、视图或刷新时中止。超过一页写“N 项以上”，不宣称精确计数；读取失败写“内容暂不可读”。不为封面创建缩略图衍生物。
+- 颜色：`--folder-tone-1..5`（松绿、湖蓝、蜂蜜、灰玫、银灰）按文件夹名哈希分配，同名同色，树、列表、网格一致；只表示身份，不表示状态。不用橙色、珊瑚色或紫色。
+- 材质：工作台唯一的材质元素，即后板、纸张加单层磨砂前板；不叠第二层玻璃，周围界面保持扁平。`prefers-reduced-transparency` 去掉模糊。
+- 动效：悬停、聚焦或有文件拖到文件夹（含空目录）上时前板前倾、纸张上浮，`--motion-standard`；`prefers-reduced-motion` 取消全部位移，只保留底色反馈。
+- 可访问性：封面 `aria-hidden`；名称和数量是真实文本；时间胶囊由 CSS `attr()` 绘制，并以 `sr-only` 文本重复。
 
 ## Finder
 
@@ -95,7 +111,7 @@ lucide-react。禁止手绘业务图标。
 
 ## 黑名单
 
-紫渐变、玻璃拟态堆叠、emoji 当图标、操作页大 hero、Inter 作主字体、为装饰引入动画库、把 Key 明文或 token 画进截图。
+紫渐变、玻璃拟态堆叠（文件夹封面的单层磨砂前板是唯一例外）、emoji 当图标、操作页大 hero、Inter 作主字体、为装饰引入动画库、把 Key 明文或 token 画进截图。
 
 ## 控件迁移验收
 

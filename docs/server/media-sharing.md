@@ -4,7 +4,7 @@
 
 ## API
 
-- `GET /api/v1/browser`：space_id、path、q、cursor；返回受管目录项、下一页与总数。显式 Directory 记录保留空目录。
+- `GET /api/v1/browser`：space_id、path、q、cursor，可选 limit（1–200）；返回受管目录项、下一页与总数。未传 limit 保留旧客户端默认 200 项，新 Web 显式使用 50 项；空值、重复参数、非整数或越界均拒绝。显式 Directory 记录保留空目录。
 - `POST /api/v1/directories`、`POST /api/v1/files/{id}/move`：目录创建与文件移动；移动要求 expected_version，保留文件身份与旧版本。
 - `POST /api/v1/directories/copy|move|trash`：按文件夹路径前缀复制、同空间移动、回收站。copy 须 `Idempotency-Key`，目标须受管 S3，超过 1000 个文件为 `directory_too_large`。不能把目录移动到自身或子路径。网页不得自行翻页递归复制。
 - `POST /api/v1/directories/export`：把文件夹前缀下的文件回存到已连接的 OneDrive。须 `Idempotency-Key`。OneDrive 不是空间对象存储；generic rclone 不是此接口目标。

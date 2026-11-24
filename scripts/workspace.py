@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import signal
 import shlex
+import shutil
 import socket
 import subprocess
 import sys
@@ -15,6 +16,40 @@ import urllib.request
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def browser_variants(name):
+    """Run every conditional scenario with its required disposable fixture."""
+    team_specs = {
+        'activity-folder-polish.spec.ts', 'admin-takeover.spec.ts',
+        'compact-governance.spec.ts', 'creation-wizard.spec.ts',
+        'direct-actions.spec.ts', 'interaction-polish.spec.ts',
+        'lazy-user-directory.spec.ts', 'shared-form-layout.spec.ts',
+        'team-quota.spec.ts', 'teams-layout.spec.ts', 'teams.spec.ts',
+        'users-management.spec.ts', 'workspace-access.spec.ts',
+    }
+    if name in team_specs:
+        return [([], {'DRIVEBRIDGE_TEST_TEAM_DEMO': '1'})]
+    if name == 'key-copy.spec.ts':
+        return [(['--grep', 'own key supports'], {}),
+                (['--grep', 'team demo keeps'], {'DRIVEBRIDGE_TEST_TEAM_DEMO': '1'})]
+    if name == 'governance.spec.ts':
+        return [(['--config', 'playwright.governance.config.ts'], {})]
+    if name == 'demo.spec.ts':
+        return [([], {'DRIVEBRIDGE_TEST_DEMO': '1'})]
+    if name == 'automation-management.spec.ts':
+        return [([], {'DRIVEBRIDGE_TEST_AUTOMATION_MANAGEMENT': '1'})]
+    modes = {
+        'label-dictionary.spec.ts': 'LABEL_MANAGEMENT',
+        'trash-holds.spec.ts': 'HOLD_MANAGEMENT',
+        'transfer-tasks.spec.ts': 'TRANSFER_PLANS',
+        'file-properties.spec.ts': 'PROPERTY_EDITING',
+        'property-migration.spec.ts': 'PROPERTY_EDITING',
+        'submission-inbox.spec.ts': 'ARCHIVE_FAILURE',
+    }
+    if name in modes:
+        return [([], {'DRIVEBRIDGE_TEST_' + modes[name]: enabled}) for enabled in ('0', '1')]
+    return [([], {})]
+
+
 def environment():
     if any(flag == '-race' or flag.startswith('-race=') for flag in shlex.split(os.environ.get('GOFLAGS', ''))):
         raise SystemExit('Remove race detection from GOFLAGS before using this workflow.')
@@ -22,11 +57,11 @@ def environment():
             'NODE_OPTIONS': (os.environ.get('NODE_OPTIONS', '')+' --no-experimental-webstorage').strip()}
 
 
-def run(command, *, evidence=True, allow_failure=False):
+def run(command, *, evidence=True, allow_failure=False, env_updates=None):
     if any(arg == '-race' or arg.startswith('-race=') for arg in command):
         raise SystemExit('Race detection is excluded from this workflow.')
     call = [sys.executable, str(ROOT/'scripts/check.py'), '--', *command] if evidence else command
-    result = subprocess.run(call, cwd=ROOT, env=environment())
+    result = subprocess.run(call, cwd=ROOT, env={**environment(), **(env_updates or {})})
     if result.returncode and not allow_failure:
         raise SystemExit(result.returncode)
     return result.returncode
@@ -142,7 +177,31 @@ def main():
     if args.command=='e2e':
         run(['pnpm','--dir','web','build'])
         run([sys.executable,'scripts/remote_system.py'])
-        run(['pnpm','--dir','web','exec','playwright','test'])
+        # Other local quality lanes may rebuild dist while browser tests run.
+        # Serve one immutable build for this run, never a changing asset tree.
+        with tempfile.TemporaryDirectory(prefix='drivebridge-web-e2e-') as folder:
+            snapshot=Path(folder)/'web'
+            shutil.copytree(ROOT/'web/dist', snapshot, symlinks=True)
+            specs=sorted((ROOT/'web/tests').glob('*.spec.ts'))
+            if not specs:
+                raise SystemExit('No browser specifications were found.')
+            codes=[]
+            # Each spec owns its backend data. Shared seeded identities must
+            # not inherit another spec's rotations, quotas or account lifecycle.
+            for spec in specs:
+                for flags, fixture in browser_variants(spec.name):
+                    print(f'Browser specification: {spec.name}; fixture: {fixture or "personal"}', flush=True)
+                    env = {'DRIVEBRIDGE_TEST_' + key: '0' for key in (
+                        'TEAM_DEMO', 'DEMO', 'AUTOMATION_MANAGEMENT', 'LABEL_MANAGEMENT',
+                        'HOLD_MANAGEMENT', 'TRANSFER_PLANS', 'ARCHIVE_FAILURE')}
+                    env.update({'DRIVEBRIDGE_WEB_DIR':str(snapshot),
+                        'DRIVEBRIDGE_TEST_PROPERTY_EDITING':'1',
+                        'DRIVEBRIDGE_TEST_SHARE_RECEIVERS':'1', **fixture})
+                    codes.append(run(['pnpm','--dir','web','exec','playwright','test','tests/'+spec.name, *flags],
+                        allow_failure=True, env_updates=env))
+            print(f'Browser specifications: {len(specs)}; fixture runs: {len(codes)}; failed: {sum(code != 0 for code in codes)}', flush=True)
+            if any(codes):
+                raise SystemExit(next(code for code in codes if code))
 
 
 if __name__=='__main__':

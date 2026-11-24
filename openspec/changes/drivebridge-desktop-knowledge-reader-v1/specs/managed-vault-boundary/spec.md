@@ -7,6 +7,10 @@
 - **WHEN** 预检不能证明旧overlay/FUSE或另一state写入口受同一guard保护
 - **THEN** 返回managed_scope_unverifiable，保留原数据和挂载，不自动迁移或init
 
+#### Scenario: 普通文件根尚未登记为 Pinax adoption
+- **WHEN** 已登记 space 与 fenced state 存在，但所选物理根没有同 space 的明确 Pinax local adoption
+- **THEN** 预检拒绝 managed_scope_unverifiable，不自动创建 adoption 或正文会话
+
 ### Requirement: 全应用入口不能绕过owner
 受管范围 SHALL 由CLI/MCP/HTTP/UI/worker的共享应用裁决保护，覆盖正文、属性、标签、覆盖上传、移动删除、祖先目录、同步和发布；新连接及发布前也复检。
 
@@ -14,12 +18,24 @@
 - **WHEN** 请求的源/目标/祖先影响已绑定范围
 - **THEN** 拒绝managed_owner_required，不因Pinax离线或普通write权限降级为直接文件修改
 
+#### Scenario: 已安装 guard 的普通正文经另一 space 的 alias 写入
+- **WHEN** provider/local 目标、其 canonical alias 或祖先影响 active/hidden 保护域，即使路径不含 .pinax 元数据
+- **THEN** 共享 owner 裁决拒绝该写入，不创建目标；registry 无法读取时失败闭锁
+
 ### Requirement: 显示移除与释放保护分离
 隐藏来源 SHALL 保留guard，释放保护必须单独确认、CAS并排除未决mutation；旧挂载writable事实不能替代新保护许可。
 
 #### Scenario: 删除知识库导航来源
 - **WHEN** 用户只隐藏来源
 - **THEN** vault与阅读状态不删除，CLI和worker继续受guard限制
+
+#### Scenario: 另一 owner 会话释放后旧 host 再次调用 Pinax
+- **WHEN** 旧 host 仍保留 source ID，而 owner 已 release 或 release 后重新绑定同一来源
+- **THEN** 每次 owner 调用前核对原 binding/source/instance/epoch，旧 epoch 不能启动新的 Pinax 会话
+
+#### Scenario: release 与已准入的 owner 调用并发
+- **WHEN** 有界 Pinax 调用已经取得 guard lease，而 release 同时到达
+- **THEN** release 等待子进程关闭与 lease 排空后才递增 epoch；调用结束复检物理目录和保护域，变化时不投影成功结果
 
 ### Requirement: 降级保持保护
 新保护state SHALL 声明最低兼容writer版本，并证明保护域内旧writer在写前可由已有admission机制拒绝；无法证明时不得绑定，不能仅新增字段便声称旧程序已受控。关闭UI不清保护，外部编辑器/未登记外部程序不在保护保证范围。

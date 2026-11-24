@@ -8,7 +8,6 @@
 
 本项目当前实施入口通过 `openspec list` 查询；以下索引用于发现原始设计和交接。
 
-- [drivebridge-file-platform-evolution-v2](changes/drivebridge-file-platform-evolution-v2/) — 迁入设计规格
-- [drivebridge-pinax-reading-integration-v1](changes/drivebridge-pinax-reading-integration-v1/) — 迁入设计规格
 - [drivebridge-storage-backends-v1](changes/drivebridge-storage-backends-v1/) — 迁入设计规格
 - [remote-mcp-guided-shared-file-access-v1](changes/remote-mcp-guided-shared-file-access-v1/) — 迁入设计规格
+- [pinax-drivebridge-workbench-v1](handoffs/pinax-drivebridge-workbench-v1/) — 跨 owner 历史交接

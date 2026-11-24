@@ -8,7 +8,7 @@ OpenSpec 的 F/B 任务统一使用同仓 `python3 scripts/openspec-tasks.py` �
 
 ## Electron 与 Pinax 阅读设计准入（2026-10-01）
 
-用户指定 Electron，三平台实机验收，阅读先行。规划 `desktop/` 只拥有 main/preload/Forge，复用 `web/`，Go application service 保持领域真源及 `CGO_ENABLED=0`。Pinax 通过公开合同接入，不直接读 `.pinax/**` 或笔记数据库；本机阅读不要求云登录，不复建独立 Reader/Workbench。受管 vault 的所有 DriveBridge mutation 入口由应用层保护，renderer 不持凭据、不执行任意 shell/fs。实现依据为 `openspec/changes/drivebridge-desktop-knowledge-reader-v1/` 与 `docs/architecture/electron-desktop.md`；目前只交设计与任务，未新增产品实现或替代原 Web/PWA/移动端需求。历史“不做 Electron”不再约束该已批准宿主。
+用户指定 Electron，三平台实机验收，阅读先行。`desktop/` 只拥有 main/preload/Forge，复用 `web/`，Go application service 保持领域真源及 `CGO_ENABLED=0`。Pinax 通过公开合同接入，不直接读 `.pinax/**` 或笔记数据库；本机阅读不要求云登录，不复建独立 Reader/Workbench。受管 vault 的所有 DriveBridge mutation 入口由应用层保护，renderer 不持凭据、不执行任意 shell/fs。实现依据为 `openspec/changes/drivebridge-desktop-knowledge-reader-v1/` 与 `docs/architecture/electron-desktop.md`；2026-11-03 已有 Linux 本地阅读、多 state、阅读状态与图片附件候选，受控保存、完整附件与三平台实机仍未完成，证据见 `docs/server/local-closure-2026-11-03.md`。不替代原 Web/PWA/移动端需求。历史“不做 Electron”不再约束该已批准宿主。
 
 ## Race 检测执行限制
 

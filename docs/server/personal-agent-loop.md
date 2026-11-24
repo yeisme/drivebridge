@@ -21,3 +21,7 @@ python3 scripts/check.py -- env CGO_ENABLED=0 go build ./cmd/drivebridge-server
 新测试覆盖当前与历史来源、固定版本解析、跨用户拒绝、来源 URL 拒绝以及授权删除恢复；原有身份、配额、恢复、加密和备份测试继续执行。完整客户端闭环由 cli/drivebridge 的 remote_system.py 启动本服务 fixture 验证。
 
 回滚到旧程序会忽略新增可选列；保留数据库与密钥，不删列、不改引用或实例身份。新增客户端入口依赖此服务版本，旧服务未提供接口时明确失败，不静默改用最新版。没有发布、真实账号或部署验收。
+
+## 网关关联引用与控制中心无路径归因（拟议增量）
+
+对应变更 `drivebridge-agent-mcp-attribution-projection-v1`：当通过个人 MCP Gateway 或空间级 Agent 令牌发起上传/传输并携带有效只读关联引用（`X-Gateway-Call-Ref`、`X-Gateway-Session-Ref` 或 `_meta["io.yeisme.gateway/correlation"]`，匹配 `^[A-Za-z0-9_.:-]{1,128}$`）时，操作记录保存类型化 `actor_type`（如 `"agent"`）与安全 `origin_refs`，并在 `GET /api/v1/operations` 响应中向有空间权限的调用者输出，继续严守不返回路径、文件名或临时下载链接。

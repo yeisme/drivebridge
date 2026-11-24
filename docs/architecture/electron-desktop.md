@@ -1,6 +1,6 @@
 # Electron 桌面宿主与 Pinax 阅读接入
 
-2026-10-01设计／2026-10-05更新 · **DTO及metadata-only进程/HTTP预检基础已验；CLI宿主入口已实现基础，guard准入和Electron仍待实施**。用户选择 Electron、阅读先行、macOS/Windows/Linux 同时实机验收。本文件取代旧设计中“不做 Electron / 原生框架未定”的桌面结论，不删除 Web/PWA 或移动客户端需求。实施真源为 [desktop-knowledge-reader change](../../openspec/changes/drivebridge-desktop-knowledge-reader-v1/README.md)。
+2026-10-01设计／2026-11-03更新 · **Linux 本地候选已接通 guard 准入、真实 Electron 阅读、多 state 和阅读状态恢复；受控保存、完整附件及三平台实机未完成**。用户选择 Electron、阅读先行、macOS/Windows/Linux 同时实机验收。本文件取代旧设计中“不做 Electron / 原生框架未定”的桌面结论，不删除 Web/PWA 或移动客户端需求。实施真源为 [desktop-knowledge-reader change](../../openspec/changes/drivebridge-desktop-knowledge-reader-v1/README.md)，当前验收边界见[本地闭环记录](../server/local-closure-2026-11-03.md)。
 
 ## 1. Owner、模块与首片
 
@@ -37,9 +37,11 @@ Hermes通过独立Pinax MCP消费，与桌面Pinax会话并存，不能直接读
 
 ## 3. 本地进程与数据流
 
-已新增 `drivebridge desktop serve` 前台入口及 `drivebridge desktop schema` 私有协议导出；需可信宿主提供stdin首帧，普通终端无帧会安全失败。当前仅metadata预检/拒绝绑定，不是完整阅读入口。它是应用打开时显式启动的前台本机门面，不注册 daemon/autostart，不开启 LAN。复用现有 Go 文件应用层和私有 state，纯 Go 构建不受 Electron 影响。
+已新增 `drivebridge desktop serve` 前台入口及 `drivebridge desktop schema` 私有协议导出；需可信宿主提供stdin首帧，普通终端无帧会安全失败。当前已接通 owner guard 下的来源确认、搜索、固定正文与双链，以及原生多 state 窗口隔离、收藏/稍后读/阅读位置恢复和 registered raster 图片；PDF/音视频附件与受控保存仍未闭环。它是应用打开时显式启动的前台本机门面，不注册 daemon/autostart，不开启 LAN。复用现有 Go 文件应用层和私有 state，纯 Go 构建不受 Electron 影响。
 
-D02.6已通过同目录真实DriveBridge/Pinax CLI控制通道验证：stdin选择→HTTP metadata预检→blocked→取消→EOF，非法首帧与错摘要拒绝，源vault树字节不变。证据 `20261005T110722Z-e482e477`；不是Electron安装包或三平台证明。以下仍包含未实现的完整目标（state/guard/全文会话/进程树），当前host schema不提供这些能力。\n\n1. main 校验随包二进制及版本摘要，以固定参数启动门面，`shell=false`，环境 allowlist；仅为不泄密的进程控制持路径。
+D02.6已通过同目录真实DriveBridge/Pinax CLI控制通道验证：stdin选择→HTTP metadata预检→blocked→取消→EOF，非法首帧与错摘要拒绝，源vault树字节不变。证据 `20261005T110722Z-e482e477`；不是Electron安装包或三平台证明。2026-11-03 的本地增量已提供私有 state 选择、owner 不透明 state 引用、guard 逐请求复检、正文会话与来源重启恢复；验收与剩余门见 `../server/local-closure-2026-11-03.md`，三平台仍未验收。
+
+1. main 校验随包二进制及版本摘要，以固定参数启动门面，`shell=false`，环境 allowlist；仅为不泄密的进程控制持路径。
 2. 通过私有 stdin 版本化首帧传入 256-bit 临时 session bearer、nonce、受控 state 位置。门面 loopback 随机端口 0，ready 仅返回 session、contract digest、地址，不返回 secret。前端拿不到服务地址或 bearer。
 3. 本地模式 principal 固定为当前 OS 用户对应的私有 DriveBridge 实例，无云登录。所有请求仍需会话鉴权，origin/sender 不替代认证；门面禁止 CORS，token 不复用云凭据。
 4. 用户通过 main 原生目录选择器选已有 vault，路径只传门面。门面检查其 roots/连接/挂载和保护域，用metadata-only临时Pinax会话只读校验。确认摘要必须列明正文/关系/附件读取scope与文件写保护；取消/过期关闭预检会话，不持久绑定、不读取正文。没初始化则提示，不自动init。

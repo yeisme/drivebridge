@@ -2,6 +2,20 @@
 
 本文只记录已落地的源码事实与本地验证证据；真实后端联调、真实云存储与发布部署仍是独立事实，不由本文代替。规格真源：[动作能力就绪](../../../openspec/changes/drivebridge-capability-readiness-v2/design.md)与[团队运行时](../../../openspec/changes/drivebridge-team-runtime-projections-v1/design.md)。
 
+## 2026-10-26 可靠性增量
+
+BlobGC 现在使用可恢复 claim token/time；服务在取得 state lock 后释放上一次进程遗留的 claim，删除和元数据清理都要求当前 token。metadata export/import/verify 现在包含 workspace authorization/receipt state，并以确定性 fingerprint 检测同数量漂移。
+
+双库 focused 入口：
+
+```bash
+make test-backend
+make test-backend-sqlite
+make test-backend-postgres
+```
+
+PostgreSQL 验收需要显式 Docker 与本地 fixture；命令不会使用真实凭据或静默退回 SQLite。当前证据为 SQLite `20261026T021718Z-9db8b5d4` 与 PostgreSQL `20261026T021733Z-25468f09`。
+
 ## 本轮工作台设计适用边界
 
 2026-10-01 只读确认 `internal/service/model.go` 的 PostgreSQL adapter 与 `cmd/drivebridge-server/metadata.go` 迁移命令已存在。下表与后文规模数字是原记录，不是本次重新验证；新工作台只在未来实施时以 SQLite 验首条闭环，PostgreSQL 真实兼容/迁移/规模仍独立验收。选型见 [技术决定](../../architecture/personal-workspace-technical-decisions.md)。

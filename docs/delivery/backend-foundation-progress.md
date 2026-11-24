@@ -1,5 +1,18 @@
 # 后端基础实施进度
 
+## 2026-10-26 后端可靠性切片
+
+本轮新增 `drivebridge-backend-reliability-v1`：BlobGC 记录 claim token/time，进程重新取得 state lock 后清理 abandoned claim，外部删除与元数据删除均按 token 条件提交；dry-run、重启恢复与 Blob/CAS 回归已通过。
+
+metadata JSONL 迁移新增 workspace grant、group、organization、request、submission、decision、credential history、label suggestion、suggestion decision 与 invocation 观察集合；验证在保留原 count 摘要的同时比较 SHA-256 fingerprints，空表不执行空插入，导入仍为目标事务原子操作。
+
+服务 fixture 新增显式 PostgreSQL 模式：`DRIVEBRIDGE_TEST_DATABASE=postgres` 与 `DRIVEBRIDGE_TEST_PG_DSN`，每个临时 state 使用独立 schema，禁止静默回退 SQLite。`make test-backend` 已同时通过 SQLite 与 PostgreSQL：
+
+- SQLite：`temp/integration-test-runs/20261026T021718Z-9db8b5d4`
+- PostgreSQL：`temp/integration-test-runs/20261026T021733Z-25468f09`
+
+该切片仍不代表真实对象存储、生产 PostgreSQL、部署或发布验收。BlobGC 外部删除的网络未知结果、真实备份介质和规模运行继续由后续任务验证。
+
 当前为B02增量模型切片，不是新grant/收件端点完成。
 
 已新增WorkspaceGrant、WorkspaceAgentGroup、WorkspaceAgentOrganization、WorkspaceSubmission及追加式WorkspaceSubmissionDecision，统一通过GORM AutoMigrate接入现有服务启动。没有改旧Agent字段、File/Version/Operation身份或凭据。新表不包含明文secret，也不单独存文件字节。
@@ -49,3 +62,11 @@ POST /api/v1/label-suggestions/{id}/decision已接入既有认证/CSRF wrapper�
 新profile认证已按精确方法/路径仅开放POST /api/v1/files/{id}/label-suggestions，仍拒绝旧上传/正文读取/人工决定/管理面。认证校验当前grant状态、owner与身份绑定，业务事务再执行专用labels.suggest权限交集。真实本地HTTP+SDK+SQLite完成创建授权→提交建议→同键重放→人类采纳→撤权后拒绝，含目录外建议拒绝、旧宽写/读与Agent自批拒绝；文件/版本为fixture预置，不声称上传链或MCP完成。证据20261001T135837Z-8cc26ef0。历史“全部关闭”记录保留为当时状态，当前只开放此窄入口。
 
 剩余：其它新profile专用认证/动作授权接线及所有应用入口拒绝绕权、发布前fencing、原请求幂等事务入口与审计、分组并发CAS/删除解绑、schema其余必要模型与迁移反例、pure-Go构建和相关业务入口。当前新grant仅允许已实现的专用标签建议POST入口；其它新动作/旧宽权限入口继续拒绝。B02与后端基础里程碑保持未完成。
+
+## 2026-11-04 受管判断 SDK 接线（drivebridge-judgment-sdk-managed-execution-v1）
+
+`server/internal/service` 接入 Aigora 公共 judgment-sdk（本地 replace 引用，纯 Go、`CGO_ENABLED=0` 可构建）。新增 `WorkspaceJudgmentProfileSnapshot`/`WorkspaceJudgmentActivation`/`WorkspaceJudgmentAttempt` 三张 GORM 模型并纳入既有 workspace AutoMigrate；快照不可变（同 owner/profile/revision 不同内容按 `judgment_revision_conflict` 拒绝），激活走显式 application-service 方法并以 expected-digest CAS 推进 generation，评估路径永不写激活状态。
+
+`judgmentStore` 在本 owner GORM 状态上实现 SDK `ReceiptStore` 合同：Claim 按 owner/project/request/attempt 原子 insert-if-absent 并在冲突时比对 input/profile digest；Finish 保持原绑定。`ProduceWorkspaceLabelSuggestion` 是显式人类入口：所有权/固定版本/governance 检查先于装配，SDK authorize 回调钉住 scope owner/project 与冻结问题集/策略 digest，且先于凭据读取；共享凭据 resolver 未注入时 shared 绑定保持不可用、不回退。shadow 模式只留证据不写建议；assist 模式仅写 `State=pending` 的 `WorkspaceLabelSuggestion`（producer 标识 `judgment:<profile_id>`），标签合并仍走原人工决定事务。unknown 结果保留原 request/attempt 身份，跨 store 重启重放零重发。
+
+验证：定向 8 例（默认关闭零副作用、快照/CAS、authorize 钉扎、claim digest 冲突、unknown 粘性、completed 零重发与 refusal→abstained 映射、assist 提议+人工决定、授权先于凭据）通过 `temp/integration-test-runs/20261104T165320Z-4426d229`；全量 `go -C server test ./internal/service` 通过 `20261104T165340Z-677133ec`；server vet 与双模式构建通过 `20261104T170012Z-f49d972c`/`20261104T170020Z-58e70dfd`。Provider 流量全部为本地 fake transport，不证明真实 Provider、凭据、内容效果或部署；本接线默认关闭，未接 HTTP/CLI 入口，后续显式开放另立任务。

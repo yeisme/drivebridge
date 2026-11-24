@@ -1,4 +1,4 @@
-.PHONY: help dev build test e2e check specs contracts contracts-check fresh-clone version-check
+.PHONY: help dev build test test-backend-sqlite test-backend-postgres test-backend-postgres-full test-backend e2e check specs contracts contracts-check fresh-clone version-check
 
 help:
 	python3 scripts/workspace.py --help
@@ -11,6 +11,17 @@ build:
 
 test:
 	python3 scripts/workspace.py test
+
+test-backend-sqlite:
+	DRIVEBRIDGE_TEST_DATABASE=sqlite python3 scripts/check.py --timeout 2100 -- go -C server test ./internal/service -count=1 -timeout=30m
+
+test-backend-postgres:
+	DRIVEBRIDGE_TEST_DATABASE=postgres python3 scripts/check.py --timeout 2100 -- python3 scripts/backend-postgres-test.py --run '.' --test-timeout=30m
+
+test-backend-postgres-full:
+	DRIVEBRIDGE_TEST_DATABASE=postgres python3 scripts/check.py --timeout 2100 -- python3 scripts/backend-postgres-test.py --run '.' --test-timeout=30m
+
+test-backend: test-backend-sqlite test-backend-postgres
 
 e2e:
 	python3 scripts/workspace.py e2e
