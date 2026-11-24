@@ -19,7 +19,8 @@ it('consumes current owner union schemas and keeps IPC declarations planned', as
   expect(ipc['x-owner-reader-digest']).toBe(owner['x-reader-schema-digest']);
   expect(owner.paths).toEqual({});
   expect(owner['x-drivebridge-integration-status']).toBe('pending');
-  expect(ipc['x-methods']).toHaveLength(32);
+  expect(ipc['x-methods']).toHaveLength(34);
+  expect(ipc['x-methods'].map((method: { name: string }) => method.name)).toEqual(expect.arrayContaining(['registerVault', 'readReadingState']));
   expect(ipc['x-methods'].every((m: { status: string }) => m.status === 'planned')).toBe(true);
   expect(ipc['x-methods'].some((m: { name: string }) => /rich|composed|recovery|writer/i.test(m.name))).toBe(false);
   for (const name of Object.keys(owner.components.schemas)) {

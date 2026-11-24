@@ -3,6 +3,7 @@ import { api, getDataContext, pinnedFile } from '../../api';
 import { statFile } from '../../info-workspace/client';
 import type { components } from '../../generated/personal-workspace';
 import { Button } from '../../components/ui/button';
+import { sha256Hex } from '../../lib/tab-lock';
 import { noteKey, type NoteIdentity } from './notebook-state';
 
 type Schemas = components['schemas'];
@@ -32,7 +33,7 @@ async function clearRecovery(slot: string, record: Recovery, signal: AbortSignal
 async function requestDigest(space: string, id: string, input: Schemas['FavoriteCreate']) {
   // Go's exported wrapper field names and declaration order are the owner digest contract.
   const raw = JSON.stringify({ SpaceID: space, ID: id, Request: input }).replace(/[<>&\u2028\u2029]/g, ch => '\\u' + ch.charCodeAt(0).toString(16).padStart(4, '0'));
-  return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw))), byte => byte.toString(16).padStart(2, '0')).join('');
+  return sha256Hex(raw);
 }
 
 export function NotebookFavorite({ identity, actor }: { identity: NoteIdentity; actor: string }) {

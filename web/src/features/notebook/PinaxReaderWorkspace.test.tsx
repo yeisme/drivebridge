@@ -32,3 +32,14 @@ it("rejects a late document identity instead of showing it under another note", 
   expect((await screen.findAllByText("pinax_reader_identity_mismatch")).length).toBeGreaterThan(0);
   expect(screen.queryByLabelText("Pinax 固定正文")).toBeNull();
 });
+
+it('continues a long document with the original revision and opaque cursor', async () => {
+  const page = { schema_version: 'pinax.reader.document.v1alpha1', object_id: note.object_id, revision: note.revision, current_revision: note.revision, uri: note.uri, observed_at: 'now', complete: false, content_bytes: 5, outline: [], nodes: [{ type: 'paragraph', anchor: 'one', text: 'First page' }], next_cursor: 'original-cursor' };
+  vi.mocked(bridge.readDocument).mockResolvedValueOnce({ data: page } as never).mockResolvedValueOnce({ data: { ...page, complete: true, next_cursor: undefined, nodes: [{ type: 'paragraph', anchor: 'two', text: 'Second page' }] } } as never);
+  render(<PinaxReaderWorkspace bridge={bridge} sourceId="source"/>);
+  fireEvent.click(await screen.findByRole('button', { name: '旅记' }));
+  fireEvent.click(await screen.findByRole('button', { name: '继续阅读' }));
+  await screen.findByText(/Second page/);
+  expect(screen.getByLabelText('Pinax 固定正文').textContent).toContain('First page');
+  expect(bridge.readDocument).toHaveBeenLastCalledWith({ source_id: 'source', input: { object_id: note.object_id, revision: note.revision, cursor: 'original-cursor' } });
+});

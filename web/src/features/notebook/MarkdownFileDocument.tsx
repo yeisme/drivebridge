@@ -6,6 +6,7 @@ import { DocumentConflictMerge } from "./DocumentConflictMerge";
 import { NotebookReadError, readMarkdownFile } from "./notebook-adapters";
 import { noteKey } from "./notebook-state";
 import type { NoteIdentity, NotebookMode } from "./notebook-state";
+import { ensureLanBrowserCompat } from "../../lib/tab-lock";
 import { claimDocumentSave, clearDocumentSave, documentCapability, documentRecoveryKey, lookupDocumentSave, saveDocument, type DocumentCapability, type DocumentSave } from "./clients";
 
 interface Props {
@@ -70,6 +71,7 @@ function FileDocumentSession({ identity, actor, draft, onDraft, onSaved, onRevok
     let recoveryAvailable = true;
     if (recoveryKey && editablePane) {
       try {
+        ensureLanBrowserCompat();
         const saved = localStorage.getItem(recoveryKey);
         if (saved !== null) {
           if (!/^edit-[a-f0-9]{48}$/.test(saved)) throw new Error("recovery_identity_invalid");

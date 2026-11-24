@@ -50,9 +50,37 @@ it('uses native selection without a renderer path and shows cancellation and gua
 it('fails closed when preload is missing', async () => {
   mount(); expect(await screen.findByRole('alert')).toBeTruthy();
 });
+it('requires confirmation and preserves the original key after a lost response', async () => {
+  const preview = { preview_id: 'preview', preview_digest: 'sha256:' + 'a'.repeat(64), expected_guard_revision: 0, decision: 'ready' };
+  const confirmBinding = vi.fn().mockRejectedValueOnce(new Error('response lost')).mockResolvedValue({ data: { binding: { source_id: 'source' } } });
+  const chooseVault = vi.fn().mockResolvedValue({ data: preview });
+  mount({ capabilities: vi.fn().mockResolvedValue({ data: { ...result.data, available: ['chooseVault', 'confirmBinding'] } }), chooseVault, confirmBinding });
+  fireEvent.click(await screen.findByRole('button', { name: '选择本机 Pinax vault' }));
+  const confirm = await screen.findByRole('button', { name: '确认绑定' });
+  expect(confirmBinding).not.toHaveBeenCalled();
+  fireEvent.click(confirm);
+  await screen.findByText('绑定结果未知，请使用原请求继续确认。');
+  expect((screen.getByRole('button', { name: '选择本机 Pinax vault' }) as HTMLButtonElement).disabled).toBe(true);
+  fireEvent.click(confirm);
+  await screen.findByText('来源已绑定，可以开始阅读。');
+  expect(confirmBinding.mock.calls[0][0]).toEqual(confirmBinding.mock.calls[1][0]);
+  expect(confirmBinding.mock.calls[0][0].input.confirmed).toBe(true);
+});
 it('selects desktop only on its packaged origin and validates response envelopes', () => {
   expect(isDesktopEntry({ protocol: 'drivebridge-app:', hostname: 'app' })).toBe(true);
   for (const location of [{ protocol: 'https:', hostname: 'app' }, { protocol: 'drivebridge-app:', hostname: 'evil' }]) expect(isDesktopEntry(location)).toBe(false);
   expect(readDesktopCapabilities(result)).toEqual([]);
   for (const value of [null, { error: { message: 'private' } }, { data: { ...result.data, token: 'secret' } }, { data: { ...result.data, available: ['chooseVault', 'chooseVault'] } }, { data: { ...result.data, schema_version: 'future' } }]) expect(() => readDesktopCapabilities(value)).toThrow();
+});
+
+it('clears a pending binding and fences its late response after native session invalidation', async () => {
+  let finish!: (value: unknown) => void;
+  const chooseVault = vi.fn(() => new Promise(resolve => { finish = resolve; }));
+  mount({ capabilities: vi.fn().mockResolvedValue({ data: { ...result.data, available: ['chooseVault'] } }), chooseVault: chooseVault as never });
+  fireEvent.click(await screen.findByRole('button', { name: '选择本机 Pinax vault' }));
+  fireEvent(window, new Event('drivebridge:session-invalidated'));
+  expect(await screen.findByText('本机会话已失效，正文与草稿已清除。请关闭并重新打开工作区。')).toBeTruthy();
+  finish({ data: { decision: 'ready' } });
+  await waitFor(() => expect(screen.queryByRole('button', { name: '确认绑定' })).toBeNull());
+  expect(screen.queryByRole('button', { name: '选择本机 Pinax vault' })).toBeNull();
 });
