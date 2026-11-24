@@ -24,20 +24,20 @@ import {
   Play,
 } from "lucide-react";
 import { api, errorText, type UserKeyRow } from "./api";
+import { Checkbox } from "./components/ui/checkbox";
+import { buildDirectTokenInviteUrl, formatInviteShareText } from "./app/url-token";
+import { Link2 } from "lucide-react";
 import { AppDialog as WorkspaceDialog } from "./components/AppDialog";
 import type { GovernanceState } from "./Governance";
-export function keyState(k: UserKeyRow) {
-  return k.archived
-    ? "已归档"
-    : k.revoked
-      ? "已吊销"
-      : k.disabled
-        ? "已禁用"
-        : k.expires_at &&
-            !k.expires_at.startsWith("0001") &&
-            new Date(k.expires_at) <= new Date()
-          ? "已过期"
-          : "有效";
+export function keyState(k: UserKeyRow): string {
+  if (k.archived) return "已归档";
+  if (k.revoked) return "已吊销";
+  if (k.one_time && k.consumed) return "已使用";
+  if (k.disabled) return "已禁用";
+  if (k.expires_at && !k.expires_at.startsWith("0001") && new Date(k.expires_at) <= new Date()) {
+    return "已过期";
+  }
+  return "有效";
 }
 export function KeyDirectory({
   keys,
@@ -65,6 +65,7 @@ export function KeyDirectory({
   const [creating,setCreating]=useState(false);
   const [createName,setCreateName]=useState("");
   const [days,setDays]=useState("90");
+  const [createOneTime,setCreateOneTime]=useState(false);
   const [revokeOwn, setRevokeOwn] = useState<UserKeyRow>();
   const [deleteOwn, setDeleteOwn] = useState<UserKeyRow>();
   const [disableOwn, setDisableOwn] = useState<UserKeyRow>();
@@ -73,6 +74,8 @@ export function KeyDirectory({
     id: string;
     name: string;
     key: string;
+    one_time?: boolean;
+    expires_at?: string;
   }>();
   const [visible, setVisible] = useState(false);
   const [copied, setCopied] = useState("");
@@ -120,7 +123,7 @@ export function KeyDirectory({
       }
       setDetail(undefined);
       setVisible(false);
-      setSecret({ id: k.id, name: k.name, key: result.key });
+      setSecret({ id: k.id, name: k.name, key: result.key, one_time: k.one_time, expires_at: k.expires_at });
     } catch (e) {
       setError(errorText(e));
     } finally {
@@ -214,16 +217,17 @@ export function KeyDirectory({
           </p>
         </div>
       </div>
-      {creating && <WorkspaceDialog title="新建 Key" close={()=>setCreating(false)}><form onSubmit={async e=>{e.preventDefault();setBusy(true);setError("");try{const out=await api<{id:string;name:string;key:string}>("/key-directory","POST",{name:createName.trim(),days:Number(days)});setSecret(out);setVisible(false);setCreating(false);await reload();}catch(e){setError(errorText(e));}finally{setBusy(false);}}}><label>Key 名称<Input autoFocus required maxLength={80} value={createName} onChange={e=>setCreateName(e.target.value)}/></label><label>有效期<SelectAdapter value={days} onChange={e=>setDays(e.target.value)}><option value="30">30 天</option><option value="90">90 天</option><option value="365">1 年</option><option value="0">长期有效</option></SelectAdapter></label><p>绑定当前账号并沿用其权限。现有 Key 继续有效。</p><div className="dialog-actions"><Button variant="outline" type="button" onClick={()=>setCreating(false)}>取消</Button><Button variant="default" type="submit"  disabled={busy||!createName.trim()}>{busy?"正在创建…":"创建 Key"}</Button></div>{error&&<p role="alert" className="banner error">{error}</p>}</form></WorkspaceDialog>}
+      {creating && <WorkspaceDialog title={createOneTime ? "生成一次性邀请直连链接" : "新建 Key"} close={()=>setCreating(false)}><form className="grid gap-4" onSubmit={async e=>{e.preventDefault();setBusy(true);setError("");try{const out=await api<{id:string;name:string;key:string;one_time?:boolean;expires_at?:string}>("/key-directory","POST",{name:createName.trim(),days:Number(days),one_time:createOneTime});setSecret(out);setVisible(false);setCreating(false);await reload();}catch(e){setError(errorText(e));}finally{setBusy(false);}}}><label className="grid gap-1.5 text-sm font-medium">备注名称<Input autoFocus required maxLength={80} placeholder={createOneTime ? "例如：邀请设计师小王临时查看" : "例如：MacBook 办公电脑"} value={createName} onChange={e=>setCreateName(e.target.value)}/></label><label className="grid gap-1.5 text-sm font-medium">有效期<SelectAdapter value={days} onChange={e=>setDays(e.target.value)}><option value="1">24 小时</option><option value="7">7 天</option><option value="30">30 天</option><option value="90">90 天</option><option value="365">1 年</option><option value="0">长期有效</option></SelectAdapter></label><label className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-border bg-muted/40 p-3 text-sm"><Checkbox checked={createOneTime} onCheckedChange={v=>setCreateOneTime(!!v)}/><span className="grid gap-0.5"><strong className="font-medium">一次性免密直连 Token（推荐用于分享邀请）</strong><span className="text-xs text-muted-foreground">生成带 <code>?token=</code> 的专属链接，受邀人点击即自动登录进入，首次打开后该链接立即失效防转发。</span></span></label><p className="text-xs text-muted-foreground">绑定当前账号并沿用其访问范围，可随时在此列表一键撤销收回会话。</p><div className="dialog-actions"><Button variant="outline" type="button" onClick={()=>setCreating(false)}>取消</Button><Button variant="default" type="submit" disabled={busy||!createName.trim()}>{busy?"正在生成…":createOneTime?"生成直连邀请":"创建 Key"}</Button></div>{error&&<p role="alert" className="banner error">{error}</p>}</form></WorkspaceDialog>}
       <div className="workspace-toolbar">
-        <Button variant="default" type="submit"  onClick={()=>{setCreateName("");setError("");setCreating(true);}}>新建 Key</Button>
+        <Button variant="default" type="button" onClick={()=>{setCreateName("");setCreateOneTime(false);setDays("90");setError("");setCreating(true);}}>新建 Key</Button>
+        <Button variant="outline" type="button" onClick={()=>{setCreateName("临时协作邀请");setCreateOneTime(true);setDays("7");setError("");setCreating(true);}}><Link2 size={15}/>生成一次性邀请链接</Button>
         <SearchField
             aria-label="搜索 Key"
             placeholder="搜索名称、Key 标识或用户…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
-        <SelectField aria-label="Key 状态" value={filter} onValueChange={setFilter} options={["all","有效","已禁用","已过期","已吊销","已归档"].map(value=>({value,label:value==="all"?"全部未归档":value}))} />
+        <SelectField aria-label="Key 状态" value={filter} onValueChange={setFilter} options={["all","有效","已使用","已禁用","已过期","已吊销","已归档"].map(value=>({value,label:value==="all"?"全部未归档":value}))} />
         <span className="text-muted-foreground">{rows.length} 个 Key</span>
       </div>
       {error && (
@@ -241,9 +245,10 @@ export function KeyDirectory({
                   <Button layout="surface" variant="ghost" type="button" className="key-name max-w-64 min-w-40 whitespace-normal" onClick={() => setDetail(k)}>
                     <KeyRound size={18} className="shrink-0" />
                     <span className="min-w-0">
-                      <strong className="flex-wrap break-words">
+                      <strong className="flex flex-wrap items-center gap-1.5 break-words">
                         {k.name || "未命名 Key"}
                         {k.current && <span className="pill">当前登录</span>}
+                        {k.one_time && <span className="pill">{k.consumed ? "一次性 · 已用" : "一次性邀请"}</span>}
                       </strong>
                       <small>key_{k.id.slice(0, 12)}</small>
                     </span>
@@ -572,9 +577,22 @@ export function KeyDirectory({
               {error}
             </p>
           )}
-          <div className="dialog-actions">
-            <Button variant="outline" type="submit"
-
+          <label className="key-secret-field mt-3">
+            免密直连链接（自动注入登录{secret.one_time ? " · 一次性单次有效" : ""}）
+            <div>
+              <Input
+                aria-label="免密直连链接"
+                type="text"
+                value={buildDirectTokenInviteUrl(location.origin, secret.key)}
+                readOnly
+                autoComplete="off"
+                spellCheck={false}
+                onFocus={(e) => e.target.select()}
+              />
+            </div>
+          </label>
+          <div className="dialog-actions flex-wrap">
+            <Button variant="outline" type="button"
               onClick={() => {
                 setSecret(undefined);
                 setVisible(false);
@@ -582,8 +600,44 @@ export function KeyDirectory({
             >
               关闭
             </Button>
+            <Button variant="outline" type="button"
+              onClick={async () => {
+                const url = buildDirectTokenInviteUrl(location.origin, secret.key);
+                try {
+                  await navigator.clipboard.writeText(url);
+                  setNotice("已复制免密直连链接（?token=），打开即可自动登录。");
+                  setError("");
+                } catch {
+                  setError("浏览器未允许自动复制，请选中上方直连链接手动复制。");
+                }
+              }}
+            >
+              <Link2 size={15} />
+              复制直连链接
+            </Button>
+            <Button variant="outline" type="button"
+              onClick={async () => {
+                const url = buildDirectTokenInviteUrl(location.origin, secret.key);
+                const text = formatInviteShareText({
+                  name: secret.name,
+                  url,
+                  token: secret.key,
+                  oneTime: secret.one_time,
+                  expiresAt: secret.expires_at,
+                });
+                try {
+                  await navigator.clipboard.writeText(text);
+                  setNotice("已复制完整邀请口令与直连链接，可直接粘贴发给好友或协作者。");
+                  setError("");
+                } catch {
+                  setError("浏览器未允许自动复制，请手动复制。");
+                }
+              }}
+            >
+              <Copy size={15} />
+              复制邀请口令
+            </Button>
             <Button variant="default" type="submit"
-
               onClick={() => void copyShownKey()}
             >
               <Copy size={15} />

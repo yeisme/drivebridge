@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { mediaKind, isVectorImageFile } from "./Media";
+import { isConvertibleImageFile, isVectorImageFile, mediaKind } from "./Media";
+import { humanFileKind } from "./lib/file-display";
 
 describe("mediaKind", () => {
   it("distinguishes audio pdf text and other files", () => {
@@ -66,5 +67,25 @@ describe("mediaKind", () => {
     expect(
       mediaKind({ mime_type: "application/octet-stream", path: "archive.bin" }),
     ).toBe("unsupported");
+  });
+  it("routes JXR, HEIC, EXR, HDR, DDS, TGA and RAW image formats to converted preview", () => {
+    for (const path of [
+      "Forza Horizon 5 2025_10_8 0_55_36.jxr",
+      "capture.wdp",
+      "photo.HEIC",
+      "photo.heif",
+      "render.exr",
+      "skybox.hdr",
+      "texture.dds",
+      "sprite.tga",
+      "scan.jp2",
+      "photo.jxl",
+      "camera.pef",
+    ]) {
+      expect(mediaKind({ mime_type: "application/octet-stream", path }), path).toBe("converted");
+      expect(isConvertibleImageFile({ mime_type: "application/octet-stream", path }), path).toBe(true);
+    }
+    expect(humanFileKind({ path: "Forza Horizon 5 2025_10_8 0_55_36.jxr" })).toBe("HDR 截图 (JXR)");
+    expect(isConvertibleImageFile({ mime_type: "application/octet-stream", path: "slides.pptx" })).toBe(false);
   });
 });

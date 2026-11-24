@@ -2,6 +2,14 @@ import "./preview-reader.css";
 import { Input } from "./components/ui/input";
 import { Button } from "./components/ui/button";
 import { SelectAdapter } from "./components/SelectAdapter";
+import {
+  IMAGE_FORMAT_META,
+  IMAGE_SCALE_OPTIONS,
+  convertImageElementToFile,
+  triggerFileDownload,
+  type ImageScalePreset,
+  type TargetImageFormat,
+} from "./lib/image-convert";
 import React, {
   lazy,
   Suspense,
@@ -49,6 +57,8 @@ import {
   ZoomOut,
 } from "lucide-react";
 import { contextURL, api, bytes, errorText, type DriveFile } from "./api";
+import { fileVisualMeta } from "./lib/file-display";
+import { FileSheetSvg } from "./components/file-art/FileArtwork";
 import { spreadsheetFormat } from "./spreadsheet-source";
 import { HTML_PREVIEW_LIMIT, interactivePreviewURL, readPreviewHTML } from "./html-preview";
 import {
@@ -112,7 +122,7 @@ export function mediaURL(file: DriveFile) {
   );
 }
 const CONVERTED_EXTENSIONS =
-  /^(psd|psb|tif|tiff|dng|cr2|cr3|nef|arw|raf|orf|rw2|docx|pptx)$/;
+  /^(psd|psb|tif|tiff|jxr|wdp|hdp|heic|heif|hif|jxl|jp2|j2k|exr|hdr|tga|dds|pcx|ppm|pgm|pbm|pnm|dng|cr2|cr3|nef|arw|raf|orf|rw2|pef|srw|rwl|3fr|iiq|docx|pptx)$/;
 const IMAGE_EXTENSIONS = /^(png|jpe?g|gif|webp|avif|bmp|svg|ico)$/;
 const IMAGE_MIME =
   /^image\/(png|jpeg|gif|webp|avif|bmp|svg\+xml|x-icon|vnd\.microsoft\.icon)$/;
@@ -154,6 +164,17 @@ export function isVectorImageFile(
   const ext = file.path.split(".").pop()?.toLowerCase() || "";
   return VECTOR_EXTENSIONS.test(ext) || VECTOR_MIME.test(file.mime_type);
 }
+function resolveMediaGlyph(kind: ReturnType<typeof mediaKind>, codeTone: boolean, size: number) {
+  if (kind === "image" || kind === "converted") return <ImageIcon size={size} />;
+  if (kind === "video") return <Film size={size} />;
+  if (kind === "audio") return <Music size={size} />;
+  if (kind === "spreadsheet") return <FileSpreadsheet size={size} />;
+  if (kind === "pdf") return <FileText size={size} />;
+  if (kind === "text") return codeTone ? <FileCode2 size={size} /> : <FileText size={size} />;
+  if (kind === "html") return <Globe size={size} />;
+  return <File size={size} />;
+}
+
 export function MediaIcon({
   file,
   size = 20,
@@ -162,25 +183,25 @@ export function MediaIcon({
   size?: number;
 }) {
   const kind = mediaKind(file);
-  const icon =
-    kind === "image" || kind === "converted" ? (
-      <ImageIcon size={size} />
-    ) : kind === "video" ? (
-      <Film size={size} />
-    ) : kind === "audio" ? (
-      <Music size={size} />
-    ) : kind === "spreadsheet" ? (
-      <FileSpreadsheet size={size} />
-    ) : kind === "pdf" ? (
-      <FileText size={size} />
-    ) : kind === "text" ? (
-      <FileCode2 size={size} />
-    ) : kind === "html" ? (
-      <Globe size={size} />
-    ) : (
-      <File size={size} />
-    );
-  return <span className={"media-kind-" + kind}>{icon}</span>;
+  const visual = fileVisualMeta(file);
+  const sheetWidth = Math.max(20, Math.round(size * 1.18));
+  const sheetHeight = Math.round(sheetWidth * 1.2);
+  return (
+    <span
+      className={`media-kind-${kind} file-tone-${visual.tone} inline-flex shrink-0 items-center justify-center rounded-lg p-1`}
+      title={resolveMediaGlyph(kind, visual.tone === "code", size) ? undefined : undefined}
+    >
+      <span style={{ width: sheetWidth, height: sheetHeight }} className="inline-flex items-center justify-center">
+        <FileSheetSvg tone={visual.tone} />
+      </span>
+    </span>
+  );
+}
+export function isConvertibleImageFile(file: Pick<DriveFile, "mime_type" | "path">): boolean {
+  const kind = mediaKind(file);
+  if (kind === "image") return true;
+  if (kind === "converted") return !/\.(docx|xlsx|pptx)$/i.test(file.path);
+  return false;
 }
 function useDerivative(
   file: DriveFile | undefined,
@@ -288,25 +309,23 @@ export function MediaThumbnail({
       !file.trashed,
     0,
   );
-  const src = file.preview_reason
-    ? ""
-    : localURL ||
-      (result?.status === "ready"
-        ? mediaContextURL(
-            file,
-            `/api/v1/previews/${encodeURIComponent(result.id)}/content`,
-          )
-        : kind === "image" && file.size_bytes <= 5 * 1024 * 1024
-          ? mediaURL(file)
-          : "");
+  const visual = fileVisualMeta(file);
+  let src = "";
+  if (!file.preview_reason) {
+    if (localURL) src = localURL;
+    else if (result?.status === "ready") src = mediaContextURL(file, `/api/v1/previews/${encodeURIComponent(result.id)}/content`);
+    else if (kind === "image" && file.size_bytes <= 5 * 1024 * 1024) src = mediaURL(file);
+  }
   return (
-    <span ref={ref} className={`media-thumbnail ${kind}`} aria-hidden="true">
+    <span ref={ref} className={`media-thumbnail ${kind} ${visual.tone}`} aria-hidden="true">
       {visible && src && !failed ? (
         <img src={src} alt="" loading="lazy" onError={() => setFailed(true)} />
       ) : (
         <span className="media-fallback">
-          <MediaIcon file={file} />
-          <span>{kind === "video" ? "视频" : kind === "audio" ? "音频" : kind === "image" ? "图片" : kind === "pdf" ? "PDF" : kind === "converted" ? "设计文档" : kind === "html" ? "网页" : "文档"}</span>
+          <span className={`media-kind-${kind} file-art-sheet-wrap`}>
+            <FileSheetSvg tone={visual.tone} />
+          </span>
+          <span className="file-art-badge">{visual.badge}</span>
         </span>
       )}
       {kind === "video" && (
@@ -355,6 +374,139 @@ function downloadCanvas(canvas: HTMLCanvasElement, name: string) {
 }
 function baseName(file: DriveFile) {
   return file.path.split("/").pop() || "file";
+}
+export function ImageFormatConvertForm({
+  file,
+  existingPaths = [],
+  onSaveToDrive,
+  onDone,
+}: {
+  file: DriveFile;
+  existingPaths?: readonly string[];
+  onSaveToDrive?: (file: File) => void | Promise<void>;
+  onDone?: (notice: string) => void;
+}) {
+  const kind = mediaKind(file);
+  const needsDerivative = kind === "converted" && !file.preview_url && !file.compatibility_url;
+  const [format, setFormat] = useState<TargetImageFormat>("png");
+  const [scale, setScale] = useState<ImageScalePreset>("100");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const { result, error: derivError } = useDerivative(file, "compatible", needsDerivative, 0);
+
+  const sourceURL =
+    file.compatibility_url ||
+    file.preview_url ||
+    (needsDerivative
+      ? result?.status === "ready"
+        ? mediaContextURL(file, `/api/v1/previews/${encodeURIComponent(result.id)}/content`)
+        : ""
+      : mediaURL(file));
+
+  const ready = Boolean(sourceURL);
+  const preparing = needsDerivative && (!result || result.status === "processing") && !derivError;
+
+  const handleConvert = async (mode: "download" | "save") => {
+    if (!sourceURL || busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error("无法读取源图像，请先等待兼容预览就绪。"));
+        img.src = sourceURL;
+      });
+      const converted = await convertImageElementToFile(img, file.path, { format, scale }, existingPaths);
+      if (mode === "download") {
+        triggerFileDownload(converted);
+        onDone?.(`已导出 ${converted.name}`);
+      } else if (onSaveToDrive) {
+        await onSaveToDrive(converted);
+        onDone?.(`已将转换后的 ${converted.name} 保存到当前网盘`);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "图片转换失败");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-3">
+      <p className="m-0 text-xs leading-relaxed text-muted-foreground">
+        将图片转换为标准格式导出或另存为新文件，原文件保持不变。
+      </p>
+      {preparing && (
+        <p role="status" className="m-0 flex items-center gap-1.5 text-xs text-muted-foreground">
+          <LoaderCircle className="size-3.5 animate-spin text-primary" />
+          正在解码 {fileVisualMeta(file).badge} 原始图像…
+        </p>
+      )}
+      {derivError && (
+        <p role="alert" className="m-0 text-xs text-destructive">
+          {derivError}
+        </p>
+      )}
+      <label className="flex flex-col gap-1.5 text-xs font-medium">
+        目标格式
+        <SelectAdapter
+          aria-label="转换目标格式"
+          value={format}
+          onChange={(e) => setFormat(e.target.value as TargetImageFormat)}
+        >
+          {(Object.keys(IMAGE_FORMAT_META) as TargetImageFormat[]).map((fmt) => (
+            <option key={fmt} value={fmt}>
+              {IMAGE_FORMAT_META[fmt].label}
+            </option>
+          ))}
+        </SelectAdapter>
+      </label>
+      <label className="flex flex-col gap-1.5 text-xs font-medium">
+        输出尺寸
+        <SelectAdapter
+          aria-label="转换尺寸比例"
+          value={scale}
+          onChange={(e) => setScale(e.target.value as ImageScalePreset)}
+        >
+          {IMAGE_SCALE_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </SelectAdapter>
+      </label>
+      {error && (
+        <p role="alert" className="m-0 text-xs text-destructive">
+          {error}
+        </p>
+      )}
+      <div className="flex flex-wrap gap-2 pt-1">
+        <Button
+          type="button"
+          variant="outline"
+          className="flex-1"
+          disabled={!ready || busy || file.trashed}
+          onClick={() => void handleConvert("download")}
+        >
+          <Download size={14} />
+          导出下载
+        </Button>
+        {onSaveToDrive && (
+          <Button
+            type="button"
+            variant="default"
+            className="flex-1"
+            disabled={!ready || busy || file.trashed}
+            onClick={() => void handleConvert("save")}
+          >
+            另存到网盘
+          </Button>
+        )}
+      </div>
+    </div>
+  );
 }
 export function ViewerInfoPanel({
   file,
@@ -445,12 +597,16 @@ function ImageViewer({
   meta,
   onMeta,
   onFailed,
+  onSaveConverted,
+  existingPaths = [],
 }: {
   file: DriveFile;
   src: string;
   meta: ViewerMeta;
   onMeta: (patch: Partial<ViewerMeta>) => void;
   onFailed: () => void;
+  onSaveConverted?: (file: File) => void | Promise<void>;
+  existingPaths?: readonly string[];
 }) {
   const stageRef = useRef<HTMLDivElement>(null);
   const layerRef = useRef<HTMLDivElement>(null);
@@ -464,6 +620,10 @@ function ImageViewer({
   const [flipH, setFlipH] = useState(false);
   const [flipV, setFlipV] = useState(false);
   const [annotate, setAnnotate] = useState(false);
+  const [convertOpen, setConvertOpen] = useState(false);
+  const [convertFormat, setConvertFormat] = useState<TargetImageFormat>("png");
+  const [convertScale, setConvertScale] = useState<ImageScalePreset>("100");
+  const [convertBusy, setConvertBusy] = useState(false);
   const [tool, setTool] = useState<AnnotationTool>("pen");
   const [color, setColor] = useState(ANNOTATION_COLORS[0]);
   const [strokeWidth, setStrokeWidth] = useState(ANNOTATION_WIDTHS[1]);
@@ -741,6 +901,32 @@ function ImageViewer({
     }
     setTimeout(() => setNote(""), 3200);
   };
+  const runConvert = async (mode: "download" | "save") => {
+    const img = imgRef.current;
+    if (!img || !natural.width || convertBusy) return;
+    setConvertBusy(true);
+    try {
+      const converted = await convertImageElementToFile(
+        img,
+        file.path,
+        { format: convertFormat, scale: convertScale },
+        existingPaths,
+      );
+      if (mode === "download") {
+        triggerFileDownload(converted);
+        setNote(`已导出 ${converted.name}`);
+      } else if (onSaveConverted) {
+        await onSaveConverted(converted);
+        setNote(`正在另存 ${converted.name} 到网盘…`);
+      }
+      setConvertOpen(false);
+    } catch (e) {
+      setNote(e instanceof Error ? e.message : "图片转换失败");
+    } finally {
+      setConvertBusy(false);
+      setTimeout(() => setNote(""), 3600);
+    }
+  };
   const scale = fit * zoom;
   const effectiveScale = scale * (flipH ? -1 : 1);
   const effectiveScaleY = scale * (flipV ? -1 : 1);
@@ -858,9 +1044,19 @@ function ImageViewer({
           className={"icon" + (annotate ? " active" : "")}
           aria-label="标注"
           title="标注工具"
-          onClick={() => setAnnotate((value) => !value)}
+          onClick={() => { setAnnotate((value) => !value); setConvertOpen(false); }}
         >
           <PenLine size={16} />
+        </Button>
+        <Button variant="ghost" type="submit"
+          className={"text" + (convertOpen ? " active" : "")}
+          aria-label="转格式"
+          aria-expanded={convertOpen}
+          title="转换图片格式（导出或另存为 PNG / JPG / WebP）"
+          onClick={() => { setConvertOpen((value) => !value); setAnnotate(false); }}
+        >
+          <Repeat size={14} />
+          <span>转格式</span>
         </Button>
         <Button variant="ghost" type="submit"
           className={"icon" + (infoOpen ? " active" : "")}
@@ -878,6 +1074,63 @@ function ImageViewer({
         >
           {fullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
         </Button>
+        {convertOpen && (
+          <>
+            <span className="viewer-tool-break" />
+            <span className="viewer-tool-label">转格式</span>
+            <label className="viewer-text-input">
+              目标格式
+              <SelectAdapter
+                aria-label="目标图片格式"
+                value={convertFormat}
+                onChange={(e) => setConvertFormat(e.target.value as TargetImageFormat)}
+              >
+                {(Object.keys(IMAGE_FORMAT_META) as TargetImageFormat[]).map((fmt) => (
+                  <option key={fmt} value={fmt}>
+                    {IMAGE_FORMAT_META[fmt].label}
+                  </option>
+                ))}
+              </SelectAdapter>
+            </label>
+            <label className="viewer-text-input">
+              输出尺寸
+              <SelectAdapter
+                aria-label="转换输出尺寸"
+                value={convertScale}
+                onChange={(e) => setConvertScale(e.target.value as ImageScalePreset)}
+              >
+                {IMAGE_SCALE_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </SelectAdapter>
+            </label>
+            <Button
+              variant="ghost"
+              type="button"
+              className="text"
+              disabled={!natural.width || convertBusy}
+              aria-label="下载转换图片"
+              onClick={() => void runConvert("download")}
+            >
+              <Download size={14} />
+              导出下载
+            </Button>
+            {onSaveConverted && (
+              <Button
+                variant="default"
+                size="sm"
+                type="button"
+                disabled={!natural.width || convertBusy}
+                aria-label="另存转换图片到网盘"
+                onClick={() => void runConvert("save")}
+              >
+                另存到网盘
+              </Button>
+            )}
+          </>
+        )}
         {annotate && (
           <>
             <span className="viewer-tool-break" />
@@ -1110,10 +1363,14 @@ export function MediaPreview({
   file,
   sourceURL,
   compact = false,
+  onSaveConverted,
+  existingPaths,
 }: {
   file: DriveFile;
   sourceURL?: string;
   compact?: boolean;
+  onSaveConverted?: (file: File) => void | Promise<void>;
+  existingPaths?: readonly string[];
 }) {
   const kind = mediaKind(file);
   sourceURL ||= file.preview_url;
@@ -1286,6 +1543,8 @@ export function MediaPreview({
             meta={meta}
             onMeta={onMeta}
             onFailed={() => setFailed(true)}
+            onSaveConverted={onSaveConverted}
+            existingPaths={existingPaths}
           />
         )
       ) : displayKind === "video" ? (
