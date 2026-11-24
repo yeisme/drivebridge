@@ -30,10 +30,11 @@ func validImportedKey(k string) bool {
 // UserImport is one batch entry: an operator-supplied key (imported as-is) or
 // an empty key (generated). Days is optional lifetime; zero means no expiry.
 type UserImport struct {
-	Name  string `json:"name"`
-	Key   string `json:"key,omitempty"`
-	Days  int    `json:"days,omitempty"`
-	Admin bool   `json:"admin,omitempty"`
+	Name    string `json:"name"`
+	Key     string `json:"key,omitempty"`
+	Days    int    `json:"days,omitempty"`
+	Admin   bool   `json:"admin,omitempty"`
+	OneTime bool   `json:"one_time,omitempty"`
 }
 
 // UserKeyIssued returns issuance material; only its encrypted form persists.
@@ -42,6 +43,7 @@ type UserKeyIssued struct {
 	Name      string    `json:"name"`
 	Key       string    `json:"key"`
 	Admin     bool      `json:"admin"`
+	OneTime   bool      `json:"one_time,omitempty"`
 	ExpiresAt time.Time `json:"expires_at"`
 }
 
@@ -98,6 +100,11 @@ func (s *Service) ImportUsers(entries []UserImport) ([]UserKeyIssued, error) {
 			return nil, code("user_key_duplicate")
 		}
 	}
+	connID := ""
+	var platform Connection
+	if s.DB.First(&platform, "id = ? AND disabled = ?", "platform", false).Error == nil {
+		connID = platform.ID
+	}
 	out := make([]UserKeyIssued, 0, len(entries))
 	for _, v := range entries {
 		key := v.Key
@@ -106,7 +113,7 @@ func (s *Service) ImportUsers(entries []UserImport) ([]UserKeyIssued, error) {
 		}
 		user := User{ID: ID(), Issuer: "key", Subject: "", Name: v.Name}
 		user.Subject = user.ID
-		k := UserKey{ID: ID(), Owner: user.ID, Name: v.Name, TokenHash: Hash(key), Admin: v.Admin, Created: time.Now().UTC()}
+		k := UserKey{ID: ID(), Owner: user.ID, Name: v.Name, TokenHash: Hash(key), Admin: v.Admin, OneTime: v.OneTime, Created: time.Now().UTC()}
 		if err := s.sealUserKey(&k, key); err != nil {
 			return nil, err
 		}
@@ -119,7 +126,17 @@ func (s *Service) ImportUsers(entries []UserImport) ([]UserKeyIssued, error) {
 		if e := s.DB.Create(&k).Error; e != nil {
 			return nil, code("database_unavailable")
 		}
-		out = append(out, UserKeyIssued{UserID: user.ID, Name: v.Name, Key: key, Admin: v.Admin, ExpiresAt: k.Expires})
+		if s.governanceActive() {
+			_ = s.DB.Create(&Membership{ID: ID(), TenantID: s.Instance, UserID: user.ID, DataOwner: user.ID, Role: "member", Status: "active"}).Error
+		}
+		if v.OneTime && connID != "" {
+			tenantID := ""
+			if s.governanceActive() {
+				tenantID = s.Instance
+			}
+			_ = s.DB.Create(&Space{ID: ID(), TenantID: tenantID, Owner: user.ID, Name: "个人空间", ConnectionID: connID, MaxBytes: s.Config.MaxBytes}).Error
+		}
+		out = append(out, UserKeyIssued{UserID: user.ID, Name: v.Name, Key: key, Admin: v.Admin, OneTime: v.OneTime, ExpiresAt: k.Expires})
 	}
 	return out, nil
 }

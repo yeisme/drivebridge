@@ -17,7 +17,7 @@ func openFixtureService(t *testing.T, cfg Config) *Service {
 	cfg.State = state
 	cfg.Enabled = true
 	cfg.Development = true
-	s, err := Open(cfg)
+	s, err := Open(databaseTestConfig(t, cfg))
 	if err != nil {
 		t.Fatal(err)
 	}

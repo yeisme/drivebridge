@@ -21,7 +21,7 @@ func (s *Service) automationManagementOn(tx *gorm.DB, p Principal) error {
 	return automationPrincipalOn(tx, p, true)
 }
 func automationReceipt(row WorkspaceRequest, space string) contract.AutomationReceipt {
-	return contract.AutomationReceipt{RuleID: row.ResourceID, SpaceID: space, Action: row.Action, RequestDigest: row.RequestDigest, ResultRevision: row.ResultRevision, CommittedAt: row.CreatedAt}
+	return contract.AutomationReceipt{RuleID: row.ResourceID, SpaceID: space, Action: row.Action, RequestDigest: row.RequestDigest, ResultRevision: row.ResultRevision, CommittedAt: row.CreatedAt.UTC().Truncate(time.Microsecond)}
 }
 func automationRequestQuery(tx *gorm.DB, p Principal, action, key string) *gorm.DB {
 	return tx.Where("owner = ? AND tenant_id = ? AND actor_id = ? AND action = ? AND request_key = ?", p.dataOwner(), p.TenantID, p.UserID, action, key)

@@ -15,8 +15,9 @@ func (s *Service) createOwnKey(w http.ResponseWriter, r *http.Request, p Princip
 		return code("forbidden")
 	}
 	var q struct {
-		Name string `json:"name"`
-		Days int    `json:"days"`
+		Name    string `json:"name"`
+		Days    int    `json:"days"`
+		OneTime bool   `json:"one_time"`
 	}
 	if err := decode(r, &q); err != nil {
 		return err
@@ -26,7 +27,7 @@ func (s *Service) createOwnKey(w http.ResponseWriter, r *http.Request, p Princip
 		return code("invalid_user_batch")
 	}
 	secret := userKeyPrefix + ID() + ID()
-	key := UserKey{ID: ID(), Owner: p.UserID, Name: q.Name, TokenHash: Hash(secret), Admin: p.Admin, Created: time.Now().UTC()}
+	key := UserKey{ID: ID(), Owner: p.UserID, Name: q.Name, TokenHash: Hash(secret), Admin: p.Admin, OneTime: q.OneTime, Created: time.Now().UTC()}
 	if q.Days > 0 {
 		key.Expires = key.Created.AddDate(0, 0, q.Days)
 	}
@@ -43,6 +44,6 @@ func (s *Service) createOwnKey(w http.ResponseWriter, r *http.Request, p Princip
 		return err
 	}
 	markAuditTarget(r, key.ID)
-	respond(w, map[string]any{"id": key.ID, "key": secret, "name": key.Name, "user_id": key.Owner, "expires_at": key.Expires})
+	respond(w, map[string]any{"id": key.ID, "key": secret, "name": key.Name, "user_id": key.Owner, "one_time": key.OneTime, "expires_at": key.Expires})
 	return nil
 }

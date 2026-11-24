@@ -53,7 +53,7 @@ func (OrganizationPlan) TableName() string { return "organization_plans" }
 type OrganizationPlanItem struct {
 	ID            string    `gorm:"primaryKey"`
 	PlanID        string    `json:"plan_id" gorm:"index;uniqueIndex:organization_item_identity"`
-	ItemKey       string    `json:"item_key" gorm:"uniqueIndex:organization_item_identity"`
+	ItemKey       string    `json:"item_key" gorm:"uniqueIndex:organization_item_identity;serializer:itemkey"`
 	Owner         string    `json:"-"`
 	FileID        string    `json:"file_id"`
 	VersionID     string    `json:"version_id"`

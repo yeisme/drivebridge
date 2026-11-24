@@ -7,8 +7,12 @@ import (
 	"gorm.io/gorm"
 )
 
-func activeUserKey(k UserKey) bool {
+func activeSessionOriginKey(k UserKey) bool {
 	return !k.Revoked && !k.Archived && !k.Disabled && (k.Expires.IsZero() || time.Now().Before(k.Expires))
+}
+
+func activeUserKey(k UserKey) bool {
+	return activeSessionOriginKey(k) && !(k.OneTime && k.Consumed)
 }
 
 func keyCopyReason(k UserKey, owner string) string {

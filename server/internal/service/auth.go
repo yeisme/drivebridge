@@ -170,7 +170,9 @@ func (s *Service) authenticate(r *http.Request) (Principal, error) {
 		// because import rejects cross-table hash duplicates.
 		var k UserKey
 		if s.DB.First(&k, "token_hash = ?", Hash(bearer)).Error == nil {
-			if !activeUserKey(k) {
+			// One-time invitation tokens must be exchanged through POST /auth/key
+			// so the single-use claim is atomic; direct bearer reuse is rejected.
+			if !activeUserKey(k) || k.OneTime {
 				return Principal{}, code("unauthorized")
 			}
 			return Principal{UserID: k.Owner, Key: &k, Admin: k.Admin}, nil
@@ -204,7 +206,7 @@ func (s *Service) authenticate(r *http.Request) (Principal, error) {
 	}
 	if v.OriginKey != "" {
 		var origin UserKey
-		if s.DB.First(&origin, "id = ?", v.OriginKey).Error != nil || !activeUserKey(origin) {
+		if s.DB.First(&origin, "id = ?", v.OriginKey).Error != nil || !activeSessionOriginKey(origin) {
 			return Principal{}, code("unauthorized")
 		}
 	}
@@ -310,7 +312,7 @@ func (s *Service) keyLogin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, code("unauthorized"))
 		return
 	}
-	if len(k.SealedKey) == 0 {
+	if !k.OneTime && len(k.SealedKey) == 0 {
 		if err := s.sealUserKey(&k, q.Key); err != nil {
 			writeError(w, err)
 			return
@@ -323,8 +325,22 @@ func (s *Service) keyLogin(w http.ResponseWriter, r *http.Request) {
 	session := ID()
 	now := time.Now().UTC()
 	v := Session{AuthenticatedAt: now, LastSeen: now, Hash: Hash(session), Owner: k.Owner, CSRF: ID(), Admin: k.Admin, OriginKey: k.ID, Expires: now.Add(12 * time.Hour)}
-	if s.DB.Create(&v).Error != nil {
-		writeError(w, code("database_unavailable"))
+	if err := s.DB.Transaction(func(tx *gorm.DB) error {
+		if k.OneTime {
+			claim := tx.Model(&UserKey{}).Where("id = ? AND one_time = ? AND consumed = ? AND revoked = ? AND archived = ? AND disabled = ?", k.ID, true, false, false, false, false).Updates(map[string]any{"consumed": true, "sealed_key": nil})
+			if claim.Error != nil {
+				return code("database_unavailable")
+			}
+			if claim.RowsAffected != 1 {
+				return code("unauthorized")
+			}
+		}
+		if tx.Create(&v).Error != nil {
+			return code("database_unavailable")
+		}
+		return nil
+	}); err != nil {
+		writeError(w, err)
 		return
 	}
 	s.cookie(w, "db_session", session, 12*3600)

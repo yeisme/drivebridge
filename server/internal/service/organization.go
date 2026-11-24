@@ -539,7 +539,7 @@ func (s *Service) SetFileLabels(p Principal, fileID string, q SetFileLabelsReque
 		if q.ExpectedRevision != "" && q.ExpectedRevision != revisionString(labelRevision(existing)) {
 			return code("version_conflict")
 		}
-		now := time.Now().UTC()
+		now := time.Now().UTC().Truncate(time.Microsecond)
 		if err := tx.Where("owner = ? AND file_id = ? AND namespace = ?", p.dataOwner(), fileID, q.Namespace).Delete(&FileLabelAssignment{}).Error; err != nil {
 			return code("database_unavailable")
 		}
@@ -640,7 +640,7 @@ func (s *Service) CreateFileCollection(p Principal, q CreateFileCollectionReques
 			return code("database_unavailable")
 		}
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			now := time.Now().UTC()
+			now := time.Now().UTC().Truncate(time.Microsecond)
 			collection = FileCollection{ID: ID(), Owner: p.dataOwner(), TenantID: p.TenantID, SpaceID: q.SpaceID, Name: q.Name, Kind: q.Kind, Scope: q.Scope, Rule: rule, RuleRevision: 1, Revision: 1, CreatedAt: now, UpdatedAt: now, KeyID: key, Fingerprint: fingerprint}
 			if err := tx.Create(&collection).Error; err != nil {
 				return code("database_unavailable")
@@ -809,7 +809,7 @@ func (s *Service) setCollectionMembersOn(tx *gorm.DB, p Principal, collectionID 
 				return err
 			}
 		}
-		now := time.Now().UTC()
+		now := time.Now().UTC().Truncate(time.Microsecond)
 		updated := tx.Model(&FileCollection{}).Where("id = ? AND owner = ? AND tenant_id = ? AND revision = ?", c.ID, c.Owner, c.TenantID, q.ExpectedRevision).Updates(map[string]any{"revision": q.ExpectedRevision + 1, "updated_at": now})
 		if updated.Error != nil {
 			return code("database_unavailable")
@@ -864,7 +864,7 @@ func (s *Service) ReadFileCollection(p Principal, collectionID string) (Collecti
 	if e != nil {
 		return CollectionReadView{}, e
 	}
-	now := time.Now().UTC()
+	now := time.Now().UTC().Truncate(time.Microsecond)
 	var memberRows []CollectionMember
 	if err := s.DB.Where("collection_id = ?", c.ID).Order("created_at, id").Limit(10001).Find(&memberRows).Error; err != nil {
 		return CollectionReadView{}, code("database_unavailable")
@@ -1035,7 +1035,7 @@ func (s *Service) createFileSnapshotOn(tx *gorm.DB, p Principal, collectionID st
 		if c.Revision != read.Revision || c.Kind != read.Kind {
 			return code("query_changed")
 		}
-		now := time.Now().UTC()
+		now := time.Now().UTC().Truncate(time.Microsecond)
 		snapshot := CollectionSnapshot{ID: ID(), CollectionID: c.ID, Owner: p.dataOwner(), Revision: read.Revision, EntriesTotal: int64(len(read.Items)), EntriesVisible: int64(len(read.Items)), CreatedAt: now}
 		if err := tx.Create(&snapshot).Error; err != nil {
 			return code("database_unavailable")
@@ -1194,7 +1194,7 @@ func (s *Service) SavedFileQueryCreate(p Principal, name string, q FileQueryRequ
 	if name == "" || len(name) > 200 {
 		return SavedQueryView{}, code("invalid_request")
 	}
-	now := time.Now().UTC()
+	now := time.Now().UTC().Truncate(time.Microsecond)
 	row := SavedFileQuery{ID: ID(), Owner: p.dataOwner(), Name: name, Query: canonicalQueryJSON(q), CreatedAt: now, UpdatedAt: now}
 	if len(row.Query) > savedQueryBudget {
 		return SavedQueryView{}, code("query_budget_exceeded")

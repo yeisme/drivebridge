@@ -61,6 +61,43 @@ func (s *Service) MCP() http.Handler {
 			return mcp.NewToolResultText(string(b)), nil
 		})
 	}
+	for _, tool := range compactWorkspaceTools() {
+		name := tool.Name
+		srv.AddTool(tool, func(ctx context.Context, q mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			p, ok := ctx.Value(principalKey{}).(Principal)
+			if !ok {
+				return mcp.NewToolResultError("unauthorized"), nil
+			}
+			args := q.GetArguments()
+			var result any
+			var err error
+			switch name {
+			case "workspace.search":
+				limit := 50
+				if raw, ok := args["limit"].(string); ok {
+					if parsed, parseErr := strconv.Atoi(raw); parseErr == nil {
+						limit = parsed
+					}
+				}
+				result, err = s.workspaceCompactSearch(p, stringArg(args, "target_kind"), stringArg(args, "query"), stringArg(args, "space_id"), limit)
+			case "workspace.inspect":
+				result, err = s.workspaceCompactInspect(p, stringArg(args, "target_kind"), stringArg(args, "target_ref"))
+			case "workspace.recover":
+				result, err = s.workspaceCompactRecover(p, stringArg(args, "target_kind"), stringArg(args, "target_ref"))
+			default:
+				err = code("unknown_tool")
+			}
+			if err != nil {
+				payload, _ := json.Marshal(map[string]any{"status": "blocked", "error": safeCode(err), "next": []string{"drivebridge://action-catalog"}})
+				return mcp.NewToolResultError(string(payload)), nil
+			}
+			payload, marshalErr := json.Marshal(result)
+			if marshalErr != nil {
+				return mcp.NewToolResultError("serialization_failed"), nil
+			}
+			return mcp.NewToolResultText(string(payload)), nil
+		})
+	}
 	srv.AddResource(mcp.NewResource("drivebridge://capabilities", "DriveBridge authenticated capabilities", mcp.WithMIMEType("application/json")), func(ctx context.Context, q mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
 		p, ok := ctx.Value(principalKey{}).(Principal)
 		if !ok {
@@ -69,6 +106,18 @@ func (s *Service) MCP() http.Handler {
 		out, e := s.CallTool(ctx, p, "capabilities", nil)
 		b, _ := json.Marshal(out)
 		return []mcp.ResourceContents{mcp.TextResourceContents{URI: q.Params.URI, MIMEType: "application/json", Text: string(b)}}, e
+	})
+	srv.AddResource(mcp.NewResource("drivebridge://action-catalog", "DriveBridge action catalog and recovery contract", mcp.WithMIMEType("application/json")), func(ctx context.Context, q mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+		p, ok := ctx.Value(principalKey{}).(Principal)
+		if !ok {
+			return nil, code("unauthorized")
+		}
+		catalog, e := s.ActionCatalog(p, p.ScopeSpace)
+		if e != nil {
+			return nil, e
+		}
+		b, _ := json.Marshal(catalog)
+		return []mcp.ResourceContents{mcp.TextResourceContents{URI: q.Params.URI, MIMEType: "application/json", Text: string(b)}}, nil
 	})
 	stream := server.NewStreamableHTTPServer(srv, server.WithStateLess(true))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -144,6 +193,18 @@ func (s *Service) CallTool(ctx context.Context, p Principal, name string, args m
 		switch name {
 		case "capabilities":
 			return s.workspaceCapabilities(p)
+		case "workspace.search":
+			limit := 50
+			if raw := text("limit"); raw != "" {
+				if parsed, parseErr := strconv.Atoi(raw); parseErr == nil {
+					limit = parsed
+				}
+			}
+			return s.workspaceCompactSearch(p, text("target_kind"), text("query"), text("space_id"), limit)
+		case "workspace.inspect":
+			return s.workspaceCompactInspect(p, text("target_kind"), text("target_ref"))
+		case "workspace.recover":
+			return s.workspaceCompactRecover(p, text("target_kind"), text("target_ref"))
 		case "files":
 			return s.searchWorkspaceFiles(p, text("space_id"), "", "", "", "", false)
 		case "search":
@@ -410,7 +471,9 @@ func (s *Service) CallTool(ctx context.Context, p Principal, name string, args m
 			return nil, e
 		}
 		parts := []Part{}
-		s.DB.Where("operation_id = ?", op.ID).Find(&parts)
+		if err := s.DB.Where("operation_id = ?", op.ID).Find(&parts).Error; err != nil {
+			return nil, code("database_unavailable")
+		}
 		indexes := []int{}
 		for _, v := range parts {
 			indexes = append(indexes, v.Index)

@@ -265,9 +265,8 @@ func TestMetadataRestoreAndMissingKey(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	backup := t.TempDir()
-	os.Chmod(backup, 0700)
-	for _, name := range []string{"metadata.sqlite", "instance.key", "instance.id"} {
+	backup := stageBackup(t, f, "metadata-restore")
+	for _, name := range []string{"instance.key"} {
 		b, e := os.ReadFile(filepath.Join(f.Service.Config.State, name))
 		if e != nil {
 			t.Fatal(e)
@@ -371,7 +370,7 @@ func TestRestartPartRecoveryCancellationAndConflictingContent(t *testing.T) {
 	f.Service = reopened
 	recovered, e := reopened.Complete(context.Background(), p, op.ID)
 	if e != nil || recovered.Status != "completed" {
-		t.Fatal("restart could not recover pinned parts")
+		t.Fatalf("restart could not recover pinned parts: status=%s error=%v", recovered.Status, e)
 	}
 	again, e := reopened.Complete(context.Background(), p, op.ID)
 	if e != nil || again.FileID != recovered.FileID {

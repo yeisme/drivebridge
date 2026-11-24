@@ -47,14 +47,14 @@ func (s *Service) keyDirectoryRoutes(mux *http.ServeMux) {
 		}
 		activeByOwner := map[string]int{}
 		for _, k := range keys {
-			if activeUserKey(k) {
+			if activeUserKey(k) && !k.OneTime {
 				activeByOwner[k.Owner]++
 			}
 		}
 		out := []map[string]any{}
 		for _, k := range keys {
 			revoke, del, disable, enable := s.keyLifecycleAllowed(p, k, activeByOwner[k.Owner])
-			out = append(out, map[string]any{"id": k.ID, "name": k.Name, "user": k.Owner, "user_name": names[k.Owner], "admin": k.Admin, "created_at": k.Created, "expires_at": k.Expires, "revoked": k.Revoked, "archived": k.Archived, "disabled": k.Disabled, "current": k.ID == current, "can_copy": k.Owner == p.UserID && activeUserKey(k) && len(k.SealedKey) > 0, "can_rotate": k.Owner == p.UserID && activeUserKey(k), "can_revoke": revoke, "can_delete": del, "can_disable": disable, "can_enable": enable, "copy_unavailable_reason": keyCopyReason(k, p.UserID)})
+			out = append(out, map[string]any{"id": k.ID, "name": k.Name, "user": k.Owner, "user_name": names[k.Owner], "admin": k.Admin, "one_time": k.OneTime, "consumed": k.Consumed, "created_at": k.Created, "expires_at": k.Expires, "revoked": k.Revoked, "archived": k.Archived, "disabled": k.Disabled, "current": k.ID == current, "can_copy": k.Owner == p.UserID && activeUserKey(k) && len(k.SealedKey) > 0, "can_rotate": k.Owner == p.UserID && activeUserKey(k), "can_revoke": revoke, "can_delete": del, "can_disable": disable, "can_enable": enable, "copy_unavailable_reason": keyCopyReason(k, p.UserID)})
 		}
 		respond(w, map[string]any{"keys": out})
 		return nil
@@ -162,16 +162,19 @@ func (s *Service) keyLifecycleAllowed(p Principal, k UserKey, activeCount int) (
 		return false, true, false, false
 	}
 	expired := !k.Expires.IsZero() && !time.Now().Before(k.Expires)
+	if k.OneTime && k.Consumed {
+		return true, true, false, false
+	}
 	if k.Disabled {
 		return true, true, false, !expired
 	}
 	if expired {
 		return true, true, false, false
 	}
-	if activeCount < 2 {
+	if !k.OneTime && activeCount < 2 {
 		return false, false, false, false
 	}
-	return true, true, true, false
+	return true, true, !k.OneTime, false
 }
 
 func (s *Service) selfRevokeKey(p Principal, id string, destroy bool) error {
@@ -197,17 +200,17 @@ func (s *Service) selfRevokeKey(p Principal, id string, destroy bool) error {
 		active := 0
 		adminActive := 0
 		for _, other := range siblings {
-			if activeUserKey(other) {
+			if activeUserKey(other) && !other.OneTime {
 				active++
 				if other.Admin {
 					adminActive++
 				}
 			}
 		}
-		if activeUserKey(k) && active < 2 {
+		if !k.OneTime && activeUserKey(k) && active < 2 {
 			return code("last_active_key")
 		}
-		if k.Admin && activeUserKey(k) && adminActive < 2 {
+		if !k.OneTime && k.Admin && activeUserKey(k) && adminActive < 2 {
 			return code("last_admin_required")
 		}
 		updates := map[string]any{"revoked": true, "sealed_key": nil}

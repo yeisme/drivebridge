@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"strconv"
 	"strings"
 	"time"
 
@@ -226,6 +227,27 @@ func (s *Service) QueryAnalytics(p Principal, q AnalyticsQueryRequest) (Analytic
 	}
 	if scanned > analyticsScanBudget {
 		return AnalyticsQueryView{}, code("query_budget_exceeded")
+	}
+	// PostgreSQL SUM(bigint) is numeric, which drivers expose as text. Keep
+	// the existing numeric JSON contract without coercing string dimensions.
+	for _, row := range rows {
+		for _, metric := range q.Metrics {
+			value := row[metric]
+			var raw string
+			switch v := value.(type) {
+			case string:
+				raw = v
+			case []byte:
+				raw = string(v)
+			default:
+				continue
+			}
+			number, err := strconv.ParseInt(raw, 10, 64)
+			if err != nil {
+				return AnalyticsQueryView{}, code("database_unavailable")
+			}
+			row[metric] = number
+		}
 	}
 	view := AnalyticsQueryView{QueryID: ID(), Backend: "transactional", ObservedAt: time.Now().UTC(), Coverage: "complete", Partial: false, Rows: rows}
 	if more {

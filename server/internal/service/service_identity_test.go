@@ -39,7 +39,7 @@ func TestServiceIdentitySignedMappingScopeAndOutage(t *testing.T) {
 	if err := os.Chmod(state, 0700); err != nil {
 		t.Fatal(err)
 	}
-	s, err := Open(Config{State: state, Enabled: true, Development: true, ServiceIdentityIssuer: server.URL})
+	s, err := Open(databaseTestConfig(t, Config{State: state, Enabled: true, Development: true, ServiceIdentityIssuer: server.URL}))
 	if err != nil {
 		t.Fatal(err)
 	}
