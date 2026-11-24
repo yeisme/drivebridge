@@ -874,7 +874,10 @@ func TestFPTeamRuntimeScaleMillion(t *testing.T) {
 	tick := time.NewTicker(time.Second)
 	defer tick.Stop()
 	for elapsed := 0; elapsed < windowSeconds; elapsed++ {
-		<-tick.C
+		scheduled := <-tick.C
+		if time.Since(scheduled) >= time.Second {
+			t.Fatal("sustained publisher missed its one-second cadence")
+		}
 		e := f.Service.DB.Transaction(func(tx *gorm.DB) error {
 			rows := make([]service.OutboxEvent, 0, ratePerSecond)
 			for i := range ratePerSecond {
@@ -895,8 +898,18 @@ func TestFPTeamRuntimeScaleMillion(t *testing.T) {
 		published += ratePerSecond
 		var watermark int64
 		f.Service.DB.Model(&service.ProjectionCheckpoint{}).Where("projection = ? AND owner_scope = ?", "file_catalogue", owner).Select("watermark").Scan(&watermark)
+		// Measure real wall-clock projection age, not queue length divided by
+		// the configured rate (which can hide a stalled/slower publisher).
+		lag := 0.0
+		var oldest service.OutboxEvent
+		lookupErr := f.Service.DB.Where("owner_scope = ? AND source_sequence > ? AND kind = ?", owner, watermark, "file_catalogue.upsert").Order("source_sequence").First(&oldest).Error
+		if lookupErr == nil {
+			lag = time.Since(oldest.CreatedAt).Seconds()
+		} else if lookupErr != gorm.ErrRecordNotFound {
+			t.Fatal(lookupErr)
+		}
 		mu.Lock()
-		lagSamples = append(lagSamples, float64(int64(published)-(watermark-(seqBase+backlog)))/float64(ratePerSecond))
+		lagSamples = append(lagSamples, lag)
 		mu.Unlock()
 	}
 	windowWall := time.Since(windowStart).Seconds()
@@ -944,7 +957,7 @@ func TestFPTeamRuntimeScaleMillion(t *testing.T) {
 	if liveRows < int64(directories)+min(backlog, int64(resources)) {
 		t.Fatalf("projection rows below expectation: %d", liveRows)
 	}
-	report := map[string]any{"directories": dirRows, "events_total": totalEvents, "backlog": backlog, "window_seconds": windowWall, "window_rate_per_second": ratePerSecond, "dir_seed_seconds": dirSeconds, "event_seed_seconds": eventSeconds, "drain_seconds": drainSeconds, "tail_seconds": tailSeconds, "lag_p95_seconds": lagP95, "read_p95_ms": readP95.Milliseconds(), "read_samples": len(latencies), "tombstones": tombstones, "duplicate_events": totalEvents - distinct, "generation": generation}
+	report := map[string]any{"directories": dirRows, "events_total": totalEvents, "backlog": backlog, "window_seconds": windowWall, "scheduled_rate_per_second": ratePerSecond, "window_rate_per_second": float64(published) / windowWall, "dir_seed_seconds": dirSeconds, "event_seed_seconds": eventSeconds, "drain_seconds": drainSeconds, "tail_seconds": tailSeconds, "lag_p95_seconds": lagP95, "read_p95_ms": readP95.Milliseconds(), "read_samples": len(latencies), "tombstones": tombstones, "duplicate_events": totalEvents - distinct, "generation": generation}
 	b, _ := json.MarshalIndent(report, "", "  ")
 	t.Logf("million report: %s", b)
 	if dir := os.Getenv("DRIVEBRIDGE_EVIDENCE_ARTIFACTS"); dir != "" {

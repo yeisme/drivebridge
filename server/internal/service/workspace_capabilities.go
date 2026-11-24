@@ -32,5 +32,11 @@ func (s *Service) workspaceCapabilities(p Principal) (map[string]any, error) {
 	if len(actions) == 0 {
 		return nil, code("forbidden")
 	}
+	// Compact discovery and recovery stay read-only, but only advertise them
+	// when the grant already has a corresponding readable surface. This keeps
+	// narrow suggestion-only grants from gaining enumeration or recovery.
+	if readReady {
+		tools = append(tools, "workspace.search", "workspace.inspect", "workspace.recover")
+	}
 	return map[string]any{"restriction_profile": "personal_workspace_v1", "tools": tools, "http_actions": actions, "public_base_url": s.Config.Origin, "byte_transport": "authenticated_http", "local_file_access": false, "files_read_ready": readReady, "fixed_version_content_ready": readReady, "legacy_create_upload": "forbidden", "human_decisions": "not_delegated", "context_headers": []string{"X-DriveBridge-Tenant", "X-DriveBridge-Space"}}, nil
 }

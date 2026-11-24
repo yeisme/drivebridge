@@ -60,6 +60,6 @@ func migrateWorkspaceModels(db *gorm.DB) error {
 		if err := tx.AutoMigrate(&WorkspaceLabelCatalog{}, &WorkspaceLabelDefinition{}); err != nil {
 			return err
 		}
-		return tx.AutoMigrate(&WorkspaceGrant{}, &WorkspaceAgentGroup{}, &WorkspaceAgentOrganization{}, &WorkspaceSubmission{}, &WorkspaceSubmissionDecision{}, &WorkspaceRequest{}, &WorkspaceCredentialHistory{}, &WorkspaceLabelSuggestion{}, &WorkspaceSuggestionDecision{}, &WorkspacePropertyCatalog{}, &WorkspacePropertyDefinition{}, &WorkspacePropertySidecar{}, &WorkspaceFilePropertyProjection{}, &WorkspaceFileLinkProjection{}, &WorkspaceFileLinkIndex{}, &WorkspaceResourceDescriptor{}, &WorkspaceResourceCheck{}, &WorkspaceFavorite{}, &WorkspaceInvocation{}, &NotebookPageMetadata{}, &NotebookCreationIntent{})
+		return tx.AutoMigrate(&WorkspaceGrant{}, &WorkspaceAgentGroup{}, &WorkspaceAgentOrganization{}, &WorkspaceSubmission{}, &WorkspaceSubmissionDecision{}, &WorkspaceRequest{}, &WorkspaceCredentialHistory{}, &WorkspaceLabelSuggestion{}, &WorkspaceSuggestionDecision{}, &WorkspacePropertyCatalog{}, &WorkspacePropertyDefinition{}, &WorkspacePropertySidecar{}, &WorkspaceFilePropertyProjection{}, &WorkspaceFileLinkProjection{}, &WorkspaceFileLinkIndex{}, &WorkspaceResourceDescriptor{}, &WorkspaceResourceCheck{}, &WorkspaceFavorite{}, &WorkspaceInvocation{}, &NotebookPageMetadata{}, &NotebookCreationIntent{}, &WorkspaceJudgmentProfileSnapshot{}, &WorkspaceJudgmentActivation{}, &WorkspaceJudgmentAttempt{})
 	})
 }

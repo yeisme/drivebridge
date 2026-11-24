@@ -112,11 +112,11 @@ func TestWorkspaceOperationRequiresCurrentGrantAndSubmissionBinding(t *testing.T
 		t.Fatal(err)
 	}
 	readTools := s.workspaceToolFilter(ctx, ToolDefinitions())
-	if len(readTools) != 4 {
-		t.Fatal("read discovery missing metadata tool")
+	if len(readTools) != 7 {
+		t.Fatal("read discovery missing compact metadata tools")
 	}
 	for _, tool := range readTools {
-		if tool.Name != "stat" && tool.Name != "capabilities" && tool.Name != "files" && tool.Name != "search" {
+		if tool.Name != "stat" && tool.Name != "capabilities" && tool.Name != "files" && tool.Name != "search" && tool.Name != "workspace.search" && tool.Name != "workspace.inspect" && tool.Name != "workspace.recover" {
 			t.Fatal("narrowed grant retained transfer tools")
 		}
 	}

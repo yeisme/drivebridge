@@ -23,7 +23,6 @@ import (
 	"github.com/glebarez/sqlite"
 	"github.com/gofrs/flock"
 	"github.com/yeisme/drivebridge-server/sdk/insights"
-	gormpostgres "gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
@@ -149,18 +148,23 @@ type Version struct {
 // owner. Object keys include the owner and optional space scope; this prevents
 // one owner's purge from affecting another owner with the same digest.
 type Blob struct {
-	ID           string    `json:"-" gorm:"primaryKey"`
-	SHA256       string    `json:"sha256" gorm:"index"`
-	Owner        string    `json:"-" gorm:"index"`
-	SpaceID      string    `json:"space_id,omitempty"`
-	ConnectionID string    `json:"-"`
-	ObjectKey    string    `json:"-"`
-	Size         int64     `json:"size_bytes"`
-	MIME         string    `json:"mime_type,omitempty"`
-	Refs         int64     `json:"ref_count"`
-	Encrypted    bool      `json:"encrypted"`
-	GCClaimed    bool      `json:"-" gorm:"not null;default:false;index"`
-	CreatedAt    time.Time `json:"created_at"`
+	ID           string `json:"-" gorm:"primaryKey"`
+	SHA256       string `json:"sha256" gorm:"index"`
+	Owner        string `json:"-" gorm:"index"`
+	SpaceID      string `json:"space_id,omitempty"`
+	ConnectionID string `json:"-"`
+	ObjectKey    string `json:"-"`
+	Size         int64  `json:"size_bytes"`
+	MIME         string `json:"mime_type,omitempty"`
+	Refs         int64  `json:"ref_count"`
+	Encrypted    bool   `json:"encrypted"`
+	GCClaimed    bool   `json:"-" gorm:"not null;default:false;index"`
+	// GCClaimedAt and GCClaimToken make deletion claims recoverable after a
+	// process crash. A claim is a short lease, never durable proof that the
+	// deleting worker finished.
+	GCClaimedAt  *time.Time `json:"-" gorm:"index"`
+	GCClaimToken string     `json:"-" gorm:"index"`
+	CreatedAt    time.Time  `json:"created_at"`
 }
 type Operation struct {
 	// Workspace staging is admitted only by dedicated grant-bound services.
@@ -178,7 +182,8 @@ type Operation struct {
 	ID                   string `json:"id" gorm:"primaryKey"`
 	Owner                string `json:"-" gorm:"uniqueIndex:operation_key"`
 	AgentID              string `json:"agent_id,omitempty"`
-	Key                  string `json:"-" gorm:"uniqueIndex:operation_key"`
+	KeyEncodingVersion   int    `json:"-" gorm:"not null;default:0"`
+	Key                  string `json:"-" gorm:"uniqueIndex:operation_key;serializer:operationkey"`
 	Fingerprint          string `json:"-"`
 	Kind                 string `json:"kind"`
 	SpaceID              string `json:"space_id"`
@@ -204,7 +209,7 @@ type Operation struct {
 	// Additive nullable columns: legacy rows keep empty strings and every
 	// legacy query path ignores them.
 	BatchID string    `json:"batch_id,omitempty" gorm:"index"`
-	ItemKey string    `json:"item_key,omitempty"`
+	ItemKey string    `json:"item_key,omitempty" gorm:"serializer:itemkey"`
 	Nonce   []byte    `json:"-"`
 	Updated time.Time `json:"updated_at"`
 }
@@ -231,6 +236,8 @@ type Agent struct {
 }
 type UserKey struct {
 	SealedKey []byte    `json:"-"`
+	OneTime   bool      `json:"one_time" gorm:"column:one_time;not null;default:false"`
+	Consumed  bool      `json:"consumed" gorm:"column:consumed;not null;default:false"`
 	Archived  bool      `json:"archived" gorm:"not null;default:false"`
 	Disabled  bool      `json:"disabled" gorm:"not null;default:false"`
 	ID        string    `json:"id" gorm:"primaryKey"`
@@ -365,6 +372,10 @@ type Service struct {
 	serviceVerifier   *oidc.IDTokenVerifier
 	storage           StorageFactory
 	connectionLocks   [32]sync.Mutex
+	// judgmentRoundTripper is a test-only transport override for the managed
+	// judgment SDK assembly. Production leaves it nil so the SDK's own HTTP
+	// client is used; it never changes endpoints or credentials.
+	judgmentRoundTripper http.RoundTripper
 }
 
 func ID() string {
@@ -407,6 +418,9 @@ func Open(c Config) (*Service, error) {
 	keyPath := filepath.Join(c.State, "instance.key")
 	key, e := os.ReadFile(keyPath)
 	if os.IsNotExist(e) {
+		if _, statErr := os.Stat(filepath.Join(c.State, "instance.id")); statErr == nil || !os.IsNotExist(statErr) {
+			return nil, code("instance_key_missing_restore_required")
+		}
 		if _, statErr := os.Stat(filepath.Join(c.State, "metadata.sqlite")); statErr == nil {
 			return nil, code("instance_key_missing_restore_required")
 		}
@@ -433,7 +447,7 @@ func Open(c Config) (*Service, error) {
 		// Team deployments run the metadata database on PostgreSQL with the
 		// pure-Go driver; the DSN never appears in logs or status output.
 		// Object bytes and the instance key stay in the state directory.
-		db, e = gorm.Open(gormpostgres.Open(c.TeamDSN), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+		db, e = openPostgresMetadata(c.TeamDSN)
 		if e != nil {
 			return nil, code("database_unavailable")
 		}
@@ -490,6 +504,10 @@ func Open(c Config) (*Service, error) {
 		}
 	}
 	if e = db.AutoMigrate(&ServiceIdentityBinding{}, &ServiceAdmission{}, &Blob{}, &UploadBatch{}, &UploadBatchItem{}, &UploadSession{}, &RetentionHold{}, &RetentionPolicy{}, &RetentionPlan{}, &RetentionItem{}, &FileThread{}, &ThreadMessage{}, &PrivateNote{}, &DiscussionRevision{}, &CloudRoot{}, &ExternalEntry{}, &TransferPlan{}, &TransferItem{}, &AnalyticsSnapshot{}, &ContentPolicy{}, &ContentBinding{}, &DeliveryManifest{}, &DeliveryManifestItem{}, &DeliveryReceipt{}, &OrganizationPolicy{}, &OrganizationPlan{}, &OrganizationPlanItem{}, &ChangeSubscription{}, &AutomationRule{}, &AutomationIntent{}, &FileLabelAssignment{}, &FileCollection{}, &CollectionMember{}, &CollectionSnapshot{}, &CollectionSnapshotEntry{}, &SavedFileQuery{}); e != nil {
+		s.Close()
+		return nil, code("database_unavailable")
+	}
+	if e = s.reconcileBlobGC(); e != nil {
 		s.Close()
 		return nil, code("database_unavailable")
 	}

@@ -33,7 +33,7 @@ func (s *Service) workspaceSubmissionCreate(w http.ResponseWriter, r *http.Reque
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	err = s.DB.Transaction(func(tx *gorm.DB) error {
-		now := time.Now().UTC()
+		now := time.Now().UTC().Truncate(time.Microsecond)
 		result, _, created, err := s.createWorkspaceSubmissionOn(tx, p, keys[0], input, now)
 		if err != nil {
 			return err
@@ -69,7 +69,7 @@ func (s *Service) workspaceSubmissionLookup(w http.ResponseWriter, r *http.Reque
 	}
 	var sub WorkspaceSubmission
 	err = s.DB.Transaction(func(tx *gorm.DB) error {
-		now := time.Now().UTC()
+		now := time.Now().UTC().Truncate(time.Microsecond)
 		grant, err := s.authorizeWorkspaceActionOn(tx, p, p.Agent.SpaceID, p.Agent.ConnectionID, p.Agent.Prefix, "inbox.submit", now)
 		if err != nil {
 			return err

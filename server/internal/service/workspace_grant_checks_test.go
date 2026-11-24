@@ -16,8 +16,8 @@ func TestWorkspaceGrantChecksLocalOnlyAndRevisionBound(t *testing.T) {
 	if err := f.Service.DB.Model(&service.Agent{}).Where("id = ?", a.ID).Updates(map[string]any{"restriction_profile": "personal_workspace_v1", "connection_id": h.space.ConnectionID}).Error; err != nil {
 		t.Fatal(err)
 	}
-	expiry := time.Now().UTC().Add(time.Hour)
-	g := service.WorkspaceGrant{ID: service.ID(), AgentID: a.ID, Owner: h.user.ID, SpaceID: h.space.ID, ConnectionID: h.space.ConnectionID, Prefix: a.Prefix, Protocol: "http", Actions: "files.read", RestrictionProfile: "personal_workspace_v1", ExpiryMode: "duration", ExpiresAt: &expiry, IssuedAt: time.Now().UTC(), Revision: 1, CredentialGeneration: 1}
+	expiry := time.Now().UTC().Truncate(time.Microsecond).Add(time.Hour)
+	g := service.WorkspaceGrant{ID: service.ID(), AgentID: a.ID, Owner: h.user.ID, SpaceID: h.space.ID, ConnectionID: h.space.ConnectionID, Prefix: a.Prefix, Protocol: "http", Actions: "files.read", RestrictionProfile: "personal_workspace_v1", ExpiryMode: "duration", ExpiresAt: &expiry, IssuedAt: time.Now().UTC().Truncate(time.Microsecond), Revision: 1, CredentialGeneration: 1}
 	if err := f.Service.DB.Create(&g).Error; err != nil {
 		t.Fatal(err)
 	}

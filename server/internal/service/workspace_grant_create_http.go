@@ -62,7 +62,7 @@ func (s *Service) workspaceGrantCreate(w http.ResponseWriter, r *http.Request, p
 			return code("internal_error")
 		}
 		secret := "db_" + hex.EncodeToString(material)
-		now := time.Now().UTC()
+		now := time.Now().UTC().Truncate(time.Microsecond)
 		grant, agent, issued, err := createWorkspaceGrantOn(tx, p.UserID, p.TenantID, p.UserID, keys[0], Hash(secret), input, now)
 		if err != nil {
 			return err

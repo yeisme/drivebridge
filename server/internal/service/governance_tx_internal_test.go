@@ -37,7 +37,7 @@ func probeInTransaction(t *testing.T, s *Service, name string, fn func(tx *gorm.
 func TestFPReworkAuthorizationUsesTransactionHandle(t *testing.T) {
 	dir := t.TempDir()
 	_ = os.Chmod(dir, 0700)
-	s, e := Open(Config{State: dir, Enabled: true, Development: true})
+	s, e := Open(databaseTestConfig(t, Config{State: dir, Enabled: true, Development: true}))
 	if e != nil {
 		t.Fatal(e)
 	}

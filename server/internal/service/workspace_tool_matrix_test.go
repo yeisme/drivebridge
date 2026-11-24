@@ -23,7 +23,7 @@ func TestWorkspaceRegisteredToolSetDeniesLegacyDispatch(t *testing.T) {
 	if _, err := s.CallTool(t.Context(), p, "capabilities", map[string]any{}); err != nil {
 		t.Fatalf("positive control failed: %v", err)
 	}
-	allowed := map[string]bool{"capabilities": true, "stat": true, "files": true, "search": true, "operation_get": true, "complete_upload": true}
+	allowed := map[string]bool{"capabilities": true, "stat": true, "files": true, "search": true, "operation_get": true, "complete_upload": true, "workspace.search": true, "workspace.inspect": true, "workspace.recover": true}
 	ctx := context.WithValue(t.Context(), principalKey{}, p)
 	listed := s.workspaceToolFilter(ctx, ToolDefinitions())
 	if len(listed) != len(allowed) {

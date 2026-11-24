@@ -54,7 +54,7 @@ func (s *Service) workspaceGrantScopePatch(w http.ResponseWriter, r *http.Reques
 		}
 		var receipt WorkspaceRequest
 		err := tx.Where("owner = ? AND tenant_id = ? AND actor_id = ? AND action = ? AND request_key = ?", p.UserID, p.TenantID, p.UserID, action, keys[0]).First(&receipt).Error
-		now := time.Now().UTC()
+		now := time.Now().UTC().Truncate(time.Microsecond)
 		if err == nil {
 			if receipt.RequestDigest != digest {
 				return code("idempotency_conflict")

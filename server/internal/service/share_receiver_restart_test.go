@@ -15,7 +15,7 @@ func TestFPShareReceiverPersistentRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	config := Config{State: dir, Enabled: true, Development: true, ShareReceivers: true}
-	s, err := Open(config)
+	s, err := Open(databaseTestConfig(t, config))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,7 +45,7 @@ func TestFPShareReceiverPersistentRestart(t *testing.T) {
 	}
 	s.Close()
 	closed = true
-	restarted, err := Open(config)
+	restarted, err := Open(databaseTestConfig(t, config))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -80,7 +80,7 @@ func (s *Service) decidePropertyMigration(ctx context.Context, p Principal, id s
 				return err
 			}
 		}
-		now := time.Now().UTC()
+		now := time.Now().UTC().Truncate(time.Microsecond)
 		changed := tx.Model(&OrganizationPlan{}).Where("id = ? AND owner = ? AND tenant_id = ? AND revision = ? AND phase = ?", id, p.UserID, p.TenantID, plan.Revision, plan.Phase).Updates(map[string]any{"phase": nextPhase, "revision": plan.Revision + 1, "confirmed_by": p.UserID, "updated_at": now})
 		if changed.Error != nil {
 			return code("database_unavailable")
@@ -175,7 +175,7 @@ func (s *Service) executePropertyMigrationOn(tx *gorm.DB, p Principal, plan Orga
 			return "", err
 		}
 	}
-	now := time.Now().UTC()
+	now := time.Now().UTC().Truncate(time.Microsecond)
 	if blocked {
 		for i := range items {
 			if items[i].Status == "pending" {

@@ -153,7 +153,7 @@ func (s *Service) favoriteTargetOn(tx *gorm.DB, p Principal, space, kind, ref st
 }
 
 func (s *Service) WorkspaceFavorites(ctx context.Context, p Principal, space string, page contract.PageQuery) (contract.FavoriteList, error) {
-	out := contract.FavoriteList{Items: []contract.FavoriteView{}, ObservedAt: time.Now().UTC(), TotalKind: "unknown"}
+	out := contract.FavoriteList{Items: []contract.FavoriteView{}, ObservedAt: time.Now().UTC().Truncate(time.Microsecond), TotalKind: "unknown"}
 	err := s.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := s.favoriteScopeOn(tx, p, space); err != nil {
 			return err
@@ -268,7 +268,7 @@ func (s *Service) changeWorkspaceFavorite(ctx context.Context, p Principal, spac
 		if row.Revision != q.ExpectedRevision || (!missing && row.Deleted == remove) {
 			return code("revision_conflict")
 		}
-		now := time.Now().UTC()
+		now := time.Now().UTC().Truncate(time.Microsecond)
 		if missing {
 			row = WorkspaceFavorite{ID: ID(), Owner: p.UserID, TenantID: p.TenantID, SpaceID: space, TargetKind: q.TargetKind, TargetRef: q.TargetRef, Revision: 1, CreatedAt: now, UpdatedAt: now}
 			result := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&row)

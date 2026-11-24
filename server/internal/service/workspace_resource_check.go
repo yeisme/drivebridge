@@ -168,7 +168,7 @@ func (s *Service) CheckResourceIntegrity(ctx context.Context, p Principal, id st
 		if current != digest {
 			return code("query_changed")
 		}
-		candidate := WorkspaceResourceCheck{ID: ID(), Owner: p.UserID, TenantID: p.TenantID, DescriptorID: id, DescriptorRevision: revision, CheckerVersion: resourceIntegrityChecker, State: state, TargetDigest: digest, CreatedAt: time.Now().UTC()}
+		candidate := WorkspaceResourceCheck{ID: ID(), Owner: p.UserID, TenantID: p.TenantID, DescriptorID: id, DescriptorRevision: revision, CheckerVersion: resourceIntegrityChecker, State: state, TargetDigest: digest, CreatedAt: time.Now().UTC().Truncate(time.Microsecond)}
 		written := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&candidate)
 		if written.Error != nil {
 			return code("database_unavailable")

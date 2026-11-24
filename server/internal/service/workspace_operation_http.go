@@ -1,6 +1,7 @@
 package service
 
 import (
+	"gorm.io/gorm/clause"
 	"net/http"
 	"time"
 
@@ -31,7 +32,7 @@ func (s *Service) workspaceOperationRecovery(p Principal, id string) (map[string
 			return err
 		}
 		op = current
-		if err := tx.Model(&Part{}).Where("operation_id = ?", op.ID).Order("`index`").Pluck("index", &indexes).Error; err != nil {
+		if err := tx.Model(&Part{}).Where("operation_id = ?", op.ID).Order(clause.OrderByColumn{Column: clause.Column{Name: "index"}}).Pluck("index", &indexes).Error; err != nil {
 			return code("database_unavailable")
 		}
 		return nil

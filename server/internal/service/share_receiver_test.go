@@ -22,7 +22,7 @@ func receiverFixture(t *testing.T) (*Service, Share, string) {
 	if err := os.Chmod(dir, 0700); err != nil {
 		t.Fatal(err)
 	}
-	s, err := Open(Config{State: dir, Enabled: true, Development: true, ShareReceivers: true, Origin: "http://localhost"})
+	s, err := Open(databaseTestConfig(t, Config{State: dir, Enabled: true, Development: true, ShareReceivers: true, Origin: "http://localhost"}))
 	if err != nil {
 		t.Fatal(err)
 	}

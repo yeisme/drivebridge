@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/yeisme/drivebridge-server/sdk/insights"
+	"gorm.io/gorm/clause"
 	"io"
 	"mime"
 	"net/http"
@@ -240,7 +241,23 @@ func (s *Service) Handler() http.Handler {
 		for k, v := range ext {
 			doc[k] = v
 		}
+		catalog, e := s.ActionCatalog(p, r.URL.Query().Get("space_id"))
+		if e != nil && r.URL.Query().Get("space_id") != "" {
+			return e
+		}
+		if e == nil {
+			doc["action_catalog"] = catalog
+		}
 		respond(w, doc)
+		return nil
+	}))
+	mux.HandleFunc("GET /api/v1/action-catalog", s.wrap("capabilities.catalog", func(w http.ResponseWriter, r *http.Request, p Principal) error {
+		catalog, err := s.ActionCatalog(p, r.URL.Query().Get("space_id"))
+		if err != nil {
+			return err
+		}
+		w.Header().Set("Cache-Control", "no-store")
+		respond(w, catalog)
 		return nil
 	}))
 	mux.HandleFunc("POST /api/v1/capabilities/check", s.wrap("capabilities.check", func(w http.ResponseWriter, r *http.Request, p Principal) error {
@@ -627,7 +644,9 @@ func (s *Service) Handler() http.Handler {
 			return e
 		}
 		parts := []Part{}
-		s.DB.Where("operation_id = ?", op.ID).Order("`index`").Find(&parts)
+		if err := s.DB.Where("operation_id = ?", op.ID).Order(clause.OrderByColumn{Column: clause.Column{Name: "index"}}).Find(&parts).Error; err != nil {
+			return code("database_unavailable")
+		}
 		indexes := []int{}
 		for _, part := range parts {
 			indexes = append(indexes, part.Index)
@@ -731,7 +750,7 @@ func (s *Service) Handler() http.Handler {
 		keys := s.ListUserKeys()
 		rows := make([]map[string]any, 0, len(keys))
 		for _, k := range keys {
-			rows = append(rows, map[string]any{"id": k.ID, "user": k.Owner, "name": k.Name, "admin": k.Admin, "expires_at": k.Expires, "revoked": k.Revoked, "archived": k.Archived, "disabled": k.Disabled})
+			rows = append(rows, map[string]any{"id": k.ID, "user": k.Owner, "name": k.Name, "admin": k.Admin, "one_time": k.OneTime, "consumed": k.Consumed, "expires_at": k.Expires, "revoked": k.Revoked, "archived": k.Archived, "disabled": k.Disabled})
 		}
 		respond(w, map[string]any{"keys": rows})
 		return nil

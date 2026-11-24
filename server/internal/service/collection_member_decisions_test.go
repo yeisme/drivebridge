@@ -125,13 +125,30 @@ func TestCollectionMemberDecisionsBudgetsAndRevision(t *testing.T) {
 	if _, err = f.Service.SetCollectionMembers(p, c.CollectionID, service.SetCollectionMembersRequest{ExpectedRevision: 1, Include: []string{a.FileID}}); err != nil {
 		t.Fatal(err)
 	}
-	if err = f.Service.DB.Model(&service.File{}).Where("id = ?", a.FileID).Update("path", strings.Repeat("x", 1024*1024)).Error; err != nil {
+	// Exceed the response budget with individually valid indexed paths. A
+	// single 1 MiB path violates PostgreSQL's index tuple limit before the
+	// application can exercise its wire budget.
+	largeFiles := make([]service.File, 1100)
+	largeMembers := make([]service.CollectionMember, len(largeFiles))
+	ids := make([]string, len(largeFiles))
+	for i := range largeFiles {
+		ids[i] = service.ID()
+		largeFiles[i] = service.File{ID: ids[i], Owner: p.UserID, SpaceID: h.space.ID, Path: fmt.Sprintf("budget/%s-%04d", strings.Repeat("x", 1024), i)}
+		largeMembers[i] = service.CollectionMember{ID: service.ID(), CollectionID: c.CollectionID, FileID: ids[i], Owner: p.UserID, Decision: "include"}
+	}
+	if err = f.Service.DB.CreateInBatches(largeFiles, 100).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err = f.Service.DB.CreateInBatches(largeMembers, 100).Error; err != nil {
 		t.Fatal(err)
 	}
 	if _, err = f.Service.CollectionMemberDecisions(t.Context(), p, c.CollectionID); err == nil || err.Error() != "query_budget_exceeded" {
 		t.Fatal("wire limit lost", err)
 	}
-	if err = f.Service.DB.Model(&service.File{}).Where("id = ?", a.FileID).Update("path", "budget/a.txt").Error; err != nil {
+	if err = f.Service.DB.Where("file_id IN ?", ids).Delete(&service.CollectionMember{}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err = f.Service.DB.Where("id IN ?", ids).Delete(&service.File{}).Error; err != nil {
 		t.Fatal(err)
 	}
 	fired := false

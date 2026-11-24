@@ -197,7 +197,7 @@ func (s *Service) RegisterWorkspaceResource(p Principal, input RegisterWorkspace
 			return code("database_unavailable")
 		}
 		row.ID = ID()
-		row.CreatedAt = time.Now().UTC()
+		row.CreatedAt = time.Now().UTC().Truncate(time.Microsecond)
 		row.UpdatedAt = row.CreatedAt
 		out, err = s.resourceViewOn(tx, p, row)
 		if err != nil {

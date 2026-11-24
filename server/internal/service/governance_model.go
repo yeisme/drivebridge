@@ -462,8 +462,10 @@ func (s *Service) BootstrapGovernance(admin string) error {
 			return err
 		}
 		var users []User
-		if err := tx.Where("? = ?", s.governanceActive(), false).Find(&users).Error; err != nil {
-			return err
+		if !s.governanceActive() {
+			if err := tx.Find(&users).Error; err != nil {
+				return err
+			}
 		}
 		for _, user := range users {
 			m := Membership{ID: ID(), TenantID: s.Instance, UserID: user.ID, DataOwner: user.ID, Role: "member", Status: "active"}

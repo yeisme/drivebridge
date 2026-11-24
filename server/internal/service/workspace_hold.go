@@ -102,7 +102,7 @@ func (s *Service) CreateWorkspaceHold(ctx context.Context, p Principal, fileID s
 		if count >= maxRetentionHoldsPerOwner {
 			return code("quota_exceeded")
 		}
-		now := time.Now().UTC()
+		now := time.Now().UTC().Truncate(time.Microsecond)
 		h := RetentionHold{ID: ID(), Owner: p.dataOwner(), TenantID: p.TenantID, FileID: fileID, VersionID: q.VersionID, Purpose: q.Purpose, SourceKind: q.SourceKind, SourceRef: q.SourceRef, Key: "workspace:" + ID(), Fingerprint: digest, Revision: 1, State: "active", ExpiresAt: expires, CreatedAt: now, UpdatedAt: now}
 		if err = tx.Create(&h).Error; err != nil {
 			return code("database_unavailable")
@@ -161,7 +161,7 @@ func (s *Service) ReleaseWorkspaceHold(ctx context.Context, p Principal, id stri
 		if h.Revision != q.ExpectedRevision || h.State != "active" {
 			return code("revision_conflict")
 		}
-		now := time.Now().UTC()
+		now := time.Now().UTC().Truncate(time.Microsecond)
 		result := tx.Model(&RetentionHold{}).Where("id = ? AND owner = ? AND tenant_id = ? AND revision = ? AND state = ?", id, p.dataOwner(), p.TenantID, q.ExpectedRevision, "active").Updates(map[string]any{"state": "released", "revision": q.ExpectedRevision + 1, "released_at": now, "updated_at": now})
 		if result.Error != nil {
 			return code("database_unavailable")
@@ -218,7 +218,7 @@ func (s *Service) LookupWorkspaceHold(ctx context.Context, p Principal, fileID s
 }
 
 func (s *Service) WorkspaceHolds(ctx context.Context, p Principal, fileID, versionID string, page contract.PageQuery) (contract.WorkspaceHoldList, error) {
-	out := contract.WorkspaceHoldList{Items: []contract.WorkspaceHoldView{}, ObservedAt: time.Now().UTC(), TotalKind: "unknown", ManagementEnabled: s.Config.HoldManagement}
+	out := contract.WorkspaceHoldList{Items: []contract.WorkspaceHoldView{}, ObservedAt: time.Now().UTC().Truncate(time.Microsecond), TotalKind: "unknown", ManagementEnabled: s.Config.HoldManagement}
 	err := s.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		f, err := s.holdFileOn(tx, p, fileID, versionID, true)
 		if err != nil {

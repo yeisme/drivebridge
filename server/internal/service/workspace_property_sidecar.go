@@ -373,7 +373,7 @@ func (s *Service) PatchFilePropertySidecar(ctx context.Context, p Principal, id 
 		if encoded.Len() > sidecarBudget {
 			return code("query_budget_exceeded")
 		}
-		now := time.Now().UTC()
+		now := time.Now().UTC().Truncate(time.Microsecond)
 		revision := row.Revision + 1
 		if row.ID == "" {
 			row = WorkspacePropertySidecar{ID: ID(), Owner: p.UserID, TenantID: p.TenantID, SpaceID: file.SpaceID, FileID: id, VersionID: q.BaseVersionID, Revision: revision, DefinitionRevision: catalog.Revision, ValuesJSON: encoded.String(), CreatedAt: now, UpdatedAt: now}

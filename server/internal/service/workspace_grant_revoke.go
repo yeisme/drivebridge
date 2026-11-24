@@ -85,7 +85,7 @@ func (s *Service) workspaceGrantStateChange(w http.ResponseWriter, r *http.Reque
 		if err := s.governanceAllow(tx, p, space.ID, grant.Prefix, "permission"); err != nil {
 			return err
 		}
-		now := time.Now().UTC()
+		now := time.Now().UTC().Truncate(time.Microsecond)
 		previousRevision := grant.Revision
 		var changeErr error
 		if action == "rename" && len(names) == 1 {

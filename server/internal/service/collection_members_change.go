@@ -42,7 +42,7 @@ func collectionMembersReceipt(row WorkspaceRequest, id string) (contract.Collect
 	if err != nil || len(digest) != 32 || row.ResultRevision < 2 || row.ResultRevision > 9007199254740991 || row.CreatedAt.IsZero() {
 		return contract.CollectionMembersReceipt{}, code("dependency_unavailable")
 	}
-	return contract.CollectionMembersReceipt{CollectionID: row.ResourceID, RequestDigest: row.RequestDigest, ResultRevision: row.ResultRevision, CommittedAt: row.CreatedAt}, nil
+	return contract.CollectionMembersReceipt{CollectionID: row.ResourceID, RequestDigest: row.RequestDigest, ResultRevision: row.ResultRevision, CommittedAt: row.CreatedAt.UTC().Truncate(time.Microsecond)}, nil
 }
 
 func (s *Service) ChangeCollectionMembers(ctx context.Context, p Principal, id string, q contract.CollectionMembersChangeRequest, key string) (contract.CollectionMembersReceipt, error) {

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"reflect"
 	"sort"
 	"strings"
 	"time"
@@ -260,7 +261,7 @@ func (s *Service) ApplyOutboxEvents(projection, ownerScope string, limit int) (i
 			if e := tx.Model(&ProjectionCheckpoint{}).Where("projection = ? AND owner_scope = ?", projection, ownerScope).Updates(map[string]any{"watermark": lastSeq, "updated_at": time.Now().UTC()}).Error; e != nil {
 				return e
 			}
-			if e := tx.Model(&OutboxEvent{}).Where("owner_scope = ? AND source_sequence <= ? AND kind = ?", ownerScope, lastSeq, "file_catalogue.upsert").Update("published", true).Error; e != nil {
+			if e := tx.Model(&OutboxEvent{}).Where("owner_scope = ? AND source_sequence > ? AND source_sequence <= ? AND kind = ? AND published = ?", ownerScope, checkpoint.Watermark, lastSeq, "file_catalogue.upsert", false).Update("published", true).Error; e != nil {
 				return e
 			}
 		}
@@ -429,7 +430,17 @@ func (s *Service) AdvanceProjectionRebuild(operationID string, pageLimit int) (m
 			}
 			for _, f := range files {
 				payload, _ := json.Marshal(map[string]any{"path": f.Path, "size_bytes": f.Size, "trashed": f.Trashed})
-				row := ProjectionRow{Projection: gen.Projection, Generation: gen.Generation, ResourceID: f.ID, OwnerScope: f.Owner, Revision: fileRevision(f.Updated), Tombstone: f.Trashed, Digest: string(payload), Payload: string(payload), CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}
+				// The outbox owns the projection revision. PostgreSQL timestamps
+				// lose sub-microsecond precision; reconstructing a revision from
+				// the persisted timestamp cannot reproduce the original event.
+				revision := fileRevision(f.Updated)
+				var latest OutboxEvent
+				if err := tx.Where("resource_id = ? AND owner_scope = ? AND kind = ?", f.ID, f.Owner, "file_catalogue.upsert").Order("source_sequence DESC").First(&latest).Error; err == nil {
+					revision = latest.ResourceRevision
+				} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+					return code("database_unavailable")
+				}
+				row := ProjectionRow{Projection: gen.Projection, Generation: gen.Generation, ResourceID: f.ID, OwnerScope: f.Owner, Revision: revision, Tombstone: f.Trashed, Digest: string(payload), Payload: string(payload), CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}
 				if e := tx.Create(&row).Error; e != nil {
 					return code("database_unavailable")
 				}
@@ -636,12 +647,16 @@ func (s *Service) RuntimeStatusView(p Principal) (map[string]any, error) {
 // exist before metadata export or import.
 func (s *Service) MetadataQuiescence() error {
 	var pending int64
-	s.DB.Model(&Operation{}).Where("status IN ?", []string{"awaiting_upload", "verifying", "transferring", "running"}).Count(&pending)
+	if err := s.DB.Model(&Operation{}).Where("status IN ?", []string{"awaiting_upload", "verifying", "transferring", "running"}).Count(&pending).Error; err != nil {
+		return code("database_unavailable")
+	}
 	if pending > 0 {
 		return code("metadata_migration_requires_quiescence")
 	}
 	var leases int64
-	s.DB.Model(&WorkerLease{}).Where("expires_at > ?", time.Now().UTC()).Count(&leases)
+	if err := s.DB.Model(&WorkerLease{}).Where("expires_at > ?", time.Now().UTC()).Count(&leases).Error; err != nil {
+		return code("database_unavailable")
+	}
 	if leases > 0 {
 		return code("metadata_migration_requires_quiescence")
 	}
@@ -662,20 +677,29 @@ func (s *Service) ExportMetadata(w interface{ Write([]byte) (int, error) }) erro
 		return e
 	}
 	write := func(kind string, rows interface{}) error {
-		b, e := json.Marshal(map[string]any{"kind": kind, "rows": rows})
+		wire, e := metadataWireRows(rows)
+		if e != nil {
+			return e
+		}
+		b, e := json.Marshal(map[string]any{"kind": kind, "rows": wire})
 		if e != nil {
 			return e
 		}
 		_, e = w.Write(append(b, '\n'))
 		return e
 	}
+	load := func(dst any) error { return s.DB.Find(dst).Error }
 	spaces := []Space{}
-	s.DB.Find(&spaces)
+	if e := load(&spaces); e != nil {
+		return e
+	}
 	if e := write("spaces", spaces); e != nil {
 		return e
 	}
 	connections := []Connection{}
-	s.DB.Find(&connections)
+	if e := load(&connections); e != nil {
+		return e
+	}
 	exported := make([]connectionExport, 0, len(connections))
 	for _, c := range connections {
 		exported = append(exported, connectionExport{Connection: c, SealedSecret: c.Secret})
@@ -684,23 +708,72 @@ func (s *Service) ExportMetadata(w interface{ Write([]byte) (int, error) }) erro
 		return e
 	}
 	files := []File{}
-	s.DB.Find(&files)
+	if e := load(&files); e != nil {
+		return e
+	}
 	if e := write("files", files); e != nil {
 		return e
 	}
 	versions := []Version{}
-	s.DB.Find(&versions)
+	if e := load(&versions); e != nil {
+		return e
+	}
 	if e := write("versions", versions); e != nil {
 		return e
 	}
 	operations := []Operation{}
-	s.DB.Find(&operations)
+	if e := load(&operations); e != nil {
+		return e
+	}
 	if e := write("operations", operations); e != nil {
 		return e
 	}
 	grants := []AccessGrant{}
-	s.DB.Find(&grants)
-	return write("grants", grants)
+	if e := load(&grants); e != nil {
+		return e
+	}
+	if e := write("grants", grants); e != nil {
+		return e
+	}
+	workspaceGrants := []WorkspaceGrant{}
+	workspaceGroups := []WorkspaceAgentGroup{}
+	workspaceOrganizations := []WorkspaceAgentOrganization{}
+	workspaceRequests := []WorkspaceRequest{}
+	workspaceSubmissions := []WorkspaceSubmission{}
+	workspaceSubmissionDecisions := []WorkspaceSubmissionDecision{}
+	workspaceCredentials := []WorkspaceCredentialHistory{}
+	workspaceSuggestions := []WorkspaceLabelSuggestion{}
+	workspaceSuggestionDecisions := []WorkspaceSuggestionDecision{}
+	workspaceInvocations := []WorkspaceInvocation{}
+	for _, rows := range []any{&workspaceGrants, &workspaceGroups, &workspaceOrganizations, &workspaceRequests, &workspaceSubmissions, &workspaceSubmissionDecisions, &workspaceCredentials, &workspaceSuggestions, &workspaceSuggestionDecisions, &workspaceInvocations} {
+		if e := load(rows); e != nil {
+			return e
+		}
+	}
+	credentialExports := make([]workspaceCredentialExport, 0, len(workspaceCredentials))
+	for _, row := range workspaceCredentials {
+		credentialExports = append(credentialExports, workspaceCredentialExport{WorkspaceCredentialHistory: row, TokenHash: row.TokenHash})
+	}
+	for kind, rows := range map[string]any{
+		"workspace_grants": workspaceGrants, "workspace_groups": workspaceGroups,
+		"workspace_organizations": workspaceOrganizations, "workspace_requests": workspaceRequests,
+		"workspace_submissions": workspaceSubmissions, "workspace_submission_decisions": workspaceSubmissionDecisions,
+		"workspace_credentials": credentialExports, "workspace_suggestions": workspaceSuggestions,
+		"workspace_suggestion_decisions": workspaceSuggestionDecisions, "workspace_invocations": workspaceInvocations,
+	} {
+		if e := write(kind, rows); e != nil {
+			return e
+		}
+	}
+	return nil
+}
+
+// workspaceCredentialExport is migration-only. TokenHash stays json:"-" on the
+// stored model so ordinary API responses cannot leak it, but a metadata move
+// must carry the hash or restored history violates its unique constraint.
+type workspaceCredentialExport struct {
+	WorkspaceCredentialHistory
+	TokenHash string `json:"token_hash,omitempty"`
 }
 
 // connectionExport carries the sealed connection credential in the snapshot.
@@ -713,13 +786,23 @@ type connectionExport struct {
 
 // metadataSnapshot is one decoded export.
 type metadataSnapshot struct {
-	InstanceID  string
-	Spaces      []Space
-	Connections []connectionExport
-	Files       []File
-	Versions    []Version
-	Operations  []Operation
-	Grants      []AccessGrant
+	InstanceID                   string
+	Spaces                       []Space
+	Connections                  []connectionExport
+	Files                        []File
+	Versions                     []Version
+	Operations                   []Operation
+	Grants                       []AccessGrant
+	WorkspaceGrants              []WorkspaceGrant
+	WorkspaceGroups              []WorkspaceAgentGroup
+	WorkspaceOrganizations       []WorkspaceAgentOrganization
+	WorkspaceRequests            []WorkspaceRequest
+	WorkspaceSubmissions         []WorkspaceSubmission
+	WorkspaceSubmissionDecisions []WorkspaceSubmissionDecision
+	WorkspaceCredentials         []WorkspaceCredentialHistory
+	WorkspaceSuggestions         []WorkspaceLabelSuggestion
+	WorkspaceSuggestionDecisions []WorkspaceSuggestionDecision
+	WorkspaceInvocations         []WorkspaceInvocation
 }
 
 // decodeMetadata streams one JSONL export without buffering the whole file.
@@ -747,29 +830,60 @@ func decodeMetadata(r interface{ Read([]byte) (int, error) }) (*metadataSnapshot
 				}
 				snapshot.InstanceID = h.InstanceID
 			case "spaces":
-				if e := json.Unmarshal(envelope.Rows, &snapshot.Spaces); e != nil {
+				if e := decodeMetadataRows(envelope.Rows, &snapshot.Spaces); e != nil {
 					return nil, code("invalid_request")
 				}
 			case "connections":
-				if e := json.Unmarshal(envelope.Rows, &snapshot.Connections); e != nil {
+				if e := decodeMetadataRows(envelope.Rows, &snapshot.Connections); e != nil {
 					return nil, code("invalid_request")
 				}
 			case "files":
-				if e := json.Unmarshal(envelope.Rows, &snapshot.Files); e != nil {
+				if e := decodeMetadataRows(envelope.Rows, &snapshot.Files); e != nil {
 					return nil, code("invalid_request")
 				}
 			case "versions":
-				if e := json.Unmarshal(envelope.Rows, &snapshot.Versions); e != nil {
+				if e := decodeMetadataRows(envelope.Rows, &snapshot.Versions); e != nil {
 					return nil, code("invalid_request")
 				}
 			case "operations":
-				if e := json.Unmarshal(envelope.Rows, &snapshot.Operations); e != nil {
+				if e := decodeMetadataRows(envelope.Rows, &snapshot.Operations); e != nil {
 					return nil, code("invalid_request")
 				}
 			case "grants":
-				if e := json.Unmarshal(envelope.Rows, &snapshot.Grants); e != nil {
+				if e := decodeMetadataRows(envelope.Rows, &snapshot.Grants); e != nil {
 					return nil, code("invalid_request")
 				}
+			case "workspace_grants":
+				e = decodeMetadataRows(envelope.Rows, &snapshot.WorkspaceGrants)
+			case "workspace_groups":
+				e = decodeMetadataRows(envelope.Rows, &snapshot.WorkspaceGroups)
+			case "workspace_organizations":
+				e = decodeMetadataRows(envelope.Rows, &snapshot.WorkspaceOrganizations)
+			case "workspace_requests":
+				e = decodeMetadataRows(envelope.Rows, &snapshot.WorkspaceRequests)
+			case "workspace_submissions":
+				e = decodeMetadataRows(envelope.Rows, &snapshot.WorkspaceSubmissions)
+			case "workspace_submission_decisions":
+				e = decodeMetadataRows(envelope.Rows, &snapshot.WorkspaceSubmissionDecisions)
+			case "workspace_credentials":
+				var exported []workspaceCredentialExport
+				if err := json.Unmarshal(envelope.Rows, &exported); err != nil {
+					return nil, code("invalid_request")
+				}
+				snapshot.WorkspaceCredentials = make([]WorkspaceCredentialHistory, len(exported))
+				for i, row := range exported {
+					row.WorkspaceCredentialHistory.TokenHash = row.TokenHash
+					snapshot.WorkspaceCredentials[i] = row.WorkspaceCredentialHistory
+				}
+			case "workspace_suggestions":
+				e = decodeMetadataRows(envelope.Rows, &snapshot.WorkspaceSuggestions)
+			case "workspace_suggestion_decisions":
+				e = decodeMetadataRows(envelope.Rows, &snapshot.WorkspaceSuggestionDecisions)
+			case "workspace_invocations":
+				e = decodeMetadataRows(envelope.Rows, &snapshot.WorkspaceInvocations)
+			}
+			if e != nil {
+				return nil, code("invalid_request")
 			}
 		}
 		if e != nil {
@@ -792,7 +906,27 @@ func metadataDigest(s *metadataSnapshot) map[string]int64 {
 			credentials++
 		}
 	}
-	return map[string]int64{"spaces": int64(len(s.Spaces)), "connections": int64(len(s.Connections)), "connection_credentials": credentials, "files": int64(len(s.Files)), "versions": int64(len(s.Versions)), "operations": int64(len(s.Operations)), "grants": int64(len(s.Grants))}
+	return map[string]int64{"spaces": int64(len(s.Spaces)), "connections": int64(len(s.Connections)), "connection_credentials": credentials, "files": int64(len(s.Files)), "versions": int64(len(s.Versions)), "operations": int64(len(s.Operations)), "grants": int64(len(s.Grants)), "workspace_grants": int64(len(s.WorkspaceGrants)), "workspace_groups": int64(len(s.WorkspaceGroups)), "workspace_organizations": int64(len(s.WorkspaceOrganizations)), "workspace_requests": int64(len(s.WorkspaceRequests)), "workspace_submissions": int64(len(s.WorkspaceSubmissions)), "workspace_submission_decisions": int64(len(s.WorkspaceSubmissionDecisions)), "workspace_credentials": int64(len(s.WorkspaceCredentials)), "workspace_suggestions": int64(len(s.WorkspaceSuggestions)), "workspace_suggestion_decisions": int64(len(s.WorkspaceSuggestionDecisions)), "workspace_invocations": int64(len(s.WorkspaceInvocations))}
+}
+
+func metadataFingerprints(s *metadataSnapshot) map[string]string {
+	hashRows := func(v any) string {
+		value := reflect.ValueOf(v)
+		parts := make([]string, 0, value.Len())
+		for i := 0; i < value.Len(); i++ {
+			wire, _ := metadataWireRow(value.Index(i))
+			b, _ := json.Marshal(wire)
+			parts = append(parts, string(b))
+		}
+		sort.Strings(parts)
+		b := []byte(strings.Join(parts, "\n"))
+		sum := sha256.Sum256(b)
+		return hex.EncodeToString(sum[:])
+	}
+	return map[string]string{
+		"spaces": hashRows(s.Spaces), "connections": hashRows(s.Connections), "files": hashRows(s.Files), "versions": hashRows(s.Versions), "operations": hashRows(s.Operations), "grants": hashRows(s.Grants),
+		"workspace_grants": hashRows(s.WorkspaceGrants), "workspace_groups": hashRows(s.WorkspaceGroups), "workspace_organizations": hashRows(s.WorkspaceOrganizations), "workspace_requests": hashRows(s.WorkspaceRequests), "workspace_submissions": hashRows(s.WorkspaceSubmissions), "workspace_submission_decisions": hashRows(s.WorkspaceSubmissionDecisions), "workspace_credentials": hashRows(s.WorkspaceCredentials), "workspace_suggestions": hashRows(s.WorkspaceSuggestions), "workspace_suggestion_decisions": hashRows(s.WorkspaceSuggestionDecisions), "workspace_invocations": hashRows(s.WorkspaceInvocations),
+	}
 }
 
 // ImportMetadata loads an export into a fresh target database. The target
@@ -812,7 +946,32 @@ func (s *Service) ImportMetadata(r interface{ Read([]byte) (int, error) }, targe
 		return nil, e
 	}
 	var existing int64
-	target.Model(&File{}).Count(&existing)
+	for _, model := range []any{&Space{}, &Connection{}, &File{}, &Version{}, &Operation{}, &AccessGrant{}} {
+		var count int64
+		if e := target.Model(model).Count(&count).Error; e != nil {
+			return nil, code("database_unavailable")
+		}
+		existing += count
+	}
+	workspaceChecks := []struct {
+		model any
+		count int
+	}{
+		{&WorkspaceGrant{}, len(snapshot.WorkspaceGrants)}, {&WorkspaceAgentGroup{}, len(snapshot.WorkspaceGroups)}, {&WorkspaceAgentOrganization{}, len(snapshot.WorkspaceOrganizations)}, {&WorkspaceRequest{}, len(snapshot.WorkspaceRequests)}, {&WorkspaceSubmission{}, len(snapshot.WorkspaceSubmissions)}, {&WorkspaceSubmissionDecision{}, len(snapshot.WorkspaceSubmissionDecisions)}, {&WorkspaceCredentialHistory{}, len(snapshot.WorkspaceCredentials)}, {&WorkspaceLabelSuggestion{}, len(snapshot.WorkspaceSuggestions)}, {&WorkspaceSuggestionDecision{}, len(snapshot.WorkspaceSuggestionDecisions)}, {&WorkspaceInvocation{}, len(snapshot.WorkspaceInvocations)},
+	}
+	for _, item := range workspaceChecks {
+		if !target.Migrator().HasTable(item.model) {
+			if item.count > 0 {
+				return nil, code("database_unavailable")
+			}
+			continue
+		}
+		var count int64
+		if e := target.Model(item.model).Count(&count).Error; e != nil {
+			return nil, code("database_unavailable")
+		}
+		existing += count
+	}
 	if existing > 0 {
 		// The target already carries business rows: switching back over new
 		// writes requires a reverse migration after quiescing this target,
@@ -855,12 +1014,25 @@ func (s *Service) ImportMetadata(r interface{ Read([]byte) (int, error) }, targe
 				return e
 			}
 		}
+		workspaceRows := []struct {
+			rows  any
+			count int
+		}{
+			{&snapshot.WorkspaceGrants, len(snapshot.WorkspaceGrants)}, {&snapshot.WorkspaceGroups, len(snapshot.WorkspaceGroups)}, {&snapshot.WorkspaceOrganizations, len(snapshot.WorkspaceOrganizations)}, {&snapshot.WorkspaceRequests, len(snapshot.WorkspaceRequests)}, {&snapshot.WorkspaceSubmissions, len(snapshot.WorkspaceSubmissions)}, {&snapshot.WorkspaceSubmissionDecisions, len(snapshot.WorkspaceSubmissionDecisions)}, {&snapshot.WorkspaceCredentials, len(snapshot.WorkspaceCredentials)}, {&snapshot.WorkspaceSuggestions, len(snapshot.WorkspaceSuggestions)}, {&snapshot.WorkspaceSuggestionDecisions, len(snapshot.WorkspaceSuggestionDecisions)}, {&snapshot.WorkspaceInvocations, len(snapshot.WorkspaceInvocations)},
+		}
+		for _, item := range workspaceRows {
+			if item.count > 0 {
+				if e := tx.Create(item.rows).Error; e != nil {
+					return e
+				}
+			}
+		}
 		return nil
 	})
 	if e != nil {
 		return nil, code("database_unavailable")
 	}
-	return map[string]any{"imported": metadataDigest(snapshot), "instance_id": snapshot.InstanceID}, nil
+	return map[string]any{"imported": metadataDigest(snapshot), "fingerprints": metadataFingerprints(snapshot), "instance_id": snapshot.InstanceID}, nil
 }
 
 // VerifyMetadata compares two exports: instance identity, table counts and
@@ -878,11 +1050,17 @@ func (s *Service) VerifyMetadata(a, b interface{ Read([]byte) (int, error) }) (m
 		return nil, code("invalid_request")
 	}
 	dl, dr := metadataDigest(left), metadataDigest(right)
+	fl, fr := metadataFingerprints(left), metadataFingerprints(right)
 	matching := true
 	for k, v := range dl {
 		if dr[k] != v {
 			matching = false
 		}
 	}
-	return map[string]any{"instance_id": left.InstanceID, "source": dl, "target": dr, "matching": matching}, nil
+	for k, v := range fl {
+		if fr[k] != v {
+			matching = false
+		}
+	}
+	return map[string]any{"instance_id": left.InstanceID, "source": dl, "target": dr, "source_fingerprints": fl, "target_fingerprints": fr, "matching": matching}, nil
 }

@@ -21,7 +21,7 @@ func TestWorkspaceInvocationStartedOrder(t *testing.T) {
 		}
 	}
 	base := time.Date(2026, 10, 6, 12, 0, 0, 0, time.UTC)
-	times := []time.Time{base, base.Add(time.Nanosecond), base.In(time.FixedZone("east", 8*3600)), base.Add(-time.Hour).In(time.FixedZone("west", -7*3600))}
+	times := []time.Time{base, base.Add(time.Microsecond), base.In(time.FixedZone("east", 8*3600)), base.Add(-time.Hour).In(time.FixedZone("west", -7*3600))}
 	ids := []string{"a-old", "z-new", "b-tie", "c-oldest"}
 	for i, id := range ids {
 		row := service.WorkspaceInvocation{ID: id, Owner: h.user.ID, SpaceID: h.space.ID, AgentID: a.ID, GrantID: g.ID, Protocol: "http", Action: "files.list", RequestID: service.ID(), Result: "unknown", StartedAt: times[i]}

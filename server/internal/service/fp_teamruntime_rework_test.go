@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 
@@ -162,8 +163,12 @@ func TestFPTeamRuntimeRebuildDualScopeInterleaved(t *testing.T) {
 		if e := f.Service.DB.Where("projection = ? AND generation = ? AND resource_id = ?", "file_catalogue", view["generation"], files[0].ID).First(&genRow).Error; e != nil {
 			t.Fatalf("scope %s event skipped by rebuild: %v", row.scope, e)
 		}
-		if genRow.Revision != files[0].Updated.UnixNano() {
-			t.Fatalf("scope %s row revision drifted: %d vs %d", row.scope, genRow.Revision, files[0].Updated.UnixNano())
+		var event service.OutboxEvent
+		if err := f.Service.DB.Where("resource_id = ? AND owner_scope = ? AND kind = ?", files[0].ID, row.scope, "file_catalogue.upsert").Order("source_sequence DESC").First(&event).Error; err != nil {
+			t.Fatal(err)
+		}
+		if genRow.Revision != event.ResourceRevision {
+			t.Fatalf("scope %s row revision drifted: %d vs original event %d", row.scope, genRow.Revision, event.ResourceRevision)
 		}
 	}
 	// Both scopes' checkpoints moved to the new generation.
@@ -179,6 +184,64 @@ func TestFPTeamRuntimeRebuildDualScopeInterleaved(t *testing.T) {
 // Rework MAJOR-3: importing a snapshot whose tables are empty (a fresh
 // deployment with no uploads yet) must succeed instead of failing on empty
 // slice inserts, and the import stays all-or-nothing.
+func TestFPTeamRuntimeImportWorkspaceRows(t *testing.T) {
+	f := rig(t)
+	h, _ := login(t, f, "alice")
+	op := fpRuntimeUpload(t, f, h, "metadata-source.txt")
+	if _, err := f.Service.ArchiveVersion(t.Context(), service.Principal{UserID: h.user.ID}, service.ArchiveRequest{SourceFileID: op.FileID, SourceVersionID: op.VersionID, TargetSpaceID: h.space.ID, TargetPath: "metadata-copy.txt"}, "metadata\x00legacy-key"); err != nil {
+		t.Fatal(err)
+	}
+	fpDrainRuntime(t, f)
+	now := time.Now().UTC().Truncate(time.Second)
+	grant := service.WorkspaceGrant{ID: "grant", AgentID: "agent", Owner: "human", TenantID: "tenant", SpaceID: "space", ConnectionID: "connection", Protocol: "mcp", Actions: "read", RestrictionProfile: "personal_workspace_v1", ExpiryMode: "never", IssuedAt: now, Revision: 1, CredentialGeneration: 1, CreatedAt: now, UpdatedAt: now}
+	credential := service.WorkspaceCredentialHistory{ID: "history", GrantID: grant.ID, Generation: 1, TokenHash: service.Hash("synthetic-workspace-token"), CreatedAt: now}
+	if e := f.Service.DB.Create(&grant).Error; e != nil {
+		t.Fatal(e)
+	}
+	if e := f.Service.DB.Create(&credential).Error; e != nil {
+		t.Fatal(e)
+	}
+	var buf bytes.Buffer
+	if e := f.Service.ExportMetadata(&buf); e != nil {
+		t.Fatal(e)
+	}
+	snapshot := buf.Bytes()
+	if !bytes.Contains(snapshot, []byte(credential.TokenHash)) {
+		t.Fatal("workspace credential history dropped its token hash")
+	}
+	targetDB, e := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "metadata.sqlite")), &gorm.Config{})
+	if e != nil {
+		t.Fatal(e)
+	}
+	if e := targetDB.AutoMigrate(&service.Space{}, &service.Connection{}, &service.File{}, &service.Version{}, &service.Operation{}, &service.AccessGrant{}, &service.WorkspaceGrant{}, &service.WorkspaceCredentialHistory{}); e != nil {
+		t.Fatal(e)
+	}
+	if _, e := f.Service.ImportMetadata(bytes.NewReader(snapshot), targetDB); e != nil {
+		t.Fatalf("workspace snapshot import failed: %v", e)
+	}
+	// Count equality cannot prove recovery. Compare the actual persisted
+	// authorization and operation fields, including fields hidden from APIs.
+	for _, model := range []any{&[]service.Space{}, &[]service.Connection{}, &[]service.File{}, &[]service.Version{}, &[]service.Operation{}} {
+		original := reflect.New(reflect.TypeOf(model).Elem()).Interface()
+		if e := f.Service.DB.Order("id").Find(original).Error; e != nil {
+			t.Fatal(e)
+		}
+		if e := targetDB.Order("id").Find(model).Error; e != nil {
+			t.Fatal(e)
+		}
+		if !reflect.DeepEqual(original, model) {
+			t.Fatalf("metadata recovery fields changed for %T", model)
+		}
+	}
+	var imported service.WorkspaceCredentialHistory
+	if e := targetDB.First(&imported, "id = ?", credential.ID).Error; e != nil {
+		t.Fatal(e)
+	}
+	if imported.TokenHash != credential.TokenHash || imported.GrantID != credential.GrantID {
+		t.Fatalf("imported credential history changed: %+v", imported)
+	}
+}
+
 func TestFPTeamRuntimeImportEmptySnapshot(t *testing.T) {
 	f := rig(t)
 	h, _ := login(t, f, "alice")

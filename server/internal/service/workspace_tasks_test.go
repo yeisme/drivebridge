@@ -14,7 +14,7 @@ func TestWorkspaceOperationTaskProjection(t *testing.T) {
 	f := rig(t)
 	alice, _ := login(t, f, "alice")
 	bob, _ := login(t, f, "bob")
-	now := time.Now().UTC()
+	now := time.Now().UTC().Truncate(time.Microsecond)
 	rows := []service.Operation{
 		{ID: "task-a", Owner: alice.user.ID, SpaceID: alice.space.ID, Kind: "upload", Path: "a.md", Status: "verifying", Size: 100, Transferred: 100, Caller: "claimed-agent", TaskRef: "claimed-task", Updated: now},
 		{ID: "task-b", Owner: alice.user.ID, ActorID: alice.user.ID, AgentID: "authenticated-agent", SpaceID: alice.space.ID, Kind: "upload", Path: "b.md", Status: "completed", FileID: "file-b", VersionID: "version-b", Updated: now},
@@ -110,7 +110,7 @@ func TestWorkspaceOperationTaskProjection(t *testing.T) {
 func TestWorkspaceOperationTaskSubmissionBinding(t *testing.T) {
 	f := rig(t)
 	alice, _ := login(t, f, "alice")
-	op := service.Operation{ID: service.ID(), Key: "task-submission", Owner: alice.user.ID, ActorID: alice.user.ID, AgentID: "real-agent", SpaceID: alice.space.ID, Kind: "upload", Purpose: "inbox_staging", WorkspaceGrantID: "real-grant", Path: ".inbox-staging/private-name", Status: "awaiting_upload", Updated: time.Now().UTC()}
+	op := service.Operation{ID: service.ID(), Key: "task-submission", Owner: alice.user.ID, ActorID: alice.user.ID, AgentID: "real-agent", SpaceID: alice.space.ID, Kind: "upload", Purpose: "inbox_staging", WorkspaceGrantID: "real-grant", Path: ".inbox-staging/private-name", Status: "awaiting_upload", Updated: time.Now().UTC().Truncate(time.Microsecond)}
 	if err := f.Service.DB.Create(&op).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -142,7 +142,7 @@ func TestWorkspaceOperationTaskScanBudget(t *testing.T) {
 	rows := make([]service.Operation, 1001)
 	for i := range rows {
 		id := service.ID()
-		rows[i] = service.Operation{ID: id, Key: id, Owner: alice.user.ID, SpaceID: alice.space.ID, Kind: "upload", Status: "running", Path: "budget", Updated: time.Now().UTC()}
+		rows[i] = service.Operation{ID: id, Key: id, Owner: alice.user.ID, SpaceID: alice.space.ID, Kind: "upload", Status: "running", Path: "budget", Updated: time.Now().UTC().Truncate(time.Microsecond)}
 	}
 	if err := f.Service.DB.CreateInBatches(rows, 50).Error; err != nil {
 		t.Fatal(err)

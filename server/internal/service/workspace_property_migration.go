@@ -139,7 +139,7 @@ func (s *Service) propertyMigrationReceiptOn(tx *gorm.DB, p Principal, space, st
 }
 
 func createPropertyMigrationReceipt(tx *gorm.DB, p Principal, plan OrganizationPlan, stage, key, digest string) (contract.PropertyMigrationReceipt, error) {
-	row := WorkspaceRequest{ID: ID(), Owner: p.UserID, TenantID: p.TenantID, ActorID: p.UserID, Action: "property.migration." + stage, RequestKey: key, RequestDigest: digest, ResourceID: plan.ID, ResultRevision: plan.Revision, CreatedAt: time.Now().UTC()}
+	row := WorkspaceRequest{ID: ID(), Owner: p.UserID, TenantID: p.TenantID, ActorID: p.UserID, Action: "property.migration." + stage, RequestKey: key, RequestDigest: digest, ResourceID: plan.ID, ResultRevision: plan.Revision, CreatedAt: time.Now().UTC().Truncate(time.Microsecond)}
 	if err := tx.Create(&row).Error; err != nil {
 		return contract.PropertyMigrationReceipt{}, code("database_unavailable")
 	}
@@ -209,7 +209,7 @@ func (s *Service) PreviewPropertyMigration(ctx context.Context, p Principal, spa
 		if err != nil {
 			return err
 		}
-		now := time.Now().UTC()
+		now := time.Now().UTC().Truncate(time.Microsecond)
 		rawRequest, _ := json.Marshal(q)
 		actions, _ := json.Marshal([]OrganizationAction{{Kind: propertyMigrationAction, Value: string(rawRequest)}})
 		plan := OrganizationPlan{ID: ID(), Owner: p.UserID, TenantID: p.TenantID, SpaceID: space, Actions: string(actions), Revision: 1, Phase: "previewed", Risk: "approval_required", ItemsTotal: int64(len(rows)), Key: Hash(p.UserID + "\x00" + p.TenantID + "\x00property.migration\x00" + key), Fingerprint: digest, CreatedAt: now, UpdatedAt: now}

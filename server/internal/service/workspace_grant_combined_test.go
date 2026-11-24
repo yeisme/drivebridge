@@ -20,7 +20,7 @@ func TestWorkspaceGrantCombinedPatchAtomicHTTP(t *testing.T) {
 	if err := f.Service.DB.Model(&service.Agent{}).Where("id = ?", a.ID).Updates(map[string]any{"restriction_profile": "personal_workspace_v1", "connection_id": h.space.ConnectionID}).Error; err != nil {
 		t.Fatal(err)
 	}
-	g := service.WorkspaceGrant{ID: service.ID(), AgentID: a.ID, Owner: h.user.ID, SpaceID: h.space.ID, ConnectionID: h.space.ConnectionID, Prefix: "refs", Protocol: "http", Actions: "inbox.submit", RestrictionProfile: "personal_workspace_v1", ExpiryMode: "never", IssuedAt: time.Now().UTC(), Revision: 1, CredentialGeneration: 1}
+	g := service.WorkspaceGrant{ID: service.ID(), AgentID: a.ID, Owner: h.user.ID, SpaceID: h.space.ID, ConnectionID: h.space.ConnectionID, Prefix: "refs", Protocol: "http", Actions: "inbox.submit", RestrictionProfile: "personal_workspace_v1", ExpiryMode: "never", IssuedAt: time.Now().UTC().Truncate(time.Microsecond), Revision: 1, CredentialGeneration: 1}
 	if err := f.Service.DB.Create(&g).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +105,7 @@ func TestWorkspaceGrantCombinedPatchAtomicHTTP(t *testing.T) {
 	if status != 200 || permanentReplay.ExpiresAt != nil || permanentReplay.Revision != 3 || permanentReplay.ExpiryChangedAt == nil || !permanentReplay.ExpiryChangedAt.Equal(*permanent.ExpiryChangedAt) {
 		t.Fatal("never replay changed expiry timestamp")
 	}
-	past := time.Now().UTC().Add(-time.Minute)
+	past := time.Now().UTC().Truncate(time.Microsecond).Add(-time.Minute)
 	if err := f.Service.DB.Model(&service.WorkspaceGrant{}).Where("id = ?", g.ID).Updates(map[string]any{"expiry_mode": "duration", "expires_at": past}).Error; err != nil {
 		t.Fatal(err)
 	}

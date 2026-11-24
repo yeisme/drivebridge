@@ -56,7 +56,7 @@ func (s *Service) workspaceGrantRotate(w http.ResponseWriter, r *http.Request, p
 			return code("internal_error")
 		}
 		secret := "db_" + hex.EncodeToString(material)
-		now := time.Now().UTC()
+		now := time.Now().UTC().Truncate(time.Microsecond)
 		_, issued, err := rotateWorkspaceRequestOn(tx, p.UserID, p.TenantID, p.UserID, grant.ID, keys[0], input.ExpectedRevision, Hash(secret), now)
 		if err != nil {
 			return err

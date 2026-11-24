@@ -18,8 +18,8 @@ func TestWorkspaceRotationHTTPOneTimeDelivery(t *testing.T) {
 	alice, _ := login(t, f, "alice")
 	bob, _ := login(t, f, "bob")
 	a, oldClient := agent(t, alice, "refs", "read")
-	deadline := time.Now().UTC().Add(time.Hour)
-	g := service.WorkspaceGrant{ID: service.ID(), AgentID: a.ID, Owner: alice.user.ID, SpaceID: alice.space.ID, ConnectionID: alice.space.ConnectionID, Prefix: a.Prefix, Protocol: "mcp", Actions: "files.read", RestrictionProfile: "personal_workspace_v1", ExpiryMode: "duration", ExpiresAt: &deadline, IssuedAt: time.Now().UTC(), Revision: 1, CredentialGeneration: 1}
+	deadline := time.Now().UTC().Truncate(time.Microsecond).Add(time.Hour)
+	g := service.WorkspaceGrant{ID: service.ID(), AgentID: a.ID, Owner: alice.user.ID, SpaceID: alice.space.ID, ConnectionID: alice.space.ConnectionID, Prefix: a.Prefix, Protocol: "mcp", Actions: "files.read", RestrictionProfile: "personal_workspace_v1", ExpiryMode: "duration", ExpiresAt: &deadline, IssuedAt: time.Now().UTC().Truncate(time.Microsecond), Revision: 1, CredentialGeneration: 1}
 	if err := f.Service.DB.Create(&g).Error; err != nil {
 		t.Fatal(err)
 	}

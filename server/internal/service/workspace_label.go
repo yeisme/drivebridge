@@ -158,7 +158,7 @@ func (s *Service) UpdateLabelDefinitions(ctx context.Context, p Principal, id st
 				return code("unsupported_action")
 			}
 		}
-		now := time.Now().UTC()
+		now := time.Now().UTC().Truncate(time.Microsecond)
 		revision := current.Revision + 1
 		if current.Revision == 0 {
 			inserted := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&WorkspaceLabelCatalog{SpaceID: id, Namespace: "manual", Owner: p.UserID, TenantID: p.TenantID, Revision: revision, UpdatedAt: now})

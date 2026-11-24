@@ -108,7 +108,7 @@ func (s *gdriveStub) handler() http.Handler {
 func TestFPCloudConnectorsGDriveAdapterScenarios(t *testing.T) {
 	dir := t.TempDir()
 	os.Chmod(dir, 0700)
-	s, e := Open(Config{State: dir, Enabled: true, Development: true, MaxBytes: 1 << 20, CloudConnectors: true})
+	s, e := Open(databaseTestConfig(t, Config{State: dir, Enabled: true, Development: true, MaxBytes: 1 << 20, CloudConnectors: true}))
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -191,7 +191,7 @@ func TestFPCloudConnectorsGDriveAdapterScenarios(t *testing.T) {
 func TestFPCloudConnectorsOneDriveAdapterPath(t *testing.T) {
 	dir := t.TempDir()
 	os.Chmod(dir, 0700)
-	s, e := Open(Config{State: dir, Enabled: true, Development: true, MaxBytes: 1 << 20, CloudConnectors: true})
+	s, e := Open(databaseTestConfig(t, Config{State: dir, Enabled: true, Development: true, MaxBytes: 1 << 20, CloudConnectors: true}))
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -280,7 +280,7 @@ func bytesReader(b []byte) io.Reader { return strings.NewReader(string(b)) }
 func TestFPCloudConnectorsGDriveHistoricalBytesArePinned(t *testing.T) {
 	dir := t.TempDir()
 	os.Chmod(dir, 0700)
-	s, e := Open(Config{State: dir, Enabled: true, Development: true, MaxBytes: 1 << 20, CloudConnectors: true})
+	s, e := Open(databaseTestConfig(t, Config{State: dir, Enabled: true, Development: true, MaxBytes: 1 << 20, CloudConnectors: true}))
 	if e != nil {
 		t.Fatal(e)
 	}

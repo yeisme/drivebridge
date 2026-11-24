@@ -202,7 +202,7 @@ func (s *Service) RebuildWorkspaceLinks(ctx context.Context, p Principal, id str
 		current.VersionID = q.VersionID
 		seen := map[string]bool{}
 		rows := make([]WorkspaceFileLinkProjection, 0, len(destinations))
-		now := time.Now().UTC()
+		now := time.Now().UTC().Truncate(time.Microsecond)
 		for _, destination := range destinations {
 			target, anchor, err := s.linkTargetOn(tx, p, current, destination)
 			if err != nil {
@@ -259,7 +259,7 @@ func (s *Service) RebuildWorkspaceLinks(ctx context.Context, p Principal, id str
 }
 
 func (s *Service) WorkspaceLinks(ctx context.Context, p Principal, id, version string, backlinks bool, page contract.PageQuery) (contract.FileLinkList, error) {
-	out := contract.FileLinkList{FileID: id, VersionID: version, Items: []contract.FileLinkView{}, ObservedAt: time.Now().UTC(), TotalKind: "unknown"}
+	out := contract.FileLinkList{FileID: id, VersionID: version, Items: []contract.FileLinkView{}, ObservedAt: time.Now().UTC().Truncate(time.Microsecond), TotalKind: "unknown"}
 	err := s.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		file, err := s.linkFileOn(tx, p, id, version)
 		if err != nil {
