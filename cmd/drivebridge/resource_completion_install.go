@@ -2,13 +2,14 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/yeisme/cli-kit/completion"
 )
 
 type resourceCompletionReport struct {
@@ -48,9 +49,7 @@ func resourceCompletionCommands(render func(*cobra.Command, resourceCompletionRe
 			}
 			shell := args[0]
 			report.Shell = shell
-			suffix := map[string]string{"bash": ".bash", "zsh": "", "fish": ".fish", "powershell": ".ps1"}
-			ext, ok := suffix[shell]
-			if !ok {
+			if _, ok := map[string]bool{"bash": true, "zsh": true, "fish": true, "powershell": true}[shell]; !ok {
 				report.ErrorCode = "invalid_shell"
 				return render(cmd, report)
 			}
@@ -61,30 +60,39 @@ func resourceCompletionCommands(render func(*cobra.Command, resourceCompletionRe
 			}
 			product := cmd.Root().Name()
 			dir := filepath.Join(base, product, "completion", shell)
-			name := product + ext
-			if shell == "zsh" {
-				name = "_" + product
+			report.Target = completion.TargetPath(dir, product, shell)
+
+			var script bytes.Buffer
+			switch shell {
+			case "zsh":
+				err = cmd.Root().GenZshCompletion(&script)
+			case "bash":
+				err = cmd.Root().GenBashCompletionV2(&script, true)
+			case "fish":
+				err = cmd.Root().GenFishCompletion(&script, true)
+			case "powershell":
+				err = cmd.Root().GenPowerShellCompletionWithDesc(&script)
 			}
-			report.Target = filepath.Join(dir, name)
-			marker := "# managed-by: " + product + "-completion"
-			if info, err := os.Lstat(report.Target); err == nil {
-				report.Installed = true
-				if !info.Mode().IsRegular() || info.Size() > 4<<20 {
-					report.ErrorCode = "unsafe_completion_target"
-					return render(cmd, report)
-				}
-				body, err := os.ReadFile(report.Target)
-				if err != nil {
-					report.ErrorCode = "completion_unreadable"
-					return render(cmd, report)
-				}
-				report.Owned = strings.Contains(string(body), marker)
-			} else if !os.IsNotExist(err) {
-				report.ErrorCode = "completion_unreadable"
+			if err != nil {
+				report.ErrorCode = "completion_generation_failed"
 				return render(cmd, report)
 			}
-			if shell == "zsh" {
-				report.Activation = "fpath=('" + strings.ReplaceAll(dir, "'", "'\"'\"'") + "' $fpath); autoload -Uz compinit; compinit"
+			opts := completion.Options{
+				Program:       product,
+				Shell:         shell,
+				Directory:     dir,
+				Script:        script.String(),
+				DirectoryMode: 0o700,
+			}
+			project := func(result completion.Report) {
+				report.Target = result.TargetPath
+				report.Installed = result.Installed
+				report.Owned = result.Owned
+				report.Changed = result.Changed
+				report.Activation = result.Activation
+				if shell != "zsh" {
+					return
+				}
 				if paths, ok := os.LookupEnv("FPATH"); ok {
 					report.Discoverability = "not_on_fpath"
 					for _, path := range filepath.SplitList(paths) {
@@ -94,77 +102,48 @@ func resourceCompletionCommands(render func(*cobra.Command, resourceCompletionRe
 					}
 				}
 			}
+			mapError := func(runErr error) string {
+				if errors.Is(runErr, completion.ErrForeignFile) {
+					return "foreign_completion_file"
+				}
+				if errors.Is(runErr, completion.ErrBackupFailed) {
+					return "completion_backup_failed"
+				}
+				if strings.Contains(runErr.Error(), "unsafe completion target") {
+					return "unsafe_completion_target"
+				}
+				if strings.Contains(runErr.Error(), "completion target unreadable") {
+					return "completion_unreadable"
+				}
+				return "completion_write_failed"
+			}
+
+			result, runErr := completion.Run(completion.ActionDoctor, opts)
+			project(result)
+			if runErr != nil {
+				report.ErrorCode = mapError(runErr)
+				return render(cmd, report)
+			}
 			yes, _ := cmd.Flags().GetBool("yes")
 			dry, _ := cmd.Flags().GetBool("dry-run")
 			force, _ := cmd.Flags().GetBool("force")
+			opts.Force = force
 			if action == "doctor" || !yes || dry {
 				return render(cmd, report)
 			}
-			if report.Installed && !report.Owned && (!force || action == "uninstall") {
-				report.ErrorCode = "foreign_completion_file"
-				return render(cmd, report)
-			}
 			if action == "uninstall" {
-				if report.Installed {
-					if err := os.Remove(report.Target); err != nil {
-						report.ErrorCode = "completion_write_failed"
-						return render(cmd, report)
-					}
-					report.Installed = false
-					report.Changed = true
+				result, runErr = completion.Run(completion.ActionUninstall, opts)
+				project(result)
+				if runErr != nil {
+					report.ErrorCode = mapError(runErr)
 				}
 				return render(cmd, report)
 			}
-			var b bytes.Buffer
-			switch shell {
-			case "zsh":
-				err = cmd.Root().GenZshCompletion(&b)
-			case "bash":
-				err = cmd.Root().GenBashCompletionV2(&b, true)
-			case "fish":
-				err = cmd.Root().GenFishCompletion(&b, true)
-			case "powershell":
-				err = cmd.Root().GenPowerShellCompletionWithDesc(&b)
+			result, runErr = completion.Run(completion.ActionInstall, opts)
+			project(result)
+			if runErr != nil {
+				report.ErrorCode = mapError(runErr)
 			}
-			if err != nil {
-				report.ErrorCode = "completion_generation_failed"
-				return render(cmd, report)
-			}
-			content := marker + "\n" + b.String()
-			if shell == "zsh" {
-				first, rest, _ := strings.Cut(b.String(), "\n")
-				content = first + "\n" + marker + "\n" + rest
-			}
-			if err = os.MkdirAll(dir, 0700); err != nil {
-				report.ErrorCode = "completion_write_failed"
-				return render(cmd, report)
-			}
-			if force && report.Installed {
-				old, err := os.ReadFile(report.Target)
-				if err != nil || os.WriteFile(report.Target+".bak-"+time.Now().UTC().Format("20060102T150405.000000000"), old, 0600) != nil {
-					report.ErrorCode = "completion_backup_failed"
-					return render(cmd, report)
-				}
-			}
-			tmp, err := os.CreateTemp(dir, ".completion-")
-			if err != nil {
-				report.ErrorCode = "completion_write_failed"
-				return render(cmd, report)
-			}
-			defer os.Remove(tmp.Name())
-			_, err = tmp.WriteString(content)
-			closeErr := tmp.Close()
-			if err != nil || closeErr != nil {
-				report.ErrorCode = "completion_write_failed"
-				return render(cmd, report)
-			}
-			if err = os.Rename(tmp.Name(), report.Target); err != nil {
-				report.ErrorCode = "completion_write_failed"
-				return render(cmd, report)
-			}
-			report.Installed = true
-			report.Owned = true
-			report.Changed = true
 			return render(cmd, report)
 		}
 		if action != "doctor" {
@@ -194,6 +173,9 @@ func resourceCompletionStringFacts(r resourceCompletionReport) map[string]string
 	}
 	return out
 }
+
+var _ = resourceCompletionStringFacts
+
 func resourceCompletionNext(cmd *cobra.Command, r resourceCompletionReport) string {
 	program := cmd.Root().Name()
 	if r.ErrorCode != "" || r.Shell == "" {
