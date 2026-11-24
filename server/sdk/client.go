@@ -81,6 +81,43 @@ type OperationState struct {
 	Operation Operation `json:"operation"`
 	Received  []int     `json:"received_parts"`
 }
+
+type ActionCatalog struct {
+	CatalogVersion string                `json:"catalog_version"`
+	Actions        []ActionCatalogAction `json:"actions"`
+	Limits         map[string]*int64     `json:"limits,omitempty"`
+	Context        ActionCatalogContext  `json:"context"`
+}
+
+type ActionCatalogContext struct {
+	InstanceID      string   `json:"instance_id"`
+	LocalFileAccess bool     `json:"local_file_access"`
+	PublicBaseURL   string   `json:"public_base_url,omitempty"`
+	Auth            string   `json:"auth"`
+	ContextHeaders  []string `json:"context_headers,omitempty"`
+}
+
+type ActionCatalogAction struct {
+	ID                string     `json:"id"`
+	Intent            string     `json:"intent"`
+	Surface           []string   `json:"surface"`
+	Tool              string     `json:"tool,omitempty"`
+	Implemented       bool       `json:"implemented"`
+	Configured        bool       `json:"configured"`
+	Authorized        bool       `json:"authorized"`
+	DependencyStatus  string     `json:"dependency_status"`
+	Availability      string     `json:"availability"`
+	BlockReason       string     `json:"block_reason,omitempty"`
+	SideEffect        string     `json:"side_effect"`
+	Actor             string     `json:"actor"`
+	ExecutionLocation string     `json:"execution_location"`
+	InputSchemaRef    string     `json:"input_schema_ref,omitempty"`
+	ResultKind        string     `json:"result_kind,omitempty"`
+	ByteTransport     string     `json:"byte_transport,omitempty"`
+	Recovery          []string   `json:"recovery,omitempty"`
+	ObservedAt        *time.Time `json:"observed_at,omitempty"`
+}
+
 type ArchiveRequest struct {
 	SourceFileID    string `json:"source_file_id"`
 	SourceVersionID string `json:"source_version_id"`
@@ -91,10 +128,11 @@ type ArchiveRequest struct {
 // UserImport is one batch entry for provisioning: an operator-supplied key
 // (imported as-is) or an empty key (generated server-side).
 type UserImport struct {
-	Name  string `json:"name"`
-	Key   string `json:"key,omitempty"`
-	Days  int    `json:"days,omitempty"`
-	Admin bool   `json:"admin,omitempty"`
+	Name    string `json:"name"`
+	Key     string `json:"key,omitempty"`
+	Days    int    `json:"days,omitempty"`
+	Admin   bool   `json:"admin,omitempty"`
+	OneTime bool   `json:"one_time,omitempty"`
 }
 
 // UserKeyIssued is the one-time issuance record; plaintext never persists.
@@ -103,6 +141,7 @@ type UserKeyIssued struct {
 	Name      string `json:"name"`
 	Key       string `json:"key"`
 	Admin     bool   `json:"admin"`
+	OneTime   bool   `json:"one_time,omitempty"`
 	ExpiresAt string `json:"expires_at"`
 }
 
@@ -212,6 +251,16 @@ func (c *Client) Operation(ctx context.Context, id string) (OperationState, erro
 	e := c.JSON(ctx, "GET", "/api/v1/operations/"+url.PathEscape(id), "", nil, &v)
 	return v, e
 }
+
+func (c *Client) ActionCatalog(ctx context.Context, spaceID string) (ActionCatalog, error) {
+	var out ActionCatalog
+	path := "/api/v1/action-catalog"
+	if spaceID != "" {
+		path += "?space_id=" + url.QueryEscape(spaceID)
+	}
+	return out, c.JSON(ctx, "GET", path, "", nil, &out)
+}
+
 func (c *Client) Inbox(ctx context.Context, status, caller, spaceID string) ([]Operation, error) {
 	var out []Operation
 	path := "/api/v1/inbox"

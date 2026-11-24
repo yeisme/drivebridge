@@ -74,7 +74,7 @@ func (s *Store) Record(f Fact) error {
 		}
 		d := Daily{Dimensions: f.Dimensions, Day: Day(f.At), Metric: f.Metric, Direction: f.Direction, Purpose: f.Purpose, Bytes: f.Bytes, Count: 1}
 		d.Key = key(d.Owner, d.Space, d.Connection, d.Actor, d.ActorKind, d.Caller, d.Operation, d.Resource, d.Day, d.Metric, d.Direction, d.Purpose)
-		return tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "key"}}, DoUpdates: clause.Assignments(map[string]any{"bytes": gorm.Expr("bytes + ?", d.Bytes), "count": gorm.Expr("count + 1")})}).Create(&d).Error
+		return tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "key"}}, DoUpdates: clause.Assignments(map[string]any{"bytes": gorm.Expr("insight_daily.bytes + ?", d.Bytes), "count": gorm.Expr("insight_daily.count + 1")})}).Create(&d).Error
 	})
 	if e != nil {
 		s.Gap()
@@ -111,7 +111,7 @@ func (s *Store) Log(e AuditEvent) error {
 		}
 		d := AuditDaily{Owner: e.Owner, Actor: e.Actor, Day: Day(e.At), Action: e.Action, Outcome: e.Outcome, Count: 1}
 		d.Key = key(d.Owner, d.Actor, d.Day, d.Action, d.Outcome)
-		return tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "key"}}, DoUpdates: clause.Assignments(map[string]any{"count": gorm.Expr("count + 1")})}).Create(&d).Error
+		return tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "key"}}, DoUpdates: clause.Assignments(map[string]any{"count": gorm.Expr("insight_audit_daily.count + 1")})}).Create(&d).Error
 	})
 	if err != nil {
 		s.AuditDegraded.Store(true)

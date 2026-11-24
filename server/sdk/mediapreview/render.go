@@ -20,7 +20,23 @@ func Converter(filename string) string {
 	if ext == ".docx" || ext == ".xlsx" || ext == ".pptx" {
 		return "libreoffice"
 	}
-	if strings.Contains(",.dng,.cr2,.cr3,.nef,.arw,.raf,.orf,.rw2,", ","+ext+",") {
+	if ext == ".jxr" || ext == ".wdp" || ext == ".hdp" {
+		for _, candidate := range []string{"JxrDecApp", "magick", "convert", "ffmpeg"} {
+			if _, err := exec.LookPath(candidate); err == nil {
+				return candidate
+			}
+		}
+		return "JxrDecApp"
+	}
+	if ext == ".heic" || ext == ".heif" || ext == ".hif" {
+		for _, candidate := range []string{"heif-convert", "magick", "convert", "ffmpeg"} {
+			if _, err := exec.LookPath(candidate); err == nil {
+				return candidate
+			}
+		}
+		return "heif-convert"
+	}
+	if strings.Contains(",.dng,.cr2,.cr3,.nef,.arw,.raf,.orf,.rw2,.pef,.srw,.rwl,.3fr,.iiq,", ","+ext+",") {
 		if _, err := exec.LookPath("dcraw_emu"); err == nil {
 			return "dcraw_emu"
 		}
@@ -28,10 +44,25 @@ func Converter(filename string) string {
 	}
 	return "ffmpeg"
 }
+
 func sandbox(ctx context.Context, dir, executable string, args ...string) *exec.Cmd {
-	prefix := []string{"--unshare-all", "--die-with-parent", "--clearenv", "--setenv", "HOME", "/work", "--setenv", "PATH", "/usr/bin:/bin:/home/linuxbrew/.linuxbrew/bin", "--ro-bind", "/usr", "/usr", "--ro-bind", "/lib", "/lib", "--ro-bind-try", "/lib64", "/lib64", "--ro-bind-try", "/home/linuxbrew/.linuxbrew", "/home/linuxbrew/.linuxbrew", "--ro-bind-try", "/etc/fonts", "/etc/fonts", "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp", "--bind", dir, "/work", "--chdir", "/work", "--", executable}
+	prefix := []string{
+		"--unshare-all", "--die-with-parent", "--clearenv",
+		"--setenv", "HOME", "/work",
+		"--setenv", "PATH", "/usr/bin:/bin:/home/linuxbrew/.linuxbrew/bin:/software/anaconda3/bin",
+		"--ro-bind", "/usr", "/usr",
+		"--ro-bind", "/lib", "/lib",
+		"--ro-bind-try", "/lib64", "/lib64",
+		"--ro-bind-try", "/home/linuxbrew/.linuxbrew", "/home/linuxbrew/.linuxbrew",
+		"--ro-bind-try", "/software/anaconda3", "/software/anaconda3",
+		"--ro-bind-try", "/etc/fonts", "/etc/fonts",
+		"--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp",
+		"--bind", dir, "/work", "--chdir", "/work",
+		"--", executable,
+	}
 	return exec.CommandContext(ctx, "bwrap", append(prefix, args...)...)
 }
+
 func pdf(ctx context.Context, dir, input, dest string) error {
 	executable, err := exec.LookPath("pdftoppm")
 	if err != nil {
@@ -105,8 +136,77 @@ func Convert(ctx context.Context, input, dest, kind, mimeType string) (string, e
 			return "", fail
 		}
 		input = ppm
+		ffmpegPath, err := exec.LookPath("ffmpeg")
+		if err != nil {
+			return "", errors.New("preview_converter_unavailable")
+		}
+		executable = ffmpegPath
 	}
-	args := []string{"-nostdin", "-v", "error", "-y", "-threads", "1", "-max_alloc", "268435456", "-protocol_whitelist", "file,pipe", "-format_whitelist", "mov,matroska,avi,mpegts,mpeg,mpegvideo,ogg,mp3,wav,flac,image2,png_pipe,jpeg_pipe,ppm_pipe,tiff_pipe,psd_pipe,gif,webp_pipe,bmp_pipe", "-i", input, "-map_metadata", "-1", "-threads", "1", "-filter_threads", "1"}
+	if converter == "JxrDecApp" {
+		if _, err = exec.LookPath("bwrap"); err != nil {
+			return "", errors.New("preview_sandbox_unavailable")
+		}
+		decodedTif := filepath.Join(dir, "decoded.tif")
+		decodedBmp := filepath.Join(dir, "decoded.bmp")
+		defer os.Remove(decodedTif)
+		defer os.Remove(decodedBmp)
+		// First try decoding into TIFF (supports 16/32-bit float HDR JXR screenshots
+		// such as Forza Horizon 5 / Windows HDR Game Bar captures), then fall back to 24-bit BMP.
+		if sandbox(ctx, dir, executable, "-i", "/work/"+filepath.Base(input), "-o", "/work/decoded.tif").Run() == nil {
+			if info, statErr := os.Stat(decodedTif); statErr == nil && info.Size() > 0 {
+				input = decodedTif
+			}
+		}
+		if input != decodedTif {
+			if sandbox(ctx, dir, executable, "-i", "/work/"+filepath.Base(input), "-o", "/work/decoded.bmp", "-c", "0").Run() != nil {
+				return "", fail
+			}
+			input = decodedBmp
+		}
+		ffmpegPath, err := exec.LookPath("ffmpeg")
+		if err != nil {
+			return "", errors.New("preview_converter_unavailable")
+		}
+		executable = ffmpegPath
+	}
+	if converter == "heif-convert" {
+		if _, err = exec.LookPath("bwrap"); err != nil {
+			return "", errors.New("preview_sandbox_unavailable")
+		}
+		decodedJpg := filepath.Join(dir, "decoded.jpg")
+		defer os.Remove(decodedJpg)
+		if sandbox(ctx, dir, executable, "--quiet", "/work/"+filepath.Base(input), "/work/decoded.jpg").Run() != nil {
+			return "", fail
+		}
+		if ffmpegPath, ffErr := exec.LookPath("ffmpeg"); ffErr == nil {
+			input = decodedJpg
+			executable = ffmpegPath
+		} else {
+			if os.Rename(decodedJpg, dest) != nil {
+				return "", fail
+			}
+			return "image/jpeg", nil
+		}
+	}
+	if converter == "magick" || converter == "convert" {
+		if _, err = exec.LookPath("bwrap"); err != nil {
+			return "", errors.New("preview_sandbox_unavailable")
+		}
+		width := "480x480>"
+		if kind == "compatible" {
+			width = "1600x1600>"
+		}
+		if sandbox(ctx, dir, executable, "/work/"+filepath.Base(input)+"[0]", "-auto-orient", "-thumbnail", width, "-strip", "-quality", "88", "jpeg:/work/"+filepath.Base(dest)).Run() != nil {
+			return "", fail
+		}
+		return "image/jpeg", nil
+	}
+	args := []string{
+		"-nostdin", "-v", "error", "-y", "-threads", "1", "-max_alloc", "268435456",
+		"-protocol_whitelist", "file,pipe",
+		"-format_whitelist", "mov,matroska,avi,mpegts,mpeg,mpegvideo,ogg,mp3,wav,flac,image2,png_pipe,jpeg_pipe,jpegxr_pipe,j2k_pipe,exr_pipe,hdr_pipe,dds_pipe,pam_pipe,pgm_pipe,ppm_pipe,pbm_pipe,pcx_pipe,sgi_pipe,sunrast_pipe,targa,apng,heif,tiff_pipe,psd_pipe,gif,webp_pipe,bmp_pipe",
+		"-i", input, "-map_metadata", "-1", "-threads", "1", "-filter_threads", "1",
+	}
 	outMIME := "image/jpeg"
 	if kind == "compatible" && strings.HasPrefix(mimeType, "video/") {
 		outMIME = "video/mp4"
@@ -116,7 +216,7 @@ func Convert(ctx context.Context, input, dest, kind, mimeType string) (string, e
 		if kind == "compatible" {
 			width = "1600"
 		}
-		args = append(args, "-frames:v", "1", "-vf", "scale='min("+width+",iw)':-2", "-fs", "16777216", "-f", "image2", dest)
+		args = append(args, "-frames:v", "1", "-vf", "scale='min("+width+",iw)':-2", "-pix_fmt", "yuvj420p", "-fs", "16777216", "-f", "image2", dest)
 	}
 	if _, err = exec.LookPath("bwrap"); err != nil {
 		return "", errors.New("preview_sandbox_unavailable")
