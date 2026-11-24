@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useLayoutEffect, useState, type ReactNode } from "react";
+import { MotionConfig } from "motion/react";
 
 export type Theme = "light" | "dark" | "system";
 export type Appearance = { theme: Theme; density: "comfortable" | "compact"; motion: "system" | "reduced" };
@@ -61,7 +62,13 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
       setStorageError("");
     } catch { setStorageError("设置已在当前页面生效，但浏览器未允许保存；刷新后可能恢复默认。"); }
   }
-  return <AppearanceContext.Provider value={{ preferences, resolvedTheme, setAppearance, storageError }}>{children}</AppearanceContext.Provider>;
+  return (
+    <AppearanceContext.Provider value={{ preferences, resolvedTheme, setAppearance, storageError }}>
+      <MotionConfig reducedMotion={preferences.motion === "reduced" ? "always" : "user"}>
+        {children}
+      </MotionConfig>
+    </AppearanceContext.Provider>
+  );
 }
 
 export function useAppearance() {

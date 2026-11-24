@@ -244,11 +244,14 @@ export interface IssuedUserKey {
   name: string;
   key: string;
   admin: boolean;
+  one_time?: boolean;
   expires_at: string;
 }
 export interface UserKeyRow {
   can_copy?: boolean; can_rotate?: boolean; can_revoke?: boolean; can_delete?: boolean; can_disable?: boolean; can_enable?: boolean; copy_unavailable_reason?: string;
   user_name?: string; current?: boolean; created_at?: string;
+  one_time?: boolean;
+  consumed?: boolean;
   archived?: boolean;
   disabled?: boolean;
   id: string;

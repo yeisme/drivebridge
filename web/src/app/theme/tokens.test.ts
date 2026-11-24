@@ -25,10 +25,11 @@ it("keeps shell geometry tokens in one canonical stylesheet", async () => {
   expect(source).toContain("--navigation-expanded-width: 184px;");
   expect(source).toContain("--navigation-rail-width: 56px;");
   expect(source).toContain("--workspace-topbar-height: 48px;");
-  expect(source).toContain("--radius-control: 6px;");
-  expect(source).toContain("--radius-surface: 8px;");
+  expect(source).toContain("--radius-control: 8px;");
+  expect(source).toContain("--radius-surface: 12px;");
   expect(source).toContain("--radius-finder: 12px;");
-  expect(source).toContain("--ui-radius: 8px;");
-  expect(source).toContain("--ui-background: #f5f6f4;");
-  expect(source.split(".dark {")[1]).toContain("--ui-border: #587563;");
+  expect(source).toContain("--ui-radius: 10px;");
+  expect(source).toContain("--ui-background: #ffffff;");
+  expect(source).toContain("--ui-sidebar: #f8f9fa;");
+  expect(source.split(".dark {")[1]).toContain("--ui-border: #23262b;");
 });

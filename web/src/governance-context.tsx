@@ -183,9 +183,39 @@ export function GovernanceBar({
   return (
     <>
       <div className="topbar-governance" aria-label="租户与访问上下文">
-        {!mobile && tenantPicker}
+        {!mobile && (data.tenants.length > 1 || data.platform_admin || data.tenant_admin) && tenantPicker}
         <Popover open={menuOpen} onOpenChange={setMenuOpen}>
-          <PopoverTrigger render={<Button type="button" variant="ghost"/>} aria-label="工作区选项" title="工作区、管理与体验身份">{mobile ? <><SlidersHorizontal size={17}/><span className="sr-only">{accessLabel}</span></> : scope ? <span className="context-access-state" role="status">{accessLabel}</span> : <><SlidersHorizontal size={17} /><span>工作区</span></>}{data.notifications.some(n => !n.read) && <i aria-label="有未读通知" />}</PopoverTrigger>
+          <PopoverTrigger
+            render={
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 gap-1.5 rounded-lg border border-border/80 bg-muted/40 px-2.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+              />
+            }
+            aria-label="工作区选项"
+            title="工作区、管理与体验身份"
+          >
+            {mobile ? (
+              <>
+                <SlidersHorizontal size={16} />
+                <span className="sr-only">{accessLabel}</span>
+              </>
+            ) : scope ? (
+              <span className="context-access-state font-medium text-primary" role="status">
+                {accessLabel}
+              </span>
+            ) : (
+              <>
+                <SlidersHorizontal size={14} />
+                <span>空间上下文</span>
+              </>
+            )}
+            {data.notifications.some((n) => !n.read) && (
+              <i className="size-1.5 rounded-full bg-primary" aria-label="有未读通知" />
+            )}
+          </PopoverTrigger>
           <PopoverContent align="end" aria-label="工作区菜单" className="workspace-menu w-80 max-w-[calc(100vw-2rem)] max-h-[var(--available-height)] overflow-y-auto gap-4 p-4">
         <div className="context-identity [&_strong]:text-sm [&_small]:text-xs"><span className="avatar" aria-hidden="true">{user.name.slice(0,1)}</span><div><strong>{user.name}</strong><small>{accessLabel}</small></div></div>
         {mobile && <div className="grid gap-2 text-xs font-medium text-muted-foreground">当前租户{tenantPicker}</div>}

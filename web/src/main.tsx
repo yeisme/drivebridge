@@ -1,5 +1,6 @@
 import { createRoot } from "react-dom/client";
 import { AppearanceProvider, initializeAppearance } from "./appearance";
+import { ensureLanBrowserCompat } from "./lib/tab-lock";
 import { SharedView } from "./Sharing";
 import { ScopedWorkspace } from "./app/ScopedWorkspace";
 import App from "./WorkspaceApp";
@@ -10,6 +11,7 @@ import { isDesktopEntry } from "./app/desktop-entry";
 export default App;
 const root = document.getElementById("root");
 if (root) {
+  ensureLanBrowserCompat();
   initializeAppearance();
   createRoot(root).render(
     <AppearanceProvider>
