@@ -41,3 +41,20 @@ func (s *Service) authorizeReading(ctx context.Context, scope personalstate.Scop
 	}
 	return nil
 }
+
+// ReadingStatesForPinax reuses the owner store with a native host's public
+// Pinax authorization adapter. It never permits file targets through this seam.
+func (s *Service) ReadingStatesForPinax(authorize personalstate.Authorize) (*personalstate.ReadingStore, error) {
+	if authorize == nil {
+		return nil, errors.New("reading_state_unavailable")
+	}
+	if err := personalstate.MigrateReading(s.DB); err != nil {
+		return nil, errors.New("reading_state_unavailable")
+	}
+	return personalstate.NewReadingStore(s.DB, func(ctx context.Context, scope personalstate.Scope, ref desktopcontract.ReadingRef) error {
+		if ref.Kind != "pinax" {
+			return errors.New("reading_target_unavailable")
+		}
+		return authorize(ctx, scope, ref)
+	})
+}

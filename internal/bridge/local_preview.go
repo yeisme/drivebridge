@@ -46,6 +46,10 @@ func (s *Service) localPreviewRoutes(mux *http.ServeMux) {
 		lock.Lock()
 		defer lock.Unlock()
 		key := hex.EncodeToString(sum[:])
+		if err := s.rejectStateRootAlias(); err != nil {
+			fail(err)
+			return
+		}
 		dir := filepath.Join(s.state, "preview-cache", key)
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
 		defer cancel()

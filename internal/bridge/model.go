@@ -159,7 +159,11 @@ func New(state string, provider Provider, enabled bool) (*Service, error) {
 	if statErr != nil || !info.IsDir() || info.Mode().Perm()&0077 != 0 {
 		return nil, errors.New("state_not_private")
 	}
-	db, err := gorm.Open(sqlite.Open(filepath.Join(state, "state.sqlite")), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	dbPath, err := stateDatabase(state)
+	if err != nil {
+		return nil, err
+	}
+	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 	if err != nil {
 		return nil, errors.New("state_unavailable")
 	}
@@ -168,10 +172,10 @@ func New(state string, provider Provider, enabled bool) (*Service, error) {
 		return nil, err
 	}
 	sqlDB.SetMaxOpenConns(1)
-	if err = db.AutoMigrate(&Space{}, &File{}, &Operation{}, &Event{}, &RelayTarget{}, &Connection{}, &AdoptRecord{}, &BindRecord{}, &SyncPlan{}, &SyncBaseline{}, &SyncItem{}, &RemoteIntent{}); err != nil {
+	if err = db.AutoMigrate(&Space{}, &File{}, &Operation{}, &Event{}, &RelayTarget{}, &Connection{}, &AdoptRecord{}, &BindRecord{}, &SyncPlan{}, &SyncBaseline{}, &SyncItem{}, &RemoteIntent{}, &ManagedGuard{}, &ManagedGuardMember{}, &ManagedGuardReceipt{}); err != nil {
 		return nil, errors.New("state_unavailable")
 	}
-	if err = os.Chmod(filepath.Join(state, "state.sqlite"), 0600); err != nil {
+	if err = os.Chmod(dbPath, 0600); err != nil {
 		return nil, err
 	}
 	// A process lock is held by the composition root before opening this state.

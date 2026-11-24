@@ -612,6 +612,13 @@ func (r *RemoteSurfaces) UploadLocalFile(ctx context.Context, space, localPath, 
 	// Clean collapses any ".."/"." segments before the path crosses the
 	// contract boundary: the server receives one canonical relative path.
 	relative := path.Clean(strings.TrimPrefix(filepath.ToSlash(localPath), "/"))
+	// Owner metadata inside an adopted vault is not an upload source either: the
+	// remote consumer would receive the vault's index, database or token files.
+	// This adapter has no Service binding, so the rule is the path predicate the
+	// application service uses, applied before any byte is read.
+	if OwnerProtectedRel(relative) {
+		return nil, errors.New("owner_protected")
+	}
 	openFile := func() (io.ReadCloser, error) {
 		f, err := r.Root.Open(localPath)
 		if err != nil {

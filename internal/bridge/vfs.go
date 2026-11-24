@@ -179,6 +179,23 @@ func (v *VFS) Open(ctx context.Context, path, versionID string) (io.ReadCloser, 
 	return body, n, nil
 }
 
+// Admit rechecks an owner-protected write target before a mount adapter creates
+// any staging bytes. Adapters must call it: the final commit rechecks again, but
+// a rejected request must not leave staging artifacts behind either.
+func (v *VFS) Admit(path string) error {
+	if !v.writable {
+		return errors.New("read_only")
+	}
+	p, rel, err := v.splitRef(path)
+	if err != nil {
+		return err
+	}
+	if err := v.s.rejectOwnerProtected(p.ID, rel); err != nil {
+		return err
+	}
+	return v.s.rejectLocalOwnerProtected(p.ID, rel)
+}
+
 func (v *VFS) Mkdir(ctx context.Context, path string) error {
 	if !v.writable {
 		return errors.New("read_only")

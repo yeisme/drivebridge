@@ -144,6 +144,30 @@ func (a *Adapter) Call(ctx context.Context, name string, args map[string]any) (a
 	var out any
 	method, path := "GET", ""
 	switch name {
+	case "workspace.search":
+		kind := text("target_kind")
+		if kind == "file" || kind == "files" {
+			q := url.Values{"space_id": {text("space_id")}, "q": {text("query")}}
+			path = "/api/v1/files?" + q.Encode()
+		} else if kind == "operation" || kind == "operations" {
+			path = "/api/v1/operations?space_id=" + url.QueryEscape(text("space_id"))
+		} else if kind == "submission" || kind == "submissions" {
+			path = "/api/v1/inbox-submissions?space_id=" + url.QueryEscape(text("space_id"))
+		} else {
+			return nil, errors.New("unsupported_action")
+		}
+	case "workspace.inspect", "workspace.recover":
+		kind, ref := text("target_kind"), text("target_ref")
+		switch kind {
+		case "file":
+			path = "/api/v1/files/" + url.PathEscape(ref)
+		case "operation":
+			path = "/api/v1/operations/" + url.PathEscape(ref)
+		case "submission":
+			path = "/api/v1/inbox-submissions/" + url.PathEscape(ref)
+		default:
+			return nil, errors.New("unsupported_action")
+		}
 	case "capabilities":
 		path = "/api/v1/capabilities"
 	case "spaces":

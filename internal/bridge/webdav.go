@@ -192,6 +192,13 @@ func (h *WebDAVHandler) move(w http.ResponseWriter, r *http.Request, relPath str
 		}
 	}
 	dest = strings.Trim(path.Clean("/"+dest), "/")
+	for _, candidate := range []string{relPath, dest} {
+		if err := h.VFS.Admit(candidate); err != nil {
+			status, code := davStatus(err)
+			davFail(w, status, code)
+			return
+		}
+	}
 	h.write(w, func() error { return h.VFS.Rename(r.Context(), relPath, dest) }, 201)
 }
 
@@ -202,6 +209,11 @@ func (h *WebDAVHandler) put(w http.ResponseWriter, r *http.Request, relPath stri
 	}
 	if r.ContentLength <= 0 {
 		davFail(w, 400, "file_size_invalid")
+		return
+	}
+	if err := h.VFS.Admit(relPath); err != nil {
+		status, code := davStatus(err)
+		davFail(w, status, code)
 		return
 	}
 	if err := h.Root.MkdirAll(".drivebridge-staging", 0700); err != nil {

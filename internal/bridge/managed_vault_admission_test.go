@@ -8,10 +8,18 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/glebarez/sqlite"
 	"github.com/yeisme/drivebridge-server/pkg/managedstate"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
-func TestManagedVaultAtomicStateFenceRejectsLegacyService(t *testing.T) {
+// L1 mechanism check: after the owner state migration the original database path
+// holds an inert marker, so a writer that opens that path directly gets no
+// database at all. This is NOT the published-old-binary proof (C1 in
+// managed-vault-guard-protocol.md) — it shows the mechanism such a binary would
+// hit in this checkout and deliberately claims nothing about historical releases.
+func TestManagedVaultStateFenceRejectsDirectDatabaseOpen(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("candidate state fence is Linux-only until platform acceptance")
 	}
@@ -40,26 +48,38 @@ func TestManagedVaultAtomicStateFenceRejectsLegacyService(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	legacy, err := New(state, NewOneDrive(), true)
-	if legacy != nil {
-		legacy.Close()
-		t.Fatal("legacy service started through the state fence")
+	marker, err := os.ReadFile(filepath.Join(state, "state.sqlite"))
+	if err != nil {
+		t.Fatal(err)
 	}
-	if err == nil || err.Error() != "state_unavailable" {
-		t.Fatalf("legacy admission error: %v", err)
+	if len(marker) < 16 || string(marker[:16]) == "SQLite format 3\x00" {
+		t.Fatal("fenced path is still a database header")
+	}
+	direct, openErr := gorm.Open(sqlite.Open(filepath.Join(state, "state.sqlite")), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	if openErr == nil {
+		if queryErr := direct.Exec("SELECT 1").Error; queryErr == nil {
+			t.Fatal("a writer that ignores the layout opened the fenced path as a database")
+		}
 	}
 	after, err := os.ReadFile(installed.DatabasePath)
 	if err != nil || sha256.Sum256(before) != sha256.Sum256(after) {
-		t.Fatal("legacy startup modified preserved operations")
+		t.Fatal("direct open modified the preserved operations")
 	}
 	if replay, err := managedstate.Install(state, plan); err != nil || replay != installed {
 		t.Fatalf("original migration identity could not reconcile: %#v %v", replay, err)
 	}
+	// The current owner resolves the managed layout, so the same state stays
+	// usable by a version that understands the fence.
+	owner, err := New(state, NewOneDrive(), true)
+	if err != nil {
+		t.Fatalf("current owner could not open the fenced layout: %v", err)
+	}
+	owner.Close()
 }
 
-// Candidate storage-layout fence only. No product code installs or consumes
-// this layout. Proves this checkout's legacy constructor refuses before
-// migration/worker recovery; it does not attest every historical binary.
+// Candidate storage-layout fence. The current owner resolves this layout; a
+// writer that does not is refused by the inert marker at the database path. This
+// does not attest every historical binary.
 func TestManagedVaultLegacyDatabasePathFenceRejectsStartup(t *testing.T) {
 	state := filepath.Join(t.TempDir(), "state")
 	s, err := New(state, NewOneDrive(), true)

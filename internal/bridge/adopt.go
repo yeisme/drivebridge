@@ -102,6 +102,9 @@ func (s *Service) rejectOwnerProtected(spaceID string, rels ...string) error {
 	if s == nil || s.DB == nil || spaceID == "" {
 		return errors.New("guard_unavailable")
 	}
+	if err := s.rejectGuardMutation(spaceID, false, rels...); err != nil {
+		return err
+	}
 	var n int64
 	if err := s.DB.Model(&AdoptRecord{}).Where("space_id = ?", spaceID).Limit(1).Count(&n).Error; err != nil {
 		return errors.New("guard_unavailable")
@@ -139,6 +142,9 @@ func (s *Service) rejectOperationMutation(op Operation) error {
 func (s *Service) rejectLocalOwnerProtected(spaceID, rel string) error {
 	if s == nil || s.DB == nil {
 		return errors.New("guard_unavailable")
+	}
+	if err := s.rejectGuardMutation(spaceID, true, rel); err != nil {
+		return err
 	}
 	var records []AdoptRecord
 	if err := s.DB.Where("kind = ?", "local").Find(&records).Error; err != nil {
