@@ -10,6 +10,9 @@ export interface components {
             bearer: string;
             binary_digest: string;
             manifest_digest: string;
+            state_path?: string;
+            /** @enum {string} */
+            state_action?: "create" | "migrate";
         };
         HostCancel: {
             /** @enum {string} */
@@ -26,6 +29,7 @@ export interface components {
             type: "ready";
             session_nonce: string;
             address: string;
+            state_ref?: string;
         } | {
             /** @enum {string} */
             schema_version: "drivebridge.desktop.host.v1alpha1";
@@ -58,7 +62,7 @@ export interface components {
             /** @enum {string} */
             schema_version: "drivebridge.desktop.host.v1alpha1";
             /** @enum {string} */
-            action: "select";
+            action: "select" | "register";
             request_id: string;
             native_path: string;
         };

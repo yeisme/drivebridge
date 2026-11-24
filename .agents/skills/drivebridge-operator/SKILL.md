@@ -9,7 +9,7 @@ Choose the file owner before transferring bytes. DriveBridge owns files, version
 
 ## Start from the installed client
 
-A connected MCP client does not need the product CLI. Read tools/list and the advertised inputSchema, then its capabilities resource. A known tool name is not proof that its backend or binding is configured. Never try guessed action names after a denial.
+A connected MCP client does not need the product CLI. Read tools/list and the advertised inputSchema, then its capabilities resources, including `drivebridge://action-catalog` when present. The action catalog describes intent, surface, side effect, execution location, byte transport, readiness and recovery; it is discovery only, never an execution permit. A known tool name is not proof that its backend or binding is configured. Never try guessed action names after a denial.
 
 On a machine that already has the local CLI, optional discovery is:
 
@@ -18,7 +18,7 @@ drivebridge capabilities --json
 drivebridge relay targets --json
 ```
 
-Do not print credentials, owner endpoint/key-file config, transient download URLs or input grants. A stable file or grant ID is not a credential. Configuration commands execute on the owning host, not through arbitrary remote tool parameters.
+Do not print credentials, owner endpoint/key-file config, transient download URLs or input grants. A stable file or grant ID is not a credential. Configuration commands execute on the owning host, not through arbitrary remote tool parameters. Prefer the catalog's advertised surface and recovery action over prose aliases; `unsupported`, `blocked`, `forbidden` and `unknown` are different outcomes.
 
 ## Knowledge workspace and resource boundaries
 
@@ -87,6 +87,22 @@ Owner-host diagnostic CLI:
 ```bash
 drivebridge-server handoff status GRANT_ID --url https://files.example.com --token-file /absolute/private/receiver.key --json
 ```
+
+## Standard interaction loop
+
+Use this order for every non-trivial file or Agent action:
+
+```text
+1. Discover: tools/list + capabilities resources + action catalog
+2. Scope: authenticated identity / tenant / space / connection / prefix
+3. Inspect: fixed ref, version and readiness
+4. Act: only an advertised action with the original idempotency key
+5. Observe: operation, submission or grant receipt
+6. Recover: query the original identity before retrying
+7. Handoff: return stable ref and next action, never secret or URL
+```
+
+MCP control discovery and byte transfer are separate. `local_path` belongs to the process hosting the MCP adapter; it never refers to the connected client's filesystem. A server-side inbox submission uses authenticated HTTP parts, not MCP base64. Human-only decisions, acceptance and archive are never delegated merely because an Agent can submit.
 
 ## Recover without changing intent
 

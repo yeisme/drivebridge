@@ -20,3 +20,6 @@ desktop/web/
 desktop/dist/
 .pi/
 .understand-anything/
+
+# pi 运行态目录
+.pi-bg/
