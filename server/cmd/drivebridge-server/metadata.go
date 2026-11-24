@@ -140,7 +140,7 @@ func openMigrationTarget(stateDir string) (*gorm.DB, error) {
 		if err != nil {
 			return nil, fail("target_unavailable", "The PostgreSQL target refused the connection; check DRIVEBRIDGE_TEAM_DSN.")
 		}
-		if err := db.AutoMigrate(&service.Space{}, &service.Connection{}, &service.File{}, &service.Version{}, &service.Operation{}, &service.AccessGrant{}); err != nil {
+		if err := db.AutoMigrate(&service.Space{}, &service.Connection{}, &service.File{}, &service.Version{}, &service.Operation{}, &service.AccessGrant{}, &service.WorkspaceGrant{}, &service.WorkspaceAgentGroup{}, &service.WorkspaceAgentOrganization{}, &service.WorkspaceRequest{}, &service.WorkspaceSubmission{}, &service.WorkspaceSubmissionDecision{}, &service.WorkspaceCredentialHistory{}, &service.WorkspaceLabelSuggestion{}, &service.WorkspaceSuggestionDecision{}, &service.WorkspaceInvocation{}); err != nil {
 			return nil, fail("target_unavailable", "The PostgreSQL target schema could not be prepared.")
 		}
 		return db, nil
@@ -155,7 +155,7 @@ func openMigrationTarget(stateDir string) (*gorm.DB, error) {
 	if err != nil {
 		return nil, fail("target_unavailable", "The sqlite target could not be opened.")
 	}
-	if err := db.AutoMigrate(&service.Space{}, &service.Connection{}, &service.File{}, &service.Version{}, &service.Operation{}, &service.AccessGrant{}); err != nil {
+	if err := db.AutoMigrate(&service.Space{}, &service.Connection{}, &service.File{}, &service.Version{}, &service.Operation{}, &service.AccessGrant{}, &service.WorkspaceGrant{}, &service.WorkspaceAgentGroup{}, &service.WorkspaceAgentOrganization{}, &service.WorkspaceRequest{}, &service.WorkspaceSubmission{}, &service.WorkspaceSubmissionDecision{}, &service.WorkspaceCredentialHistory{}, &service.WorkspaceLabelSuggestion{}, &service.WorkspaceSuggestionDecision{}, &service.WorkspaceInvocation{}); err != nil {
 		return nil, fail("target_unavailable", "The sqlite target schema could not be prepared.")
 	}
 	return db, nil

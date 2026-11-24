@@ -17,6 +17,7 @@ type Route struct {
 
 func Routes() []Route {
 	return []Route{
+		{Method: "get", Path: "/api/v1/action-catalog", OperationID: "getActionCatalog", ResponseSchema: "ActionCatalog", QueryFields: []string{"space_id"}, ReadPolicy: "Current authenticated identity; readiness is discovery only"},
 		{Method: "get", Path: "/api/v1/spaces/{id}/label-definitions", OperationID: "getLabelDefinitions", ResponseSchema: "LabelDefinitionPageEnvelope", HumanOnly: true, QueryFields: []string{"namespace", "cursor", "limit"}},
 		{Method: "put", Path: "/api/v1/spaces/{id}/label-definitions", OperationID: "updateLabelDefinitions", RequestSchema: "LabelDefinitionUpdate", ResponseSchema: "LabelDefinitionReceiptEnvelope", HumanOnly: true, Idempotent: true},
 		{Method: "post", Path: "/api/v1/spaces/{id}/label-definitions/lookup", OperationID: "lookupLabelDefinitions", RequestSchema: "IdempotencyLookupRequest", ResponseSchema: "LabelDefinitionReceiptEnvelope", HumanOnly: true},

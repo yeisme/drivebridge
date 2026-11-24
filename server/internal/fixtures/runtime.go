@@ -14,6 +14,9 @@ import (
 	"fmt"
 	jose "github.com/go-jose/go-jose/v4"
 	"github.com/yeisme/drivebridge-server/internal/service"
+	gormpostgres "gorm.io/driver/postgres"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 	"html"
 	"io"
 	"net"
@@ -30,16 +33,18 @@ import (
 )
 
 type Runtime struct {
-	listCalls atomic.Int64
-	App       *httptest.Server
-	OIDC      *httptest.Server
-	S3        *httptest.Server
-	Service   *service.Service
-	mu        sync.Mutex
-	objects   map[string][]byte
-	claims    map[string]url.Values
-	badClaim  string
-	Failure   bool
+	cleanupSchema func()
+	closeOnce     sync.Once
+	listCalls     atomic.Int64
+	App           *httptest.Server
+	OIDC          *httptest.Server
+	S3            *httptest.Server
+	Service       *service.Service
+	mu            sync.Mutex
+	objects       map[string][]byte
+	claims        map[string]url.Values
+	badClaim      string
+	Failure       bool
 	// diskDir enables the disk-backed streaming object store for scale
 	// fixtures. Objects stream to files instead of resident memory.
 	diskDir    string
@@ -205,7 +210,57 @@ func StartWithOptions(state, web, listen string, options Options) (*Runtime, err
 	if maxBytes <= 0 {
 		maxBytes = 32 << 20
 	}
-	s, e := service.Open(service.Config{RequireExplicitAdminRead: options.RequireExplicitAdminRead, State: state, Development: true, Enabled: true, DocumentEditing: true, PropertyEditing: options.PropertyEditing, AutomationManagement: options.AutomationManagement, Issuer: f.OIDC.URL, ClientID: "fixture-client", MaxBytes: maxBytes, WebDir: web, CloudConnectors: options.CloudConnectors, TransferPlans: options.TransferPlans})
+	teamDSN := ""
+	if os.Getenv("DRIVEBRIDGE_TEST_DATABASE") == "postgres" {
+		teamDSN = os.Getenv("DRIVEBRIDGE_TEST_PG_DSN")
+		if teamDSN == "" {
+			f.OIDC.Close()
+			f.S3.Close()
+			return nil, fmt.Errorf("DRIVEBRIDGE_TEST_PG_DSN is required for postgres fixtures")
+		}
+		sum := sha256.Sum256([]byte(state))
+		schema := "db_" + fmt.Sprintf("%x", sum[:8])
+		adminDSN, parseErr := url.Parse(teamDSN)
+		if parseErr != nil {
+			return nil, fmt.Errorf("invalid postgres fixture dsn")
+		}
+		adminQuery := adminDSN.Query()
+		adminQuery.Set("options", "-c search_path=public")
+		adminDSN.RawQuery = adminQuery.Encode()
+		admin, openErr := gorm.Open(gormpostgres.Open(adminDSN.String()), &gorm.Config{})
+		if openErr != nil {
+			return nil, openErr
+		}
+		if createErr := admin.Exec("CREATE SCHEMA IF NOT EXISTS " + schema).Error; createErr != nil {
+			return nil, createErr
+		}
+		sqlDB, _ := admin.DB()
+		sqlDB.Close()
+		// Each fixture owns only its digest-named disposable schema. Removing
+		// it on close bounds later GORM catalog inspection. Service-level
+		// restart keeps it intact until the fixture itself closes.
+		f.cleanupSchema = func() {
+			db, err := gorm.Open(gormpostgres.Open(adminDSN.String()), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+			if err != nil {
+				return
+			}
+			connection, err := db.DB()
+			if err != nil {
+				return
+			}
+			defer connection.Close()
+			_ = db.Exec("DROP SCHEMA IF EXISTS " + schema + " CASCADE").Error
+		}
+		q := url.Values{}
+		q.Set("options", "-c search_path="+schema+",public")
+		teamDSNURL, parseErr := url.Parse(teamDSN)
+		if parseErr != nil {
+			return nil, fmt.Errorf("invalid postgres fixture dsn")
+		}
+		teamDSNURL.RawQuery = q.Encode()
+		teamDSN = teamDSNURL.String()
+	}
+	s, e := service.Open(service.Config{RequireExplicitAdminRead: options.RequireExplicitAdminRead, State: state, Development: true, Enabled: true, DocumentEditing: true, PropertyEditing: options.PropertyEditing, AutomationManagement: options.AutomationManagement, Issuer: f.OIDC.URL, ClientID: "fixture-client", MaxBytes: maxBytes, WebDir: web, CloudConnectors: options.CloudConnectors, TransferPlans: options.TransferPlans, TeamDSN: teamDSN})
 	if e != nil {
 		f.OIDC.Close()
 		f.S3.Close()
@@ -605,7 +660,17 @@ func (f *Runtime) SeedObjects(key string, size int) {
 	f.objects[key] = bytes.Repeat([]byte("s"), size)
 }
 
-func (f *Runtime) Close()           { f.App.Close(); f.Service.Close(); f.OIDC.Close(); f.S3.Close() }
+func (f *Runtime) Close() {
+	f.closeOnce.Do(func() {
+		f.App.Close()
+		f.Service.Close()
+		f.OIDC.Close()
+		f.S3.Close()
+		if f.cleanupSchema != nil {
+			f.cleanupSchema()
+		}
+	})
+}
 func (f *Runtime) ObjectCount() int { f.mu.Lock(); defer f.mu.Unlock(); return len(f.objects) }
 
 // ListCalls reports how many ListObjectsV2 requests the fixture store has

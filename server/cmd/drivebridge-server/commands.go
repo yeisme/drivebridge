@@ -192,7 +192,7 @@ func newUsersCommand(c *cli) *cobra.Command {
 			}
 			rows := make([]map[string]any, 0, len(issued))
 			for _, v := range issued {
-				rows = append(rows, map[string]any{"user_id": v.UserID, "name": v.Name, "key": v.Key, "admin": v.Admin, "expires_at": v.ExpiresAt})
+				rows = append(rows, map[string]any{"user_id": v.UserID, "name": v.Name, "key": v.Key, "admin": v.Admin, "one_time": v.OneTime, "expires_at": v.ExpiresAt})
 			}
 			out, _ := cmd.Flags().GetString("out")
 			if out != "" {
@@ -493,22 +493,28 @@ func newBackupCommand(c *cli) *cobra.Command {
 				}
 				defer os.RemoveAll(staging)
 			}
-			for _, name := range []string{"metadata.sqlite", "instance.id"} {
-				in, err := os.Open(filepath.Join(state, name))
-				if err != nil {
+			if s.DB.Dialector.Name() == "postgres" {
+				if err = s.SnapshotBackupMetadata(staging); err != nil {
 					return err
 				}
-				out, err := os.OpenFile(filepath.Join(staging, name), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
-				if err != nil {
+			} else {
+				for _, name := range []string{"metadata.sqlite", "instance.id"} {
+					in, err := os.Open(filepath.Join(state, name))
+					if err != nil {
+						return err
+					}
+					out, err := os.OpenFile(filepath.Join(staging, name), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+					if err != nil {
+						in.Close()
+						return err
+					}
+					_, err = io.Copy(out, in)
 					in.Close()
-					return err
-				}
-				_, err = io.Copy(out, in)
-				in.Close()
-				out.Sync()
-				out.Close()
-				if err != nil {
-					return err
+					out.Sync()
+					out.Close()
+					if err != nil {
+						return err
+					}
 				}
 			}
 			if err = service.WriteBackupManifest(staging); err != nil {
