@@ -9,7 +9,7 @@ require (
 	github.com/aws/smithy-go v1.27.1
 	github.com/coreos/go-oidc/v3 v3.14.1
 	github.com/glebarez/sqlite v1.11.0
-	github.com/go-jose/go-jose/v4 v4.1.4
+	github.com/go-jose/go-jose/v4 v4.1.6
 	github.com/gofrs/flock v0.12.1
 	github.com/invopop/jsonschema v0.13.0
 	github.com/mark3labs/mcp-go v0.45.0
